@@ -78,6 +78,10 @@ urlpatterns = [
     path("<int:pk>/", views.detail, name="detail"),
     path("<int:pk>/edit/", views.edit, name="edit"),
     path("<int:pk>/clauses/", views.finalize_clauses, name="finalize_clauses"),
+    path("<int:request_id>/edit/", views.agreement_edit, name="agreement_edit"),
+    path("<int:request_id>/send/", views.agreement_send, name="agreement_send"),
+    path("<int:agreement_id>/milestones/<int:milestone_id>/deliver/", views.milestone_deliver, name="milestone_deliver"),
+    path("<int:agreement_id>/milestones/<int:milestone_id>/review/", views.milestone_review, name="milestone_review"),
 
     # موافقة/رفض العميل على اتفاقية الطلب (يتوقع request_id)
     path("accept/by-request/<int:request_id>/", views.accept_by_request, name="accept_by_request"),

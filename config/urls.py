@@ -15,12 +15,12 @@ urlpatterns = [
     path("disputes/", include(("disputes.urls", "disputes"), namespace="disputes")),
     path("uploads/", include(("uploads.urls", "uploads"), namespace="uploads")),
     path("employees/", include(("profiles.urls", "profiles"), namespace="profiles")),
-    path("notifications/", include(("notifications.urls", "notifications"), namespace="notifications")),
     path("agreements/", include(("agreements.urls", "agreements"), namespace="agreements")),
-    path("notifications/", include("notifications.urls", namespace="notifications")),
+
+    # إشعارات — استخدم المسار الموجود فعليًا في مشروعك
+    path("notifications/", include(("notifications.urls", "notifications"), namespace="notifications")),
 
     # الجذور/المسارات العامة
-    # ملاحظة: ترتيب الجذور مهم. أبقينا website قبل core كما كان لديك.
     path("", include(("website.urls", "website"), namespace="website")),
     path("", include(("core.urls", "core"), namespace="core")),
 ]

@@ -11,4 +11,6 @@ urlpatterns = [
     path("<int:pk>/update-status/", views.dispute_update_status, name="update_status"),
     # (اختياري) عرض النزاع
     path("<int:pk>/", views.dispute_detail, name="detail"),
+    path("<int:request_id>/open/", views.dispute_open, name="dispute_open"),
+
 ]

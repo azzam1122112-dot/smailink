@@ -502,9 +502,9 @@
               </div>
 
               <div class="mt-4 flex flex-wrap items-start gap-3">
-                {# الموظف: تسليم المرحلة #}
+                {# الموظف: تسليم/إعادة تسليم المرحلة — مسموح بعد الرفض أيضًا #}
                 {% if request.user.is_authenticated and request.user.id == req.assigned_employee_id %}
-                  {% if not ms.is_approved and not ms.is_paid and not ms.is_rejected and not ms.is_pending_review and not ms.is_delivered %}
+                  {% if not ms.is_paid and not ms.is_approved and not ms.is_pending_review %}
                     <form method="post" action="{% url 'agreements:milestone_deliver' ms.id %}#ms-{{ ms.id }}"
                           class="flex items-start gap-2"
                           onsubmit="return confirm('سيتم تعليم هذه المرحلة كـ (تم التسليم) مع حفظ الملاحظة إن وُجدت. تأكيد؟');">
@@ -517,7 +517,7 @@
                   {% endif %}
                 {% endif %}
 
-                {# العميل: اعتماد/رفض #}
+                {# العميل: اعتماد/رفض — فقط أثناء المراجعة #}
                 {% if request.user.is_authenticated and request.user.id == req.client_id %}
                   {% if ms.is_pending_review %}
                     <form method="post" action="{% url 'agreements:milestone_approve' ms.id %}#ms-{{ ms.id }}"
@@ -528,7 +528,7 @@
 
                     <button class="btn btn-danger" data-reject-modal="#rej-{{ ms.id }}">رفض</button>
 
-                    {# مودال الرفض – متاح للكتابة مع إدارة تركيز وز-index مرتفع #}
+                    {# مودال الرفض #}
                     <div id="rej-{{ ms.id }}" class="fixed inset-0 z-50 hidden" aria-hidden="true" role="dialog" aria-labelledby="rej-title-{{ ms.id }}">
                       <div class="absolute inset-0 bg-black/40" data-close-modal></div>
                       <div class="mx-auto mt-24 w-[92%] max-w-lg rounded-2xl border bg-white dark:bg-slate-800 shadow-xl overflow-hidden focus:outline-none">
@@ -709,7 +709,7 @@
     lastFocused = document.activeElement;
     modal.classList.remove('hidden');
     modal.setAttribute('aria-hidden', 'false');
-    document.documentElement.classList.add('overflow-y-hidden'); // تثبيت الصفحة
+    document.documentElement.classList.add('overflow-y-hidden');
     const ta = modal.querySelector('textarea');
     if (ta) { setTimeout(function(){ ta.focus(); ta.select && ta.select(); }, 30); }
   }
@@ -734,7 +734,7 @@
     }
   });
 
-  // اغلاق بالـ ESC
+  // ESC to close
   document.addEventListener('keydown', function(e) {
     if (e.key === 'Escape') {
       const opened = document.querySelector('.fixed.inset-0:not(.hidden)');

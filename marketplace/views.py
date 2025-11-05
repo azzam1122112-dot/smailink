@@ -1,5 +1,7 @@
 # marketplace/views.py
 from __future__ import annotations
+from core.permissions import require_role
+from django.utils import timezone
 
 from django.conf import settings
 from django.contrib import messages
@@ -19,12 +21,6 @@ from notifications.utils import create_notification
 
 from .forms import RequestCreateForm, OfferCreateForm, OfferForm, AdminReassignForm
 from .models import Request, Offer, Note
-
-# (اختياري) توافُق خلفي
-try:
-    from core.models import Notification as LegacyNotificationModel  # noqa
-except Exception:
-    LegacyNotificationModel = None  # noqa
 
 
 # ======================
@@ -140,6 +136,19 @@ def _status_vals(*names):
     return out
 
 
+def _fallback_after_forbidden(user):
+    """توجيه مناسب حسب الدور عند نقص الصلاحية."""
+    try:
+        role = getattr(user, "role", "") or ""
+        if role == "employee":
+            return reverse("marketplace:my_tasks")
+        if role == "client":
+            return reverse("marketplace:my_requests")
+        return reverse("marketplace:request_list")
+    except Exception:
+        return "/"
+
+
 # ======================
 # قوائم الطلبات
 # ======================
@@ -163,7 +172,6 @@ class RequestListView(LoginRequiredMixin, ListView):
             if role == "client":
                 qs = qs.filter(client=user)
             elif role == "employee":
-                # الموظف يرى المعيّن له، ويمكنك إبقاء NEW مرئيًا إن رغبت:
                 qs = qs.filter(Q(assigned_employee=user))
             else:
                 qs = qs.none()
@@ -216,7 +224,7 @@ class MyAssignedRequestsView(LoginRequiredMixin, ListView):
         done_like = _status_vals("COMPLETED", "CANCELED", "CLOSED")
         qs = qs.exclude(status__in=done_like)
 
-        # إخفاء النزاعات المجمّدة إن رغبت
+        # إخفاء النزاعات (المجمّدة) إن رغبت
         if hasattr(Request, "Status") and hasattr(Request.Status, "DISPUTED"):
             qs = qs.exclude(status=Request.Status.DISPUTED)
         else:
@@ -282,8 +290,24 @@ class NewRequestsForEmployeesView(LoginRequiredMixin, EmployeeOnlyMixin, ListVie
             Request.objects
             .filter(status=Request.Status.NEW, assigned_employee__isnull=True)
             .select_related("client")
+            .prefetch_related(Prefetch("offers", queryset=Offer.objects.only("id", "status", "employee_id")))
             .order_by("-created_at")
         )
+
+    def get_context_data(self, **kwargs):
+        """
+        نمرّر offered_request_ids إلى القالب حتى يعمل شرط زر “تقديم عرض” بدون TemplateSyntaxError.
+        """
+        ctx = super().get_context_data(**kwargs)
+        u = self.request.user
+        # جميع الطلبات التي لهذا الموظف عليها عرض PENDING
+        offered_ids = list(
+            Offer.objects
+            .filter(employee=u, status=Offer.Status.PENDING)
+            .values_list("request_id", flat=True)
+        )
+        ctx["offered_request_ids"] = offered_ids
+        return ctx
 
 
 # ======================
@@ -294,38 +318,44 @@ class RequestDetailView(LoginRequiredMixin, DetailView):
     template_name = "marketplace/request_detail.html"
     context_object_name = "req"
 
+    # لا نُصفّي حسب الدور هنا حتى لا نُنتج 404 مضلّل
     def get_queryset(self):
-        u = self.request.user
-        base = (
+        return (
             Request.objects
             .select_related("client", "assigned_employee")
             .prefetch_related(
                 Prefetch("offers", queryset=Offer.objects.select_related("employee")),
-                Prefetch("notes", queryset=Note.objects.select_related("author"))
+                Prefetch("notes", queryset=Note.objects.select_related("author")),
             )
         )
-        role = getattr(u, "role", None)
 
-        if role == "admin" or u.is_staff:
-            return base
-        if role == "finance":
-            return base.filter(
-                status__in=[
-                    Request.Status.OFFER_SELECTED,
-                    Request.Status.AGREEMENT_PENDING,
-                    Request.Status.IN_PROGRESS,
-                ]
-            )
-        if role == "employee":
-            return base.filter(Q(assigned_employee=u) | Q(client=u))
-        return base.filter(client=u)
+    def _is_admin_like(self, u) -> bool:
+        role = getattr(u, "role", "") or ""
+        return bool(u.is_superuser or u.is_staff or role in {"admin", "manager", "gm"})
+
+    def _can_view(self, u, req: Request) -> bool:
+        if u.id in {req.client_id, getattr(req, "assigned_employee_id", None)}:
+            return True
+        if self._is_admin_like(u):
+            return True
+        if getattr(u, "role", "") == "finance":
+            return True
+        return False
+
+    def get(self, request, *args, **kwargs):
+        self.object = self.get_object()
+        if not self._can_view(request.user, self.object):
+            messages.error(request, "ليس لديك صلاحية لعرض هذا الطلب.")
+            return redirect(_fallback_after_forbidden(request.user))
+        context = self.get_context_data(object=self.object)
+        return self.render_to_response(context)
 
     def get_context_data(self, **kwargs):
         ctx = super().get_context_data(**kwargs)
         req = ctx["req"]
         u = self.request.user
 
-        # تقديم عرض (موظف فقط وعلى NEW وغير مُسنّد)
+        # تقديم عرض (موظف فقط وعلى NEW وغير مُسنَّد)
         ctx["can_offer"] = False
         ctx["my_offer"] = None
         ctx["offer_form"] = None
@@ -366,6 +396,10 @@ class RequestDetailView(LoginRequiredMixin, DetailView):
         req = self.object
         u = request.user
 
+        if not self._can_view(u, req):
+            messages.error(request, "ليس لديك صلاحية لتنفيذ هذا الإجراء.")
+            return redirect(_fallback_after_forbidden(u))
+
         if not (u.is_authenticated and getattr(u, "role", None) == "employee"):
             messages.error(request, "غير مصرح بتقديم عرض على هذا الطلب.")
             return redirect("marketplace:request_detail", pk=req.pk)
@@ -394,6 +428,7 @@ class RequestDetailView(LoginRequiredMixin, DetailView):
             messages.warning(request, "لديك عرض مسبق لهذا الطلب.")
             return redirect("marketplace:request_detail", pk=req.pk)
 
+        # إشعار العميل
         try:
             off = req.offers.filter(employee=u).order_by("-id").first()
             if off:
@@ -457,52 +492,70 @@ class OfferCreateView(LoginRequiredMixin, EmployeeOnlyMixin, CreateView):
         return reverse("marketplace:request_detail", args=[self.req_obj.pk])
 
 
-@login_required
-@require_POST
+@require_role("employee")
 @transaction.atomic
-def offer_select(request, offer_id: int):
+def offer_create(request, request_id):
+    req = get_object_or_404(Request, pk=request_id)
+    if req.is_frozen:
+        return HttpResponseForbidden("الطلب في حالة نزاع")
+    # تحقّق عدم وجود عرض سابق لهذا الموظف
+    Offer.objects.create(request=req, employee=request.user, price=..., notes=...)
+    messages.success(request, "تم إرسال العرض")
+    return redirect("marketplace:request_detail", pk=req.pk)
+
+
+@require_role("client")
+@transaction.atomic
+def offer_select(request, offer_id):
+    # اختيار العرض من العميل أو الإدارة (الديكوريتر يسمح للستاف/admin أيضًا)
     off = get_object_or_404(
-        Offer.objects.select_for_update().select_related("request", "employee", "request__client"),
+        Offer.objects.select_related("request").select_for_update(),
         pk=offer_id
     )
-    req = Request.objects.select_for_update().select_related("client").get(pk=off.request_id)
+    req = off.request  # ممكن لاحقًا نضيف select_for_update() على الطلب لو احتجنا
 
-    if not (req.client_id == request.user.id or _is_admin(request.user)):
-        messages.error(request, "غير مصرح.")
-        return redirect("marketplace:request_detail", pk=req.id)
+    # تحقق صاحب الطلب
+    if req.client != request.user and not getattr(request.user, "is_staff", False):
+        return HttpResponseForbidden("غير مسموح")
 
-    if off.status == Offer.Status.SELECTED:
-        messages.info(request, "هذا العرض مُختار بالفعل.")
-        return redirect("marketplace:request_detail", pk=req.id)
+    # منع الاختيار أثناء النزاع
+    if getattr(req, "is_frozen", False) or str(getattr(req, "status", "")).lower() == "disputed":
+        messages.error(request, "لا يمكن اختيار عرض: الطلب في حالة نزاع.")
+        return redirect("marketplace:request_detail", pk=req.pk)
 
-    if req.status != Request.Status.NEW or req.assigned_employee_id is not None:
-        messages.warning(request, "لا يمكن اختيار عرض في هذه المرحلة.")
-        return redirect("marketplace:request_detail", pk=req.id)
+    # صلاحية/وضع العرض
+    if hasattr(off, "can_select") and not off.can_select(request.user):
+        return HttpResponseForbidden("لا يمكن اختيار هذا العرض")
+    if getattr(off, "status", None) != getattr(Offer.Status, "PENDING", "pending"):
+        messages.info(request, "لا يمكن اختيار عرض غير معلّق.")
+        return redirect("marketplace:request_detail", pk=req.pk)
 
-    try:
-        off.status = Offer.Status.SELECTED
-        off.save(update_fields=["status"])
-        # signals ستتولى رفض بقية العروض + إسناد الموظف + ضبط الحالة إلى OFFER_SELECTED
-    except IntegrityError:
-        messages.warning(request, "تم اختيار عرض آخر بالفعل لهذا الطلب.")
-        return redirect("marketplace:request_detail", pk=req.id)
+    # ارفض بقية العروض
+    Offer.objects.filter(request=req).exclude(pk=off.pk).update(status=getattr(Offer.Status, "REJECTED", "rejected"))
+
+    # اختر العرض (بدون selected_at لأنه غير موجود عندك)
+    off.status = getattr(Offer.Status, "SELECTED", "selected")
+    # ملاحظة مهمّة: لا تمرّر حقول غير موجودة داخل update_fields
+    off.save(update_fields=["status"])  # أو off.save() لو تفضّل
+
+    # إسناد الطلب وتحديث حالته
+    req.assigned_employee = off.employee
+    req.status = getattr(Request.Status, "OFFER_SELECTED", "offer_selected")
+    # احفظ فقط الحقول الموجودة
+    update_fields = ["assigned_employee", "status"]
+    if hasattr(req, "updated_at"):
+        from django.utils import timezone
+        req.updated_at = timezone.now()
+        update_fields.append("updated_at")
+    req.save(update_fields=update_fields)
 
     try:
         _notify_offer_selected(off)
-        _notify_link(
-            recipient=req.client,
-            title="تم اختيار العرض",
-            body=f"تم اختيار عرض {off.employee} لطلبك #{req.pk}.",
-            url=reverse("marketplace:request_detail", args=[req.pk]),
-            actor=request.user,
-            target=req,
-        )
     except Exception:
         pass
 
-    messages.success(request, "تم اختيار العرض وإسناد الطلب تلقائيًا.")
-    return redirect("marketplace:request_detail", pk=req.id)
-
+    messages.success(request, "تم اختيار العرض وإسناد الطلب")
+    return redirect("marketplace:request_detail", pk=req.pk)
 
 @login_required
 @transaction.atomic
@@ -694,7 +747,7 @@ class MyTasksView(LoginRequiredMixin, ListView):
         done_like = _status_vals("COMPLETED", "CANCELED", "CLOSED")
         qs = qs.exclude(status__in=done_like)
 
-        # إخفاء النزاع المجمّد
+        # إخفاء النزاع
         if hasattr(Request, "Status") and hasattr(Request.Status, "DISPUTED"):
             qs = qs.exclude(status=Request.Status.DISPUTED)
         else:
@@ -863,8 +916,6 @@ def admin_request_reassign(request, pk: int):
         form = AdminReassignForm()
     return render(request, "marketplace/admin_reassign.html", {"req": req, "form": form})
 
-# داخل marketplace/views.py
-from django.http import HttpResponseForbidden
 
 @login_required
 def offer_detail(request, offer_id):

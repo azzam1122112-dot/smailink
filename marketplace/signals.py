@@ -1,34 +1,49 @@
-from django.db.models.signals import pre_save, post_save
+# marketplace/signals.py
+from __future__ import annotations
+from django.db.models.signals import post_save
 from django.dispatch import receiver
-from .models import Offer, Request
 from django.utils import timezone
-from datetime import timedelta
+from django.core.exceptions import FieldDoesNotExist
 
-@receiver(pre_save, sender=Offer)
-def _normalize_offer_status(sender, instance: Offer, **kwargs):
-    """
-    طبّع القيمة لتكون ضمن TextChoices دائمًا (حماية من مدخلات نصية عشوائية).
-    """
-    valid = {c[0] for c in Offer.STATUS_CHOICES}
-    if instance.status not in valid:
-        instance.status = Offer.Status.PENDING
+from .models import Offer, Request
+
+def _model_has_field(model_cls, field_name: str) -> bool:
+    try:
+        model_cls._meta.get_field(field_name)
+        return True
+    except FieldDoesNotExist:
+        return False
 
 @receiver(post_save, sender=Offer)
-def handle_offer_selection(sender, instance: Offer, created, **kwargs):
+def handle_offer_selection(sender, instance: Offer, created: bool, **kwargs):
     """
-    عند اختيار عرض:
-    - إسناد الموظف للطلب.
-    - تحديث حالة الطلب إلى OFFER_SELECTED.
-    - ضبط طوابع SLA (الآن + 3 أيام).
-    - رفض بقية العروض.
+    عند تغيير حالة العرض إلى SELECTED:
+    - نحدّث الطلب (الموظف المعيّن + الحالة).
+    - لا نلمس حقولًا غير موجودة (offer_selected_at مثلاً) إلا بعد التحقق.
+    ملاحظة: view يقوم أصلًا برفض بقية العروض وإسناد الطلب؛ هذه الإشارة تجعل السلوك متسقًا حتى لو تغيّر من الإدارة.
     """
-    if instance.status == Offer.Status.SELECTED:
-        req = instance.request
-        # تحديث الطلب + SLA
-        req.mark_offer_selected_now(instance.employee)
-        req.save(update_fields=[
-            "assigned_employee", "status", "offer_selected_at", "agreement_due_at",
-            "sla_agreement_overdue", "updated_at"
-        ])
-        # رفض بقية العروض
-        Offer.objects.filter(request=req).exclude(pk=instance.pk).update(status=Offer.Status.REJECTED)
+    if created:
+        return
+
+    off = instance
+    # نعمل فقط عند حالة SELECTED
+    if getattr(off, "status", None) != getattr(Offer.Status, "SELECTED", "selected"):
+        return
+
+    req = off.request
+    # حدث الطلب آمنًا
+    req.assigned_employee = off.employee
+    req.status = getattr(Request.Status, "OFFER_SELECTED", "offer_selected")
+
+    update_fields = ["assigned_employee", "status"]
+
+    if _model_has_field(Request, "offer_selected_at"):
+        req.offer_selected_at = timezone.now()
+        update_fields.append("offer_selected_at")
+
+    if hasattr(req, "updated_at"):
+        req.updated_at = timezone.now()
+        update_fields.append("updated_at")
+
+    # لا تمرّر حقول غير موجودة إطلاقًا
+    req.save(update_fields=update_fields)

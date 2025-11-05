@@ -1,4 +1,3 @@
-# finance/views.py
 from __future__ import annotations
 
 import csv
@@ -11,7 +10,7 @@ from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.db import transaction
 from django.db.models import Count, Q, Sum
-from django.http import HttpResponse, HttpResponseForbidden
+from django.http import HttpResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
 from django.views.decorators.http import require_GET, require_POST
@@ -25,7 +24,7 @@ logger = logging.getLogger(__name__)
 
 # ========= أدوات صلاحيات =========
 def _is_finance(user) -> bool:
-    """غلاف صغير لتوحيد الاستدعاء داخل هذا الملف."""
+    """تغليف بسيط لفحص صلاحية المالية."""
     return is_finance(user)
 
 # ========= أدوات فترة زمنية =========
@@ -54,24 +53,23 @@ def _period_bounds(request) -> Tuple[date | None, date | None]:
     # افتراضي: آخر 30 يوم
     return today - timedelta(days=29), today
 
-# ========= منطق حالة الطلب (مركزّي وآمن) =========
+# ========= منطق حالة الطلب (مركزي وآمن) =========
 SAFE_PROGRESS_STATES = {"new", "offer_selected", "agreement_pending"}
 
 def _touch_request_in_progress(req: Request) -> bool:
     """
-    يدفع حالة الطلب إلى in_progress فقط إن كان ما يزال في الحالات المبكرة.
+    يدفع حالة الطلب إلى in_progress فقط إن كان في الحالات المبكرة.
     لا يكمّل الطلب هنا إطلاقًا.
-    يرجّع True إن حدث تحديث فعلاً.
     """
     try:
         cur = getattr(req, "status", None)
         if cur in SAFE_PROGRESS_STATES:
             req.status = getattr(Request.Status, "IN_PROGRESS", "in_progress")
+            updates = ["status"]
             if hasattr(req, "updated_at"):
                 req.updated_at = timezone.now()
-                req.save(update_fields=["status", "updated_at"])
-            else:
-                req.save(update_fields=["status"])
+                updates.append("updated_at")
+            req.save(update_fields=updates)
             return True
         return False
     except Exception:
@@ -79,10 +77,7 @@ def _touch_request_in_progress(req: Request) -> bool:
         return False
 
 def _can_complete_request(req: Request) -> bool:
-    """
-    لا نُكمل الطلب إذا كان في نزاع أو في حالة تمنع الإكمال.
-    ابقِ المسار مفتوحًا للمنازعات (لا تحويل إلى مكتمل أثناء النزاع).
-    """
+    """لا نُكمل الطلب إذا كان في نزاع/ملغي."""
     cur = getattr(req, "status", "") or ""
     DISPUTED = getattr(Request.Status, "DISPUTED", "disputed")
     CANCELLED = getattr(Request.Status, "CANCELLED", "cancelled")
@@ -90,55 +85,72 @@ def _can_complete_request(req: Request) -> bool:
 
 def _complete_request_if_all_paid(agreement: Agreement) -> bool:
     """
-    يكمّل الطلب إذا (وفقط إذا) جميع فواتير الاتفاقية مدفوعة.
-    يرجع True إذا تم التغيير فعلاً.
+    يكمّل الطلب إذا (وفقط إذا):
+      1) لكل مرحلة Milestone فاتورة مرتبطة،
+      2) وجميع هذه الفواتير مدفوعة.
+    هذا يمنع الإكمال المبكر عند وجود أول فاتورة فقط.
     """
     try:
-        inv_qs = getattr(agreement, "invoices", None)
-        if not inv_qs:
+        # احضر كل المراحل المرتبطة بالاتفاقية
+        milestones = list(getattr(agreement, "milestones", []).all())
+        if not milestones:
             return False
-        invoices = list(inv_qs.all())
+
+        # احضر كل فواتير الاتفاقية
+        invoices = list(getattr(agreement, "invoices", []).select_related("milestone").all())
         if not invoices:
             return False
 
-        all_paid = all(getattr(inv, "status", None) == Invoice.Status.PAID or getattr(inv, "is_paid", False)
-                       for inv in invoices)
-        if not all_paid:
+        # خرّيط الفاتورة بحسب milestone_id
+        inv_by_ms = {inv.milestone_id: inv for inv in invoices if getattr(inv, "milestone_id", None)}
+
+        # يجب أن توجد فاتورة لكل مرحلة
+        if len(inv_by_ms) < len(milestones):
             return False
 
+        # كل الفواتير المرتبطة بالمراحل يجب أن تكون مدفوعة
+        for m in milestones:
+            inv = inv_by_ms.get(m.id)
+            if not inv:
+                return False
+            paid_flag = (getattr(inv, "status", None) == Invoice.Status.PAID) or bool(getattr(inv, "is_paid", False))
+            if not paid_flag:
+                return False
+
+        # جميع الفواتير مدفوعة والمنازعات غير قائمة → كمّل الطلب
         req: Request | None = getattr(agreement, "request", None)
-        if not req:
-            return False
-
-        if not _can_complete_request(req):
-            # يوجد نزاع أو حالة تمنع الإكمال — لا نغيّر الحالة.
+        if not req or not _can_complete_request(req):
             return False
 
         if getattr(req, "status", "") == getattr(Request.Status, "COMPLETED", "completed"):
             return False
 
-        update_fields: List[str] = ["status"]
+        # حدّث الطلب
         req.status = getattr(Request.Status, "COMPLETED", "completed")
+        updates = ["status"]
         if hasattr(req, "completed_at"):
             req.completed_at = timezone.now()
-            update_fields.append("completed_at")
+            updates.append("completed_at")
         if hasattr(req, "updated_at"):
             req.updated_at = timezone.now()
-            update_fields.append("updated_at")
-        req.save(update_fields=update_fields)
+            updates.append("updated_at")
+        req.save(update_fields=updates)
 
-        # (اختياري) تأشير الاتفاقية مكتملة إن كان لديها حقل status
-        if hasattr(agreement, "status"):
-            if getattr(agreement, "status") != "completed":
-                agreement.status = "completed"
-                if hasattr(agreement, "updated_at"):
-                    agreement.updated_at = timezone.now()
-                    agreement.save(update_fields=["status", "updated_at"])
-                else:
-                    agreement.save(update_fields=["status"])
+        # (اختياري) تأشير الاتفاقية كمكتملة إن وُجد حقل status
+        if hasattr(agreement, "status") and getattr(agreement, "status") != "completed":
+            agreement.status = "completed"
+            ag_updates = ["status"]
+            if hasattr(agreement, "updated_at"):
+                agreement.updated_at = timezone.now()
+                ag_updates.append("updated_at")
+            agreement.save(update_fields=ag_updates)
+
         return True
     except Exception:
-        logger.exception("فشل إكمال الطلب تلقائيًا عند سداد كل الفواتير (agreement_id=%s)", getattr(agreement, "id", None))
+        logger.exception(
+            "فشل إكمال الطلب تلقائيًا عند سداد كل الفواتير (agreement_id=%s)",
+            getattr(agreement, "id", None),
+        )
         return False
 
 # ======= لوحة المالية =======
@@ -204,7 +216,7 @@ def mark_invoice_paid(request, pk: int):
     - يتحقق من صلاحية المستخدم (مالية/Staff/Admin).
     - يحدّث حالة الفاتورة + paid_at/paid_ref إن لزم.
     - إن كانت الفاتورة مرتبطة بـ Milestone: يحدّث أعلام/حالة المرحلة إلى مدفوعة.
-    - لا يُكمِّل الطلب إلا إذا **جميع** فواتير الاتفاقية مدفوعة (مع تجاهل الإكمال إن كان الطلب مُتنازعًا).
+    - لا يُكمِّل الطلب إلا إذا **جميع** فواتير الاتفاقية مدفوعة (مع احترام النزاعات).
     """
     user = request.user
     if not (_is_finance(user) or getattr(user, "is_staff", False) or getattr(user, "is_superuser", False)):
@@ -222,13 +234,11 @@ def mark_invoice_paid(request, pk: int):
         return redirect(request.META.get("HTTP_REFERER", "/"))
 
     try:
-        # 1) تحديث الفاتورة نفسها
+        # (1) تحديث الفاتورة
         inv_updates: List[str] = []
-
         if hasattr(inv, "status"):
             inv.status = Invoice.Status.PAID
             inv_updates.append("status")
-        # دعم نماذج تضع is_paid بدلاً من status
         if hasattr(inv, "is_paid"):
             inv.is_paid = True
             inv_updates.append("is_paid")
@@ -249,36 +259,27 @@ def mark_invoice_paid(request, pk: int):
         if inv_updates:
             inv.save(update_fields=inv_updates)
 
-        # 2) تحديث الـ Milestone المرتبط (إن وجد) — دعم الحالتين (status أو أعلام منطقية)
+        # (2) تحديث المرحلة المرتبطة
         ms: Milestone | None = getattr(inv, "milestone", None)
         if ms:
             ms_updates: List[str] = []
-
-            # حالة نصية
             STATUS_PAID = getattr(getattr(ms, "Status", None), "PAID", "paid")
             if hasattr(ms, "status") and getattr(ms, "status") != STATUS_PAID:
                 ms.status = STATUS_PAID
                 ms_updates.append("status")
-
-            # أعلام منطقية
             if hasattr(ms, "is_paid") and not getattr(ms, "is_paid", False):
                 ms.is_paid = True  # type: ignore[attr-defined]
                 ms_updates.append("is_paid")
-            if hasattr(ms, "is_approved") and not getattr(ms, "is_approved", False):
-                # أغلب النماذج تعتبر المرحلة مدفوعة بعد أن كانت معتمدة مسبقًا؛ لا نُجبر الاعتماد إن لم يكن.
-                pass
+            if hasattr(ms, "paid_at"):
+                ms.paid_at = getattr(inv, "paid_at", timezone.now())
+                ms_updates.append("paid_at")
             if hasattr(ms, "updated_at"):
                 ms.updated_at = timezone.now()
                 ms_updates.append("updated_at")
-            if hasattr(ms, "paid_at"):
-                ms.paid_at = getattr(inv, "paid_at", timezone.now())
-                if "paid_at" not in ms_updates:
-                    ms_updates.append("paid_at")
-
             if ms_updates:
                 ms.save(update_fields=ms_updates)
 
-        # 3) إكمال الطلب فقط لو تم سداد جميع الفواتير
+        # (3) إكمال الطلب فقط لو تم سداد جميع الفواتير لكل المراحل
         ag: Agreement | None = getattr(inv, "agreement", None)
         if ag:
             done = _complete_request_if_all_paid(ag)
@@ -304,7 +305,6 @@ def invoice_detail(request, pk: int):
         Invoice.objects.select_related("agreement", "milestone", "agreement__request"),
         pk=pk,
     )
-    # نمرّر المفتاحين inv و invoice للتوافق مع القوالب
     return render(request, "finance/invoice_detail.html", {"inv": inv, "invoice": inv})
 
 # ======= فواتير اتفاقية معيّنة (توليد المفقود) =======
@@ -329,8 +329,8 @@ def agreement_invoices(request, agreement_id: int):
                     agreement=ag,
                     milestone=m,
                     amount=m.amount,
-                    status=Invoice.Status.UNPAID if hasattr(Invoice, "Status") else getattr(Invoice, "status", "unpaid"),
-                    # لو عندك created_by أو حقول إضافية ادعمها هنا بشروط hasattr
+                    # إصلاح: مرّر القيمة النصّية الصحيحة إذا لم تكن Enum
+                    status=Invoice.Status.UNPAID if hasattr(Invoice, "Status") else "unpaid",
                 )
             )
     if to_create:
@@ -345,7 +345,7 @@ def agreement_invoices(request, agreement_id: int):
     )
     return render(request, "finance/invoice_list.html", {"agreement": ag, "invoices": invoices, "totals": totals})
 
-# ======= مدفوعاتي (عميل) — + فلتر طريقة السداد =======
+# ======= مدفوعاتي (عميل) =======
 @login_required
 @require_GET
 def client_payments(request):
@@ -414,7 +414,7 @@ def client_payments(request):
         },
     )
 
-# ======= مستحقاتي (موظف) — + فلتر طريقة السداد =======
+# ======= مستحقاتي (موظف) =======
 @login_required
 @require_GET
 def employee_dues(request):
@@ -469,21 +469,23 @@ def employee_dues(request):
     )
 
     return render(
-        request,
-        "finance/employee_dues.html",
-        {
-            "invoices": invs,
-            "totals": totals,
-            "status_q": status_q,
-            "q": q,
-            "date_from": date_from,
-            "date_to": date_to,
-            "method_q": method_q,
-            "methods": methods,
-        },
-    )
+    request,
+    "finance/employee_dues.html",
+    {
+        "invoices": invs,
+        "totals": totals,
+        "status_q": status_q,
+        "q": q,
+        "date_from": date_from,
+        "date_to": date_to,
+        "method_q": method_q,
+        "methods": methods,
+    },
+)
 
-# ======= تقرير التحصيل (مالية) + تجميع =======
+
+
+# ======= تقرير التحصيل (مالية) =======
 @login_required
 @require_GET
 def collections_report(request):
@@ -555,7 +557,7 @@ def collections_report(request):
         },
     )
 
-# ======= تصدير CSV لنفس مرشحات التقرير =======
+# ======= تصدير CSV =======
 @login_required
 @require_GET
 def export_invoices_csv(request):

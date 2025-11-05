@@ -2,6 +2,8 @@
 from django.urls import path
 from django.shortcuts import redirect
 from . import views
+from .views import RequestDetailView
+from . import views_offers
 
 app_name = "marketplace"
 
@@ -20,6 +22,17 @@ def offer_select_legacy_cbv_redirect(request, offer_id: int):
     """توافق لمسار قديم: o/<int:offer_id>/select/ → offers/<int:offer_id>/select/"""
     return redirect("marketplace:offer_select", offer_id=offer_id)
 
+def request_detail_fallback(request, ref: str):
+    """
+    مسار مرن للتفاصيل:
+    - لو ref أرقام فقط → يحوِّل لمسار pk.
+    - غير ذلك → يحوِّل لمسار short_code.
+    يفيد الروابط المختلطة/القديمة.
+    """
+    if ref.isdigit():
+        return redirect("marketplace:request_detail", pk=int(ref))
+    return redirect("marketplace:request_detail_by_code", short_code=ref)
+
 
 urlpatterns = [
     # ======================
@@ -28,12 +41,19 @@ urlpatterns = [
     path("r/new/", views.RequestCreateView.as_view(), name="request_create"),
     path("r/mine/", views.MyRequestsListView.as_view(), name="my_requests"),
     path("r/new-requests/", views.NewRequestsForEmployeesView.as_view(), name="new_requests"),
+    path("o/<int:request_id>/new/", views_offers.offer_create, name="offer_create"),
+    path("offers/<int:offer_id>/select/", views_offers.offer_select, name="offer_select"),
+    path("r/<int:pk>/", views.RequestDetailView.as_view(), name="request_detail"),
 
-    # مسار قديم (عرض الطلبات المسندة) لكن باسم مختلف لتجنب تضارب الأسماء:
+    # مسار عرض الطلبات المسندة (اسم واضح لتجنّب تضارب)
     path("r/assigned/", views.MyAssignedRequestsView.as_view(), name="assigned_requests"),
 
-    # تفاصيل و قائمة افتراضية
-    path("r/<int:pk>/", views.RequestDetailView.as_view(), name="request_detail"),
+    # تفاصيل الطلب
+    path("r/<int:pk>/", views.RequestDetailView.as_view(), name="request_detail"),                 # بالـ pk
+    path("r/code/<slug:short_code>/", views.RequestDetailView.as_view(), name="request_detail_by_code"),  # بالكود
+    path("r/ref/<slug:ref>/", request_detail_fallback, name="request_detail_ref"),                 # Fallback ذكي
+
+    # قائمة افتراضية
     path("r/", request_list_alias, name="request_list"),
 
     # نزاعات
@@ -60,6 +80,8 @@ urlpatterns = [
     # توافق لمسارات قديمة
     path("o/<int:request_id>/new/", offer_create_legacy_cbv_redirect, name="offer_create_cbv"),
     path("o/<int:offer_id>/select/", offer_select_legacy_cbv_redirect, name="offer_select_cbvstyle"),
+    path("r/<slug:short_code>/", RequestDetailView.as_view(), name="request_detail_short"),
+    path("<int:pk>/", RequestDetailView.as_view(), name="request_detail"),
 
     # ======================
     # مهامي (الاسم الرسمي الذي تستخدمه القوائم)

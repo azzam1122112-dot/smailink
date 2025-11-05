@@ -267,3 +267,28 @@ def dispute_detail(request, pk: int):
     """
     dispute = get_object_or_404(Dispute.objects.select_related("request", "opened_by"), pk=pk)
     return render(request, "disputes/detail.html", {"dispute": dispute, "req": dispute.request})
+
+
+# disputes/views.py
+from django.shortcuts import get_object_or_404, redirect, render
+from django.http import HttpResponseForbidden
+from django.contrib import messages
+from django.db import transaction
+from core.permissions import require_role
+from .models import Dispute
+from marketplace.models import Request
+
+@require_role("client", "employee", "manager")
+@transaction.atomic
+def dispute_open(request, request_id):
+    req = get_object_or_404(Request, pk=request_id)
+    if req.is_frozen:
+        messages.info(request, "يوجد نزاع مفتوح بالفعل")
+        return redirect("marketplace:request_detail", pk=req.pk)
+    side = "client" if getattr(request.user, "role", "") == "client" else "employee"
+    reason = (request.POST.get("reason") or "").strip()
+    if not reason:
+        return HttpResponseForbidden("اذكر سبب النزاع")
+    Dispute.objects.create(request=req, opened_by=request.user, side=side, reason=reason)
+    messages.warning(request, "تم فتح النزاع وإيقاف جميع العمليات. تم إشعار الإدارة والمالية.")
+    return redirect("marketplace:request_detail", pk=req.pk)

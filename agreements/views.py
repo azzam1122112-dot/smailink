@@ -1,9 +1,9 @@
-# agreements/views.py
 from __future__ import annotations
+from core.permissions import require_role
 
 import logging
 from decimal import Decimal, ROUND_HALF_UP
-from typing import List, Any
+from typing import List
 
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
@@ -41,8 +41,10 @@ def _is_admin(user) -> bool:
         or getattr(user, "role", "") == "admin"
     )
 
+
 def _is_emp_or_admin(user) -> bool:
     return bool(_is_admin(user) or getattr(user, "role", "") == "employee")
+
 
 def _get_selected_offer(req: Request) -> Offer | None:
     off = getattr(req, "selected_offer", None)
@@ -50,12 +52,14 @@ def _get_selected_offer(req: Request) -> Offer | None:
         return off
     return req.offers.filter(status=Offer.Status.SELECTED).select_related("employee").first()
 
+
 def _has_db_field(instance, field_name: str) -> bool:
     try:
         instance._meta.get_field(field_name)  # type: ignore[attr-defined]
         return True
     except Exception:
         return False
+
 
 def _set_db_field(instance, field_name: str, value, update_fields: list[str]) -> None:
     """
@@ -72,6 +76,7 @@ def _set_db_field(instance, field_name: str, value, update_fields: list[str]) ->
     setattr(instance, field_name, value)
     update_fields.append(field_name)
 
+
 def _assign_auto_order(formset: BaseFormSet) -> None:
     idx = 1
     for form in formset.forms:
@@ -82,6 +87,7 @@ def _assign_auto_order(formset: BaseFormSet) -> None:
             form.instance.order = idx
         cd["order"] = idx
         idx += 1
+
 
 def _sum_milestones(formset: BaseFormSet) -> Decimal:
     total = Decimal("0.00")
@@ -94,6 +100,7 @@ def _sum_milestones(formset: BaseFormSet) -> Decimal:
             total += Decimal(amt)
     return total
 
+
 def _lock_core_fields_if_needed(ag: Agreement, form: AgreementEditForm) -> None:
     """
     احترازيًا: إن كانت الاتفاقية موجودة، لا نسمح بتغيير المدة والإجمالي من POST.
@@ -102,6 +109,7 @@ def _lock_core_fields_if_needed(ag: Agreement, form: AgreementEditForm) -> None:
     if ag.pk and hasattr(form, "cleaned_data"):
         form.cleaned_data["duration_days"] = ag.duration_days
         form.cleaned_data["total_amount"] = ag.total_amount
+
 
 def _update_request_status_on_send(req: Request) -> None:
     """
@@ -117,6 +125,7 @@ def _update_request_status_on_send(req: Request) -> None:
         else:
             req.save(update_fields=["status"])
 
+
 def _move_request_on_accept(req: Request) -> None:
     """
     عند موافقة العميل على الاتفاقية → IN_PROGRESS.
@@ -130,6 +139,7 @@ def _move_request_on_accept(req: Request) -> None:
         updates.append("updated_at")
     req.save(update_fields=updates)
 
+
 def _touch_request_in_progress(req: Request) -> None:
     """
     إن كان الطلب في حالات مبكرة (new/offer_selected/agreement_pending) نحوله إلى in_progress.
@@ -140,6 +150,7 @@ def _touch_request_in_progress(req: Request) -> None:
              getattr(Request.Status, "AGREEMENT_PENDING", "agreement_pending")}
     if getattr(req, "status", None) in early:
         _move_request_on_accept(req)
+
 
 def _return_request_to_offer_selected(req: Request) -> None:
     """
@@ -153,6 +164,7 @@ def _return_request_to_offer_selected(req: Request) -> None:
             updates.append("updated_at")
         req.save(update_fields=updates)
 
+
 def _redirect_to_request_detail(ms: Milestone) -> HttpResponse:
     """إعادة توجيه آمنة لصفحة الطلب مع مرساة المرحلة."""
     req = getattr(getattr(ms, "agreement", None), "request", None)
@@ -163,6 +175,7 @@ def _redirect_to_request_detail(ms: Milestone) -> HttpResponse:
     except Exception:
         url = reverse("marketplace:request_detail", args=[req.id])
     return redirect(f"{url}#ms-{ms.id}")
+
 
 # =========================
 # Agreement: فتح/تفاصيل/تحرير/قبول/رفض/بنود
@@ -207,6 +220,7 @@ def open_by_request(request: HttpRequest, request_id: int) -> HttpResponse:
     messages.success(request, "تم إنشاء مسودة الاتفاقية. يمكنك تحريرها وإرسالها للعميل.")
     return redirect("agreements:edit", pk=ag.pk)
 
+
 @login_required
 def detail(request: HttpRequest, pk: int) -> HttpResponse:
     """تفاصيل الاتفاقية (للأطراف المخوّلة فقط)."""
@@ -230,6 +244,7 @@ def detail(request: HttpRequest, pk: int) -> HttpResponse:
 
     ctx = {"agreement": ag, "req": req, "rejection_reason": ag.rejection_reason}
     return render(request, "agreements/agreement_detail.html", ctx)
+
 
 @login_required
 def edit(request: HttpRequest, pk: int) -> HttpResponse:
@@ -307,6 +322,7 @@ def edit(request: HttpRequest, pk: int) -> HttpResponse:
         {"agreement": ag, "req": req, "form": form, "formset": formset},
     )
 
+
 @login_required
 def accept_by_request(request: HttpRequest, request_id: int) -> HttpResponse:
     """موافقة العميل على الاتفاقية → يحوّل الطلب إلى in_progress فقط."""
@@ -335,6 +351,7 @@ def accept_by_request(request: HttpRequest, request_id: int) -> HttpResponse:
     messages.success(request, "تمت الموافقة على الاتفاقية. تم تحويل الطلب إلى قيد التنفيذ.")
     return redirect("agreements:detail", pk=ag.pk)
 
+
 @login_required
 def reject_by_request(request: HttpRequest, request_id: int) -> HttpResponse:
     """صفحة إدخال سبب رفض الاتفاقية (للعميل)."""
@@ -349,6 +366,7 @@ def reject_by_request(request: HttpRequest, request_id: int) -> HttpResponse:
         return redirect("agreements:detail", pk=ag.pk)
 
     return render(request, "agreements/agreement_reject.html", {"agreement": ag, "req": req})
+
 
 @login_required
 @require_POST
@@ -377,6 +395,7 @@ def reject(request: HttpRequest, pk: int) -> HttpResponse:
     _return_request_to_offer_selected(req)
     messages.success(request, "تم رفض الاتفاقية وإعادتها إلى مرحلة العروض.")
     return redirect("agreements:detail", pk=ag.pk)
+
 
 @login_required
 @transaction.atomic
@@ -415,51 +434,132 @@ def finalize_clauses(request: HttpRequest, pk: int) -> HttpResponse:
 
     return render(request, "agreements/finalize_clauses.html", {"agreement": agreement, "form": form})
 
+
 # =========================
 # Milestones: تسليم/اعتماد/رفض
 # =========================
 
 @login_required
+@require_POST
 @transaction.atomic
 def milestone_deliver(request: HttpRequest, milestone_id: int, *args, **kwargs) -> HttpResponse:
     """
     تسليم/إعادة تسليم المرحلة من الموظف المُسنَد (أو staff/admin).
-    - يمنع التسليم بعد الاعتماد أو السداد.
-    - يفتح المراجعة ويصفر أي رفض سابق.
-    - يضمن بقاء الطلب “قيد التنفيذ” فقط (لا إكمال هنا).
-    """
-    if request.method != "POST":
-        return HttpResponseNotAllowed(["POST"])
 
-    ms = get_object_or_404(Milestone.objects.select_related("agreement__request"), pk=milestone_id)
+    الأمان والضوابط:
+    - POST فقط (@require_POST).
+    - داخل معاملة ذرّية لمنع السباقات.
+    - قفل صفّ المرحلة أثناء التحديث (select_for_update) لتجنّب التحديثات المتزامنة.
+    - منع التسليم إذا كان الطلب مُجمَّدًا (نزاع).
+    - منع التسليم بعد اعتماد المرحلة أو سدادها.
+    - تصفير سبب الرفض عند إعادة التسليم وفتح المراجعة من جديد.
+    - إبقاء الطلب في حالة "قيد التنفيذ" فقط (لا يتم إكمال الطلب هنا).
+
+    الحقول المدعومة (اختياريًا وفق نموذجك):
+    - is_delivered, delivered_at, delivered_note
+    - is_pending_review
+    - is_rejected, rejected_reason
+    - is_approved
+    - is_paid   (إن وُجدت على المرحلة/أو عبر الفاتورة)
+    """
+
+    # جلب المرحلة مع قفل صف أثناء التحديث (يحتاج أن تكون داخل @transaction.atomic)
+    ms = (
+        Milestone.objects
+        .select_related("agreement__request")
+        .select_for_update()
+        .get(pk=milestone_id)
+    )
     req = ms.agreement.request
 
-    is_admin = _is_admin(request.user)
+    # حماية في حالة النزاع: الطلب مُجمَّد → لا تسليم
+    if getattr(req, "is_frozen", False) or str(getattr(req, "status", "")).lower() == "disputed":
+        messages.error(request, "لا يمكن تسليم المرحلة: الطلب في حالة نزاع.")
+        return _redirect_to_request_detail(ms)
+
+    # صلاحيات: موظف مُسنَد أو أدمن/ستاف
+    is_admin = _is_admin(request.user)  # متوقعة لديك (تتحقق من is_staff/superuser أو أدوار الإدارة)
     is_assigned_employee = request.user.id == getattr(req, "assigned_employee_id", None)
     if not (is_admin or is_assigned_employee):
+        logger.warning("رفض تسليم مرحلة بسبب الصلاحيات | user=%s milestone=%s", request.user.id, ms.pk)
         messages.error(request, "ليست لديك صلاحية لتسليم هذه المرحلة.")
         return _redirect_to_request_detail(ms)
 
-    if bool(getattr(ms, "is_approved", False)) or bool(getattr(ms, "is_paid", False)):
+    # منع التسليم بعد الاعتماد أو السداد
+    # نتحقق من الأعلام البوليانية إن وُجدت، وكذلك الفاتورة المرتبطة إن وُجدت
+    is_approved = bool(getattr(ms, "is_approved", False))
+    is_paid_flag = bool(getattr(ms, "is_paid", False))
+
+    invoice_paid = False
+    inv = getattr(ms, "invoice", None)
+    if inv is not None:
+        try:
+            invoice_paid = (str(getattr(inv, "status", "")).lower() == "paid")
+        except Exception:
+            invoice_paid = False
+
+    if is_approved or is_paid_flag or invoice_paid:
         messages.info(request, "لا يمكن تسليم المرحلة بعد اعتمادها أو سدادها.")
         return _redirect_to_request_detail(ms)
 
+    # ملاحظة التسليم (اختياري)
     note = (request.POST.get("note") or "").strip()
+
+    # تحديثات آمنة للحقول (باستخدام أداة المشروع _set_db_field)
     updates: List[str] = []
-    _set_db_field(ms, "delivered_at", timezone.now(), updates)
+    now = timezone.now()
+
+    # سنضبط حالة التسليم وفتح المراجعة وإزالة أي رفض سابق
+    _set_db_field(ms, "delivered_at", now, updates)
     _set_db_field(ms, "delivered_note", note, updates)
     _set_db_field(ms, "is_delivered", True, updates)
     _set_db_field(ms, "is_pending_review", True, updates)
     _set_db_field(ms, "is_rejected", False, updates)
     _set_db_field(ms, "rejected_reason", "", updates)
-    _set_db_field(ms, "updated_at", timezone.now(), updates)
+    _set_db_field(ms, "updated_at", now, updates)
+
+    # إن كان لديك حقل status نصّي للمراحل (مثل: pending/under_review/...) يمكنك تعيينه هنا:
+    # _set_db_field(ms, "status", "under_review", updates)
+
     ms.save(update_fields=updates or None)
 
-    # تأكيد دفع الطلب باتجاه التنفيذ فقط (بدون إكمال)
-    _touch_request_in_progress(req)
+    # دفع الطلب باتجاه التنفيذ (لا يتم إكمال الطلب هنا)
+    try:
+        _touch_request_in_progress(req)
+    except Exception as exc:
+        # لا نفشل العملية الأساسية، لكن نسجل التحذير
+        logger.warning("فشل _touch_request_in_progress(req=%s): %s", req.pk, exc)
 
     messages.success(request, "تم تسليم المرحلة — أُرسلت للمراجعة لدى العميل.")
     return _redirect_to_request_detail(ms)
+
+
+@require_role("client")
+@transaction.atomic
+def milestone_review(request, agreement_id, milestone_id):
+    m = get_object_or_404(Milestone.objects.select_related("agreement__request"), pk=milestone_id, agreement_id=agreement_id)
+    req = m.agreement.request
+    if req.is_frozen:
+        return HttpResponseForbidden("الطلب في نزاع")
+    action = request.POST.get("action")  # approve / reject
+    if action == "approve":
+        m.status = m.Status.APPROVED
+        m.approved_at = timezone.now()
+        m.rejected_reason = ""
+        m.save(update_fields=["status", "approved_at", "rejected_reason"])
+        messages.success(request, "تم اعتماد المرحلة، وتم إنشاء/تفعيل الفاتورة")
+    else:
+        reason = (request.POST.get("reason") or "").strip()
+        if not reason:
+            messages.error(request, "اذكر سبب الرفض")
+            return redirect("marketplace:request_detail", pk=req.pk)
+        m.status = m.Status.REJECTED
+        m.rejected_reason = reason
+        m.save(update_fields=["status", "rejected_reason"])
+        messages.warning(request, "تم رفض المرحلة. يرجى توضيح المطلوب للموظف")
+    return redirect("marketplace:request_detail", pk=req.pk)
+
+
 
 @login_required
 @transaction.atomic
@@ -537,6 +637,7 @@ def milestone_approve(request: HttpRequest, milestone_id: int, *args, **kwargs) 
     messages.success(request, "تم اعتماد المرحلة وإصدار الفاتورة المستحقة.")
     return _redirect_to_request_detail(ms)
 
+
 @login_required
 @transaction.atomic
 def milestone_reject(request: HttpRequest, milestone_id: int, *args, **kwargs) -> HttpResponse:
@@ -575,3 +676,67 @@ def milestone_reject(request: HttpRequest, milestone_id: int, *args, **kwargs) -
 
     messages.info(request, "تم رفض المرحلة. يمكن للموظف إعادة التسليم بعد التصحيح.")
     return _redirect_to_request_detail(ms)
+
+
+# agreements/views.py (مقتطفات أساسية)
+from django.shortcuts import get_object_or_404, redirect, render
+from django.http import HttpResponseForbidden
+from django.contrib import messages
+from django.db import transaction
+from .models import Agreement, Milestone
+from marketplace.models import Request
+
+@require_role("employee", "manager")
+@transaction.atomic
+def agreement_edit(request, request_id):
+    req = get_object_or_404(Request, pk=request_id)
+    if req.is_frozen:
+        return HttpResponseForbidden("الطلب في نزاع")
+    if request.user != req.assigned_employee and not request.user.is_staff:
+        return HttpResponseForbidden("غير مسموح")
+    ag, _ = Agreement.objects.get_or_create(request=req, defaults={"title": req.title, "total_amount": 0})
+    # عرّض نموذجًا يضيف/يحذف Milestone (1..n) بمبالغها
+    # بعد الحفظ: تحقّق أن sum(m.amount) == ag.total_amount، وإلا أظهر رسالة خطأ واضحة
+    ...
+    return render(request, "agreements/agreement_form.html", {"agreement": ag})
+
+@require_role("employee", "manager")
+@transaction.atomic
+def agreement_send(request, request_id):
+    req = get_object_or_404(Request, pk=request_id)
+    if req.is_frozen:
+        return HttpResponseForbidden("الطلب في نزاع")
+    if request.user != req.assigned_employee and not request.user.is_staff:
+        return HttpResponseForbidden("غير مسموح")
+    ag = req.agreement
+    # تحقق من تساوي مجموع المراحل مع الإجمالي:
+    total_m = sum(m.amount for m in ag.milestones.all())
+    if total_m != ag.total_amount:
+        messages.error(request, "مجموع مبالغ الدفعات يجب أن يساوي المبلغ الإجمالي")
+        return redirect("agreements:agreement_edit", request_id=req.pk)
+    ag.mark_sent()
+    req.status = Request.Status.AGREEMENT_PENDING
+    req.save(update_fields=["status", "updated_at"])
+    messages.success(request, "تم إرسال الاتفاقية للعميل")
+    return redirect("marketplace:request_detail", pk=req.pk)
+
+@require_role("client")
+@transaction.atomic
+def agreement_decide(request, request_id):
+    req = get_object_or_404(Request, pk=request_id)
+    if req.is_frozen:
+        return HttpResponseForbidden("الطلب في نزاع")
+    ag = req.agreement
+    action = request.POST.get("action")  # accept / reject
+    if action == "accept":
+        ag.accept()
+        # سيجنّس الإشارة الطلب إلى IN_PROGRESS
+        messages.success(request, "تم قبول الاتفاقية")
+    else:
+        reason = (request.POST.get("reason") or "").strip()
+        if not reason:
+            messages.error(request, "اذكر سبب الرفض")
+            return redirect("marketplace:request_detail", pk=req.pk)
+        ag.reject(reason)
+        messages.warning(request, "تم رفض الاتفاقية. يمكنك طلب تعديلها")
+    return redirect("marketplace:request_detail", pk=req.pk)
