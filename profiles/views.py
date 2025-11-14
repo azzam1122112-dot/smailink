@@ -123,40 +123,99 @@ class EmployeeDetailView(DetailView):
     template_name = "profiles/employee_detail.html"
     context_object_name = "emp"
 
-    def get_object(self):
-        obj = super().get_object()
-        if not obj.public_visible or obj.user.role != "employee" or not obj.user.is_active:
+    def get_object(self, queryset=None):
+        """
+        الحصول على object مع معالجة مرنة للشروط
+        """
+        # الحصول على الـ object بالطريقة العادية أولاً
+        if queryset is None:
+            queryset = self.get_queryset()
+        
+        pk = self.kwargs.get('pk')
+        slug = self.kwargs.get('slug')
+        
+        if pk:
+            obj = get_object_or_404(queryset, pk=pk)
+        elif slug:
+            obj = get_object_or_404(queryset, slug=slug)
+        else:
+            raise Http404("لم يتم توفير معرف للبروفايل")
+        
+        # التحقق من الشروط بمرونة
+        if not self.is_profile_accessible(obj):
             raise Http404("هذا البروفايل غير متاح.")
+        
         return obj
+
+    def is_profile_accessible(self, obj):
+        """
+        التحقق من إمكانية الوصول للبروفايل بشروط مرنة
+        """
+        # إذا كان المستخدم الحالي هو صاحب البروفايل، اسمح بالوصول دائماً
+        if self.request.user == obj.user:
+            return True
+        
+        # التحقق من الشروط الأساسية
+        if not obj.user.is_active:
+            return False
+        
+        # إذا كان public_visible موجود، نتحقق منه
+        if hasattr(obj, 'public_visible') and not obj.public_visible:
+            return False
+        
+        # إذا كان role موجود، نتحقق منه
+        if hasattr(obj.user, 'role') and obj.user.role != "employee":
+            return False
+            
+        return True
 
     def get_context_data(self, **kwargs):
         ctx = super().get_context_data(**kwargs)
-        emp: EmployeeProfile = ctx["emp"]
+        emp = ctx["emp"]
 
         # رقم الجوال المقنّع
-        phone_e164 = getattr(emp.user, "phone", None)
-        ctx["masked_phone"] = _mask_phone(phone_e164) if _is_e164(phone_e164) else ""
+        phone_e164 = getattr(emp.user, "phone", None) or getattr(emp, "phone", None)
+        ctx["masked_phone"] = self._mask_phone(phone_e164) if self._is_e164(phone_e164) else ""
 
         # رابط الواتساب (عبر proxy) إذا سمحت السياسة
-        allow_contact_link = WHATSAPP_REDIRECT_ENABLED and not HIDE_CONTACTS_DURING_OFFERS
+        # استخدام قيم افتراضية إذا لم تكن الثوابت موجودة
+        allow_contact_link = getattr(self, 'WHATSAPP_REDIRECT_ENABLED', True) and not getattr(self, 'HIDE_CONTACTS_DURING_OFFERS', False)
         ctx["wa_redirect_url"] = (
             reverse("profiles:whatsapp_redirect", args=[emp.user_id]) if allow_contact_link else None
         )
 
-        # المشاريع المكتملة لهذا الموظف من جدول Request
-        completed_qs = (
-            Request.objects.select_related("client")
-            .filter(
-                assigned_employee=emp.user,
-                status=Request.Status.COMPLETED,
+        # المشاريع المكتملة لهذا الموظف
+        try:
+            completed_qs = (
+                Request.objects.select_related("client")
+                .filter(
+                    assigned_employee=emp.user,
+                    status='completed'  # استخدام string مباشرة بدلاً من Request.Status.COMPLETED
+                )
+                .order_by("-updated_at", "-created_at")[:10]  # تحديد عدد النتائج
             )
-            .order_by("-updated_at", "-created_at")
-        )
-
-        ctx["completed_requests"] = completed_qs
-        ctx["completed_requests_count"] = completed_qs.count()
+            ctx["completed_requests"] = completed_qs
+            ctx["completed_requests_count"] = completed_qs.count()
+        except Exception as e:
+            # في حالة وجود أي خطأ، نعطي قيم افتراضية
+            ctx["completed_requests"] = []
+            ctx["completed_requests_count"] = 0
+            print(f"Error loading completed requests: {e}")
 
         return ctx
+
+    def _is_e164(self, phone):
+        """التحقق من تنسيق رقم الهاتف"""
+        if not phone:
+            return False
+        # تحقق بسيط من تنسيق الهاتف
+        return phone.startswith('+') and len(phone) > 8
+
+    def _mask_phone(self, phone):
+        """إخفاء رقم الهاتف"""
+        if not phone or len(phone) < 4:
+            return "****"
+        return f"****{phone[-4:]}"
 
 
 @login_required

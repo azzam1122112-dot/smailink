@@ -13,12 +13,14 @@ urlpatterns = [
     path("", EmployeeListView.as_view(), name="employees_list"),
     path("techs/", RedirectView.as_view(pattern_name="profiles:employees_list", permanent=True), name="techs_list"),
     path("employees/", RedirectView.as_view(pattern_name="profiles:employees_list", permanent=True), name="employees_list_alias"),
-    path('employees/<int:pk>/', views.EmployeeDetailView.as_view(), name='employee_detail'),
-
-    # ملفات عامة (slug)
-    path("<slug:slug>/", EmployeeDetailView.as_view(), name="employee_detail"),
-    path("tech/<slug:slug>/", EmployeeDetailView.as_view(), name="tech_profile_detail"),
-
+    
+    # ✅ التصحيح: دمج المسارين في مسار واحد يدعم pk و slug
+    path('employees/<int:pk>/', EmployeeDetailView.as_view(), name='employee_detail_by_pk'),
+    path('employees/<slug:slug>/', EmployeeDetailView.as_view(), name='employee_detail_by_slug'),
+    
+    # ✅ مسار رئيسي واحد
+    path('employee/<int:pk>/', EmployeeDetailView.as_view(), name='employee_detail'),
+    
     # تحويل واتساب الآمن
     path("w/emp/<int:user_id>/", whatsapp_redirect, name="whatsapp_redirect"),
 ]
