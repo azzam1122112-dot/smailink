@@ -1,0 +1,120 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}التنبيهات — سامي لينك{% endblock %}
+
+{% block extra_head %}
+<style>
+  .notif-card{transition:transform .2s, box-shadow .2s; border-radius:1rem}
+  .notif-card:hover{transform:translateY(-4px); box-shadow:0 16px 32px -16px rgba(0,0,0,.15)}
+  .notif-unread{background:linear-gradient(180deg,#f8fafc 0%,#ffffff 100%);}
+  .dark .notif-unread{background:linear-gradient(180deg,#0b1220 0%,#0f172a 100%);}
+  .notif-read{background:#fff}
+  .dark .notif-read{background:#0f172a}
+  .chip{font-weight:700; font-size:.75rem; padding:.25rem .6rem; border-radius:9999px}
+  .chip-unread{color:#fff; background:linear-gradient(135deg,#0284c7 0%,#0369a1 100%)}
+  .chip-read{color:#065f46; background:#ecfdf5}
+  .empty-state{border:2px dashed rgba(148,163,184,.35); border-radius:1.25rem}
+</style>
+{% endblock %}
+
+{% block content %}
+<header class="mb-8">
+  <div class="flex items-center justify-between gap-4">
+    <div>
+      <h1 class="text-3xl md:text-4xl font-black gradient-text">مركز التنبيهات</h1>
+      <p class="text-slate-600 dark:text-slate-400 mt-1">كل ما يهمك في المنصة من تحديثات وإشعارات.</p>
+    </div>
+    <div class="flex items-center gap-2">
+      <a href="{% url 'notifications:mark_all_read' %}" class="px-3 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700 transition">
+        <i class="fas fa-eye mr-2"></i> تعليم الكل كمقروء
+      </a>
+      <a href="{% url 'notifications:delete_all' %}" class="px-3 py-2 rounded-xl bg-red-600 text-white hover:bg-red-700 transition" onclick="return confirm('هل أنت متأكد من حذف جميع التنبيهات؟');">
+        <i class="fas fa-trash mr-2"></i> حذف الكل
+      </a>
+    </div>
+  </div>
+
+  <!-- تبويبات الفلاتر -->
+  <div class="mt-6 flex items-center gap-2">
+    {% with status_q=status_q|default:"all" %}
+      <a href="{% url 'notifications:list' %}?status=all" class="px-4 py-2 rounded-xl border {% if status_q == 'all' %}bg-primary-600 text-white border-primary-600{% else %}bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800{% endif %}">الكل</a>
+      <a href="{% url 'notifications:list' %}?status=unread" class="px-4 py-2 rounded-xl border {% if status_q == 'unread' %}bg-primary-600 text-white border-primary-600{% else %}bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800{% endif %}">غير مقروءة</a>
+      <a href="{% url 'notifications:list' %}?status=read" class="px-4 py-2 rounded-xl border {% if status_q == 'read' %}bg-primary-600 text-white border-primary-600{% else %}bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800{% endif %}">مقروءة</a>
+    {% endwith %}
+  </div>
+</header>
+
+{% if page_obj.object_list %}
+  <div class="grid md:grid-cols-2 xl:grid-cols-3 gap-4">
+    {% for n in page_obj.object_list %}
+      <article class="notif-card border border-slate-200 dark:border-slate-700 p-5 relative {% if not n.is_read %}notif-unread{% else %}notif-read{% endif %}">
+        <div class="flex items-start gap-4">
+          <div class="w-12 h-12 rounded-xl grid place-items-center text-white shadow"
+               style="background-image:linear-gradient(135deg,#0284c7,#075985);">
+            <i class="fas fa-bell"></i>
+          </div>
+          <div class="flex-1">
+            <div class="flex items-center justify-between gap-3">
+              <h3 class="text-lg font-bold text-slate-800 dark:text-slate-100">
+                <a href="{% url 'notifications:detail' n.id %}" class="hover:underline">{{ n.title|default:"تنبيه" }}</a>
+              </h3>
+              <span class="text-xs text-slate-500 dark:text-slate-400">{{ n.created_at|date:"Y-m-d H:i" }}</span>
+            </div>
+            {% if n.body %}
+              <p class="mt-1 text-slate-600 dark:text-slate-300 line-clamp-2">{{ n.body }}</p>
+            {% endif %}
+
+            <div class="mt-3 flex items-center gap-2">
+              {% if not n.is_read %}
+                <span class="chip chip-unread">غير مقروء</span>
+              {% else %}
+                <span class="chip chip-read">مقروء</span>
+              {% endif %}
+
+              {% if n.url %}
+                <a href="{% url 'notifications:detail' n.id %}" class="px-3 py-1.5 rounded-lg text-primary-700 dark:text-primary-300 hover:bg-primary-50 dark:hover:bg-primary-900/20 transition">
+                  فتح الرابط
+                </a>
+              {% endif %}
+            </div>
+          </div>
+        </div>
+
+        <div class="mt-4 flex items-center gap-2">
+          {% if not n.is_read %}
+            <a href="{% url 'notifications:mark_read' n.id %}?next={{ request.get_full_path|urlencode }}" class="px-3 py-2 rounded-lg bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 transition">
+              <i class="fas fa-check mr-1"></i> تعليم كمقروء
+            </a>
+          {% endif %}
+          <a href="{% url 'notifications:delete' n.id %}?next={{ request.get_full_path|urlencode }}" class="px-3 py-2 rounded-lg bg-red-600 text-white hover:bg-red-700 transition" onclick="return confirm('حذف هذا التنبيه؟');">
+            <i class="fas fa-trash mr-1"></i> حذف
+          </a>
+        </div>
+      </article>
+    {% endfor %}
+  </div>
+
+  <!-- ترقيم -->
+  {% if page_obj.paginator.num_pages > 1 %}
+    <nav class="mt-8 flex items-center justify-center gap-2">
+      {% if page_obj.has_previous %}
+        <a class="px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800" href="?page={{ page_obj.previous_page_number }}&status={{ status_q }}">السابق</a>
+      {% endif %}
+      <span class="px-3 py-2 rounded-lg bg-primary-600 text-white">{{ page_obj.number }}</span>
+      {% if page_obj.has_next %}
+        <a class="px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800" href="?page={{ page_obj.next_page_number }}&status={{ status_q }}">التالي</a>
+      {% endif %}
+    </nav>
+  {% endif %}
+{% else %}
+  <div class="empty-state p-10 text-center">
+    <div class="w-16 h-16 rounded-2xl mx-auto grid place-items-center text-white shadow mb-4"
+         style="background-image:linear-gradient(135deg,#0284c7,#075985);">
+      <i class="fas fa-inbox"></i>
+    </div>
+    <h3 class="text-xl font-bold mb-2">لا توجد تنبيهات حالياً</h3>
+    <p class="text-slate-600 dark:text-slate-400">عند وصول جديد سنعرضه لك هنا مباشرة.</p>
+  </div>
+{% endif %}
+{% endblock %}

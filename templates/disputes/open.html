@@ -1,52 +1,105 @@
+{# disputes/templates/disputes/open_dispute.html #}
 {% extends "base.html" %}
 {% block title %}فتح نزاع — طلب #{{ req.pk }}{% endblock %}
+
+{% block extra_css %}
+<style>
+  .fade-in{animation:fadeIn .45s ease} @keyframes fadeIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
+  .card{border-radius:1rem}
+  .hint{font-size:.8rem;color:#64748b}
+  .danger{background:#fef2f2;border-color:#fecaca;color:#991b1b}
+  .input-focus:focus{box-shadow:0 0 0 3px rgba(99,102,241,.12);outline:0}
+  .counter{font-size:.75rem}
+  .backdrop{position:fixed;inset:0;background:rgba(2,6,23,.45);display:none;z-index:60}
+  .modal{background:var(--tw-bg, #fff);border-radius:1rem;max-width:28rem;margin-inline:auto}
+  .dark .modal{--tw-bg:#0f172a}
+</style>
+{% endblock %}
+
 {% block content %}
 <section class="max-w-2xl mx-auto rtl py-8" dir="rtl">
-  <div class="rounded-2xl border bg-white dark:bg-slate-800 p-6 space-y-4">
-    <h1 class="text-xl font-bold">فتح نزاع للطلب #{{ req.pk }}</h1>
+  <div class="card border bg-white dark:bg-slate-800 p-6 space-y-5 fade-in">
+    <header class="flex items-start justify-between">
+      <div>
+        <h1 class="text-xl font-extrabold text-slate-900 dark:text-white">
+          فتح نزاع للطلب <span class="text-indigo-600 dark:text-indigo-300">#{{ req.pk }}</span>
+        </h1>
+        <p class="mt-1 text-slate-600 dark:text-slate-300 text-sm">
+          سيتم إشعار قسم النزاعات وإيقاف أي صرف مالي تلقائي لحين معالجة الطلب.
+        </p>
+      </div>
+      <a href="{% url 'marketplace:request_detail' req.pk %}"
+         class="btn btn-light">
+        رجوع
+      </a>
+    </header>
 
     {# أخطاء عامة للنموذج #}
     {% if form.non_field_errors %}
-      <div class="p-3 rounded-lg bg-red-50 dark:bg-red-900/20 text-red-700 dark:text-red-200 text-sm">
+      <div class="p-3 rounded-xl border danger">
         {% for err in form.non_field_errors %}
-          <div>{{ err }}</div>
+          <div class="text-sm">{{ err }}</div>
         {% endfor %}
       </div>
     {% endif %}
 
-    <form method="post" action="{% url 'disputes:open' req.pk %}" onsubmit="return confirm('سيتم فتح نزاع لهذا الطلب. تأكيد؟');">
+    <form id="open-dispute-form"
+          method="post"
+          action="{% url 'disputes:open_by_request' req.pk %}"
+          novalidate>
       {% csrf_token %}
       {{ form.media }}
 
-      <div class="space-y-4">
+      <div class="space-y-5">
+        {# العنوان #}
         <div>
-          <label class="block text-sm text-slate-600 dark:text-slate-300 mb-1">العنوان</label>
-          {{ form.title }}
+          <label class="block text-sm font-semibold text-slate-700 dark:text-slate-200 mb-1">
+            العنوان
+          </label>
+          {{ form.title|add_class:"w-full rounded-xl border px-4 py-2 input-focus bg-white dark:bg-slate-700 dark:border-slate-600" }}
           {% if form.title.errors %}
-            <p class="mt-1 text-xs text-red-600">
+            <p class="mt-1 text-xs text-rose-600">
               {% for e in form.title.errors %}{{ e }}{% if not forloop.last %}<br>{% endif %}{% endfor %}
             </p>
           {% endif %}
+          <div class="flex items-center justify-between mt-1">
+            <span class="hint">اكتب وصفًا مختصرًا وواضحًا لموضوع النزاع.</span>
+            <span class="counter text-slate-500" data-counter-for="id_title"></span>
+          </div>
         </div>
 
+        {# السبب #}
         <div>
-          <label class="block text-sm text-slate-600 dark:text-slate-300 mb-1">السبب</label>
-          {{ form.reason }}
+          <label class="block text-sm font-semibold text-slate-700 dark:text-slate-200 mb-1">
+            السبب
+          </label>
+          {{ form.reason|add_class:"w-full rounded-xl border px-4 py-2 input-focus bg-white dark:bg-slate-700 dark:border-slate-600" }}
           {% if form.reason.errors %}
-            <p class="mt-1 text-xs text-red-600">
+            <p class="mt-1 text-xs text-rose-600">
               {% for e in form.reason.errors %}{{ e }}{% if not forloop.last %}<br>{% endif %}{% endfor %}
             </p>
           {% endif %}
+          <div class="flex items-center justify-between mt-1">
+            <span class="hint">اختر/اكتب سببًا محددًا يُسهل المعالجة.</span>
+            <span class="counter text-slate-500" data-counter-for="id_reason"></span>
+          </div>
         </div>
 
+        {# التفاصيل الإضافية #}
         <div>
-          <label class="block text-sm text-slate-600 dark:text-slate-300 mb-1">تفاصيل إضافية</label>
-          {{ form.details }}
+          <label class="block text-sm font-semibold text-slate-700 dark:text-slate-200 mb-1">
+            تفاصيل إضافية
+          </label>
+          {{ form.details|add_class:"w-full rounded-xl border px-4 py-3 input-focus bg-white dark:bg-slate-700 dark:border-slate-600" }}
           {% if form.details.errors %}
-            <p class="mt-1 text-xs text-red-600">
+            <p class="mt-1 text-xs text-rose-600">
               {% for e in form.details.errors %}{{ e }}{% if not forloop.last %}<br>{% endif %}{% endfor %}
             </p>
           {% endif %}
+          <div class="flex items-center justify-between mt-1">
+            <span class="hint">أدرج وقائع مختصرة وأدلّة (أرقام فواتير/مراحل… إلخ).</span>
+            <span class="counter text-slate-500" data-counter-for="id_details"></span>
+          </div>
         </div>
 
         {# اختياري: ربط النزاع بمرحلة معينة إن رغبت #}
@@ -55,11 +108,93 @@
         {% endif %}
       </div>
 
-      <div class="mt-6 flex items-center gap-2">
-        <button class="btn btn-danger">فتح نزاع</button>
-        <a href="{{ req.get_absolute_url }}" class="btn btn-ghost">رجوع</a>
+      <div class="mt-6 flex items-center gap-3">
+        <button id="submit-btn" type="button"
+                class="btn btn-danger px-5">
+          فتح نزاع
+        </button>
+        <a href="{% url 'marketplace:request_detail' req.pk %}" class="btn btn-ghost">
+          رجوع
+        </a>
       </div>
     </form>
   </div>
 </section>
+
+{# Modal تأكيد خفيف #}
+<div id="confirm-backdrop" class="backdrop">
+  <div class="modal border mx-4 mt-24 p-6 shadow-xl">
+    <h3 class="text-lg font-bold text-slate-900 dark:text-white">تأكيد فتح النزاع</h3>
+    <p class="mt-2 text-slate-600 dark:text-slate-300 text-sm">
+      سيتم فتح نزاع لهذا الطلب وإيقاف أي صرف حتى تتم المراجعة. هل تريد المتابعة؟
+    </p>
+    <div class="mt-5 flex gap-2 justify-end">
+      <button id="cancel-confirm" class="btn btn-light">إلغاء</button>
+      <button id="confirm-submit" class="btn btn-danger">تأكيد</button>
+    </div>
+  </div>
+</div>
+
+<script>
+(function(){
+  const form = document.getElementById('open-dispute-form');
+  const submitBtn = document.getElementById('submit-btn');
+  const backdrop = document.getElementById('confirm-backdrop');
+  const confirmBtn = document.getElementById('confirm-submit');
+  const cancelBtn = document.getElementById('cancel-confirm');
+
+  // عدّادات الأحرف (تقرأ maxlength إن وُجد وإلا تعرض العدد الحالي فقط)
+  function wireCounter(id){
+    const el = document.getElementById(id);
+    const counter = document.querySelector('[data-counter-for="'+id+'"]');
+    if(!el || !counter) return;
+    const max = el.getAttribute('maxlength');
+    const update = () => {
+      const len = (el.value || '').length;
+      counter.textContent = max ? (len + ' / ' + max) : (len + ' حرف');
+    };
+    el.addEventListener('input', update);
+    update();
+  }
+  ['id_title','id_reason','id_details'].forEach(wireCounter);
+
+  // منع الإرسال المكرر
+  function lockForm(){
+    const btn = form.querySelector('button[type="submit"], #submit-btn');
+    if(btn){ btn.setAttribute('disabled','disabled'); btn.classList.add('opacity-60','pointer-events-none'); }
+  }
+
+  // تأكيد عبر Modal
+  function openModal(){ backdrop.style.display='block'; }
+  function closeModal(){ backdrop.style.display='none'; }
+
+  submitBtn?.addEventListener('click', function(){
+    openModal();
+  });
+  cancelBtn?.addEventListener('click', function(){
+    closeModal();
+  });
+  backdrop?.addEventListener('click', function(e){
+    if(e.target === backdrop) closeModal();
+  });
+
+  confirmBtn?.addEventListener('click', function(){
+    // تحويل زر الإرسال الحقيقي إلى submit ثم قفل
+    const hiddenSubmit = document.createElement('button');
+    hiddenSubmit.type = 'submit';
+    hiddenSubmit.style.display = 'none';
+    form.appendChild(hiddenSubmit);
+    lockForm();
+    form.submit();
+  });
+
+  // تحسين لوحة المفاتيح
+  document.addEventListener('keydown', function(e){
+    if(backdrop.style.display==='block'){
+      if(e.key==='Escape'){ closeModal(); }
+      if(e.key==='Enter'){ confirmBtn.click(); }
+    }
+  });
+})();
+</script>
 {% endblock %}

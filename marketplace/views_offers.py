@@ -1,20 +1,21 @@
+# marketplace/views_offers.py
 from __future__ import annotations
 
 """
-عروض الطلبات – منطق إنشاء/اختيار/رفض العرض مع ضوابط أمان وسياسات السوق.
+عروض الطلبات – منطق إنشاء/اختيار/رفض/سحب العرض مع ضوابط أمان وسياسات السوق.
 
 نقاط بارزة:
 - نافذة العروض: افتراضيًا 5 أيام من إنشاء الطلب (قابلة للتعديل عبر settings.OFFERS_WINDOW_DAYS).
 - موظف واحد/عرض واحد على نفس الطلب (يُمنع التكرار على PENDING/SELECTED).
-- لا عروض على طلب مُسند أو خارج حالة NEW أو في نزاع.
+- لا عروض على طلب مُسنَّد أو خارج حالة NEW أو في نزاع/تجميد.
 - اختيار العرض: يرفض بقية العروض، ويسند الطلب للموظف، ويحوّل الحالة إلى OFFER_SELECTED.
-- تعامل آمن مع الحقول الاختيارية (offer_selected_at/updated_at) بدون كسر التوافق.
 - تنظيف مدخلات النصوص، والتحقق الصارم من السعر كـ Decimal موجبة ضمن نطاق منطقي.
-- سجلات (logging) للأحداث المهمة لتتبّع الإنتاج.
+- سجلات (logging) للأحداث المهمة + معاملات ذرّية لتناسق البيانات.
 """
 
 import logging
 from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
+from typing import Optional
 
 from django.conf import settings
 from django.utils import timezone
@@ -31,7 +32,7 @@ from django.http import (
 from django.shortcuts import get_object_or_404, redirect
 from django.views.decorators.http import require_POST
 
-from core.permissions import require_role  # ✅
+from core.permissions import require_role  # يتيح للـ staff/admin كذلك
 from .models import Request, Offer
 
 logger = logging.getLogger(__name__)
@@ -40,12 +41,13 @@ logger = logging.getLogger(__name__)
 # إعدادات وسياسات
 # =========================
 OFFERS_WINDOW_DAYS: int = int(getattr(settings, "OFFERS_WINDOW_DAYS", 5))
-MAX_PRICE: Decimal = Decimal(getattr(settings, "OFFERS_MAX_PRICE", "1000000"))
-MIN_PRICE: Decimal = Decimal("1")
+MAX_PRICE: Decimal = Decimal(str(getattr(settings, "OFFERS_MAX_PRICE", "1000000")))
+MIN_PRICE: Decimal = Decimal("1.00")
+
 
 # محاولة استيراد المُخطر من views؛ إن لم يوجد وفّر بديل صامت
 try:
-    from .views import _notify_offer_selected  # موجود غالبًا في marketplace/views.py
+    from .views import _notify_offer_selected  # متوقع وجوده في marketplace/views.py
 except Exception:  # pragma: no cover
     def _notify_offer_selected(off: Offer) -> None:  # noqa: N802
         return
@@ -84,8 +86,27 @@ def _within_offers_window(req: Request) -> bool:
     return timezone.now() <= deadline
 
 
-def _sanitize_notes(value: str, max_len: int = 2000) -> str:
-    """تنظيف ملاحظات النص من الوسوم وتقليل الطول."""
+def _offers_open(req: Request) -> bool:
+    """
+    نافذة العروض مفتوحة إذا كان:
+    - حالة الطلب NEW
+    - غير مُسنَّد
+    - ليس مُجمّدًا وليس في نزاع
+    - ضمن نافذة الأيام المحددة
+    """
+    status_str = str(getattr(req, "status", "")).lower()
+    new_value = getattr(Request.Status, "NEW", "new")
+    if status_str != str(new_value).lower():
+        return False
+    if getattr(req, "assigned_employee_id", None):
+        return False
+    if getattr(req, "is_frozen", False) or status_str == "disputed":
+        return False
+    return _within_offers_window(req)
+
+
+def _sanitize_notes(value: Optional[str], max_len: int = 2000) -> str:
+    """تنظيف ملاحظات النص من الوسوم وتقليل الطول لحماية XSS."""
     value = (value or "").strip()
     value = strip_tags(value)
     if len(value) > max_len:
@@ -93,16 +114,15 @@ def _sanitize_notes(value: str, max_len: int = 2000) -> str:
     return value
 
 
-def _parse_price(raw: str) -> Decimal | None:
+def _parse_price(raw: Optional[str]) -> Optional[Decimal]:
     """
     تحويل السعر إلى Decimal موجبة مع تقريب إلى خانتين.
-    يعيد None عند عدم صحة الإدخال.
+    يعيد None عند عدم صحة الإدخال أو تجاوز الحدود.
     """
     try:
         price = Decimal((raw or "").strip())
         if price <= 0:
             return None
-        # تقريب إلى خانتين (مثل العملات)
         price = price.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
         if price < MIN_PRICE or price > MAX_PRICE:
             return None
@@ -122,7 +142,7 @@ def offer_create(request: HttpRequest, request_id: int) -> HttpResponse:
     الموظف يرسل عرضًا على طلب جديد.
 
     الأمان والمنطق:
-    - POST فقط.
+    - POST فقط + معاملة ذرّية.
     - رفض عند النزاع/التجميد.
     - يُسمح فقط للموظف أو للإدارة.
     - منع التكرار لنفس الموظف (PENDING/SELECTED).
@@ -134,31 +154,15 @@ def offer_create(request: HttpRequest, request_id: int) -> HttpResponse:
 
     role = getattr(request.user, "role", "")
     if not (_is_admin(request.user) or role == "employee"):
-        logger.warning("offer_create: unauthorized user tried to offer", extra={"user_id": request.user.id, "req": req.pk})
+        logger.warning(
+            "offer_create: unauthorized user tried to offer",
+            extra={"user_id": getattr(request.user, "id", None), "req": req.pk},
+        )
         return HttpResponseForbidden("ليست لديك صلاحية لإرسال عرض على هذا الطلب.")
 
-    # منع العروض أثناء النزاع/التجميد
-    status_str = str(getattr(req, "status", "")).lower()
-    if getattr(req, "is_frozen", False) or status_str == "disputed":
-        messages.error(request, "لا يمكن إرسال عرض: الطلب في حالة نزاع.")
-        return redirect("marketplace:request_detail", pk=req.pk)
-
-    # لا عروض إلا على NEW وغير المُسنَد
-    new_value = getattr(Request.Status, "NEW", "new")
-    if str(getattr(req, "status", "")).lower() != str(new_value).lower():
-        messages.info(request, "لا يمكن إرسال عرض إلا على الطلبات الجديدة.")
-        return redirect("marketplace:request_detail", pk=req.pk)
-
-    if getattr(req, "assigned_employee_id", None):
-        messages.info(request, "تم إسناد الطلب بالفعل.")
-        return redirect("marketplace:request_detail", pk=req.pk)
-
-    # نافذة العروض
-    if not _within_offers_window(req):
-        messages.error(
-            request,
-            f"انتهت نافذة استقبال العروض ({OFFERS_WINDOW_DAYS} أيام من إنشاء الطلب)."
-        )
+    # لا عروض إلا على NEW وغير المُسنَد وضمن النافذة ودون نزاع/تجميد
+    if not _offers_open(req):
+        messages.error(request, "لا يمكن إرسال عرض على هذا الطلب في حالته الحالية/الوقت الحالي.")
         return redirect("marketplace:request_detail", pk=req.pk)
 
     # منع تكرار عروض الموظف نفسه على نفس الطلب (pending/selected)
@@ -178,7 +182,7 @@ def offer_create(request: HttpRequest, request_id: int) -> HttpResponse:
     if price is None:
         messages.error(
             request,
-            f"قيمة السعر غير صحيحة. يُسمح من {MIN_PRICE} إلى {MAX_PRICE} وبخانتين عشريتين."
+            f"قيمة السعر غير صحيحة. يُسمح من {MIN_PRICE} إلى {MAX_PRICE} وبخانتين عشريتين.",
         )
         return redirect("marketplace:request_detail", pk=req.pk)
 
@@ -195,7 +199,11 @@ def offer_create(request: HttpRequest, request_id: int) -> HttpResponse:
 
     logger.info(
         "offer_create: created",
-        extra={"request_id": req.pk, "employee_id": request.user.id, "price": str(price)}
+        extra={
+            "request_id": req.pk,
+            "employee_id": getattr(request.user, "id", None),
+            "price": str(price),
+        },
     )
     messages.success(request, "تم إرسال العرض بنجاح.")
     return redirect("marketplace:request_detail", pk=req.pk)
@@ -210,7 +218,7 @@ def offer_select(request: HttpRequest, offer_id: int) -> HttpResponse:
     - يرفض بقية العروض.
     - يحدّث حالة العرض المختار.
     - يسند الطلب للموظف ويحوّل حالته إلى OFFER_SELECTED.
-    - يتعامل بحذر مع الحقول الاختيارية مثل offer_selected_at/updated_at.
+    - يتعامل بحذر مع الحقول الاختيارية مثل selected_at/updated_at و offer_selected_at.
     """
     off = get_object_or_404(
         Offer.objects.select_related("request", "employee").select_for_update(),
@@ -218,14 +226,18 @@ def offer_select(request: HttpRequest, offer_id: int) -> HttpResponse:
     )
     req = off.request
 
-    # السماح للعميل أو الإدارة فقط (require_role يسمح للـ staff/admin، لكن نضيف تحققًا صريحًا للعميل مالك الطلب)
-    if req.client != request.user and not getattr(request.user, "is_staff", False):
-        logger.warning("offer_select: forbidden user", extra={"user_id": request.user.id, "req": req.pk, "offer": off.pk})
+    # السماح للعميل مالك الطلب أو الإدارة فقط
+    if req.client != request.user and not _is_admin(request.user):
+        logger.warning(
+            "offer_select: forbidden user",
+            extra={"user_id": getattr(request.user, "id", None), "req": req.pk, "offer": off.pk},
+        )
         return HttpResponseForbidden("غير مسموح")
 
     # منع أثناء النزاع/التجميد
-    if getattr(req, "is_frozen", False) or str(getattr(req, "status", "")).lower() == "disputed":
-        messages.error(request, "لا يمكن اختيار عرض: الطلب في حالة نزاع.")
+    status_str = str(getattr(req, "status", "")).lower()
+    if getattr(req, "is_frozen", False) or status_str == "disputed":
+        messages.error(request, "لا يمكن اختيار عرض: الطلب في حالة نزاع/تجميد.")
         return redirect("marketplace:request_detail", pk=req.pk)
 
     # صلاحية العرض للحظة الاختيار
@@ -297,9 +309,9 @@ def offer_select(request: HttpRequest, offer_id: int) -> HttpResponse:
 def offer_reject(request: HttpRequest, offer_id: int) -> HttpResponse:
     """
     رفض عرض من قِبل العميل (أو الإدارة).
-    - POST فقط.
+    - POST فقط + معاملة ذرّية.
     - لا يؤثر على العروض الأخرى.
-    - لا رفض أثناء حالة النزاع.
+    - لا رفض أثناء حالة النزاع/التجميد.
     - لا يُسمح برفض عروض ليست PENDING.
     """
     off = get_object_or_404(
@@ -308,16 +320,19 @@ def offer_reject(request: HttpRequest, offer_id: int) -> HttpResponse:
     )
     req = Request.objects.select_for_update().get(pk=off.request_id)
 
-    is_client = (request.user == req.client)
-    if not (is_client or _is_admin(request.user)):
-        logger.warning("offer_reject: forbidden", extra={"user_id": request.user.id, "offer": off.pk})
+    is_client_owner = (request.user == req.client)
+    if not (is_client_owner or _is_admin(request.user)):
+        logger.warning(
+            "offer_reject: forbidden",
+            extra={"user_id": getattr(request.user, "id", None), "offer": off.pk},
+        )
         return HttpResponseForbidden("ليست لديك صلاحية لرفض العرض.")
 
     if getattr(req, "is_frozen", False) or str(getattr(req, "status", "")).lower() == "disputed":
-        messages.error(request, "لا يمكن رفض عرض: الطلب في حالة نزاع.")
+        messages.error(request, "لا يمكن رفض عرض: الطلب في حالة نزاع/تجميد.")
         return redirect("marketplace:request_detail", pk=req.pk)
 
-    if off.status != getattr(Offer.Status, "PENDING", "pending"):
+    if getattr(off, "status", None) != getattr(Offer.Status, "PENDING", "pending"):
         messages.info(request, "لا يمكن رفض هذا العرض في حالته الحالية.")
         return redirect("marketplace:request_detail", pk=req.pk)
 
@@ -332,18 +347,44 @@ def offer_reject(request: HttpRequest, offer_id: int) -> HttpResponse:
 
     logger.info(
         "offer_reject: rejected",
-        extra={"request_id": req.pk, "offer_id": off.pk, "by_user": request.user.id},
+        extra={"request_id": req.pk, "offer_id": off.pk, "by_user": getattr(request.user, "id", None)},
     )
     messages.success(request, "تم رفض العرض.")
     return redirect("marketplace:request_detail", pk=req.pk)
 
+
 @login_required
-def offer_withdraw(request, offer_id):
-    offer = get_object_or_404(Offer, pk=offer_id, technician=request.user)
-    req = offer.request
-    if not req.offers_open:
+@require_POST
+@transaction.atomic
+def offer_withdraw(request: HttpRequest, offer_id: int) -> HttpResponse:
+    """
+    سحب عرض من الموظف (طالما نافذة العروض مفتوحة والحالة PENDING).
+    - يمنع السحب بعد اختيار العرض أو بعد إغلاق النافذة.
+    """
+    off = get_object_or_404(
+        Offer.objects.select_related("request").select_for_update(),
+        pk=offer_id,
+    )
+    req = off.request
+
+    # لا يسمح إلا لصاحب العرض أو الإدارة
+    if not (_is_admin(request.user) or off.employee_id == getattr(request.user, "id", None)):
+        return HttpResponseForbidden("غير مسموح بسحب هذا العرض.")
+
+    # يجب أن تكون نافذة العروض مفتوحة وأن حالة العرض PENDING
+    if not _offers_open(req):
         messages.error(request, "انتهت نافذة العروض؛ لا يمكن سحب العرض الآن.")
-        return redirect(req.get_absolute_url())
-    offer.delete()
+        return redirect("marketplace:request_detail", pk=req.pk)
+
+    if getattr(off, "status", None) != getattr(Offer.Status, "PENDING", "pending"):
+        messages.info(request, "لا يمكن سحب عرض غير مُعلّق.")
+        return redirect("marketplace:request_detail", pk=req.pk)
+
+    off.delete()
+
+    logger.info(
+        "offer_withdraw: withdrawn",
+        extra={"request_id": req.pk, "offer_id": offer_id, "by_user": getattr(request.user, "id", None)},
+    )
     messages.success(request, "تم سحب العرض، يمكنك إعادة التقديم طالما النافذة مفتوحة.")
-    return redirect(req.get_absolute_url())
+    return redirect("marketplace:request_detail", pk=req.pk)

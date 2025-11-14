@@ -1,0 +1,22 @@
+{# لا نكسر الصفحة إذا غاب مسار: نستخدم as ثم if #}
+{% url 'dashboard:admin_dashboard' as dash_url %}
+{% url 'dashboard:employees_list' as emp_url %}
+{% url 'dashboard:clients_list' as cli_url %}
+{% url 'dashboard:requests_list' as req_url %}
+{% url 'dashboard:disputes_list' as dis_url %}
+{% url 'finance:invoice_list' as inv_url %}
+{% url 'agreements:list' as ag_url %}
+{% url 'marketplace:offers_list' as off_url %}
+{% url 'notifications:list' as noti_url %}
+
+<nav class="px-3 pb-6 space-y-1">
+  {% if dash_url %}<a href="{{ dash_url }}" class="{% if request.resolver_match.url_name == 'admin_dashboard' %}active{% endif %}"><i class="fa fa-gauge"></i><span>لوحة القيادة</span></a>{% endif %}
+  {% if req_url %}<a href="{{ req_url }}"><i class="fa fa-list"></i><span>الطلبات</span></a>{% endif %}
+  {% if inv_url %}<a href="{{ inv_url }}"><i class="fa fa-receipt"></i><span>الفواتير</span></a>{% endif %}
+  {% if ag_url %}<a href="{{ ag_url }}"><i class="fa fa-file-signature"></i><span>الاتفاقيات</span></a>{% endif %}
+  {% if off_url %}<a href="{{ off_url }}"><i class="fa fa-handshake"></i><span>العروض</span></a>{% endif %}
+  {% if dis_url %}<a href="{{ dis_url }}"><i class="fa fa-scale-balanced"></i><span>النزاعات</span></a>{% endif %}
+  {% if emp_url %}<a href="{{ emp_url }}"><i class="fa fa-id-badge"></i><span>الموظفون</span></a>{% endif %}
+  {% if cli_url %}<a href="{{ cli_url }}"><i class="fa fa-user"></i><span>العملاء</span></a>{% endif %}
+  {% if noti_url %}<a href="{{ noti_url }}"><i class="fa fa-bell"></i><span>الإشعارات</span></a>{% endif %}
+</nav>

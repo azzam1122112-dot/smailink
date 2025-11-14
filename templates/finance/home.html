@@ -1,42 +1,112 @@
+{# finance/templates/finance/home.html #}
 {% extends "base.html" %}
+{% load humanize %}
+
 {% block title %}لوحة المالية{% endblock %}
+
 {% block content %}
-<section class="max-w-7xl mx-auto rtl" dir="rtl">
-  <h1 class="text-2xl font-extrabold mb-6">لوحة المالية</h1>
+<div class="container mx-auto px-4 py-6" dir="rtl">
+  <div class="mb-6">
+    <h1 class="text-2xl md:text-3xl font-extrabold">لوحة المالية</h1>
+    <p class="text-sm text-gray-600 mt-1">نظرة إجمالية على التحصيل والضرائب وعمولة المنصة ومتابعة الطلبات.</p>
+  </div>
 
-  <div class="grid md:grid-cols-4 gap-4">
-    <div class="card p-5">
-      <div class="text-slate-500 text-sm mb-1">طلبات قيد التنفيذ</div>
-      <div class="text-2xl font-extrabold">{{ inprogress_count }}</div>
-      <a href="{% url 'finance:inprogress' %}" class="btn btn-ghost mt-3">عرض القائمة</a>
+  <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+    <div class="p-4 rounded-2xl shadow bg-white">
+      <div class="text-gray-500 text-sm">طلبات قيد التنفيذ</div>
+      <div class="text-2xl font-bold mt-1">{{ inprogress_count|default:0 }}</div>
+      <div class="text-xs text-gray-500 mt-1">إجمالي مبالغ اتفاقياتها: {{ total_agreements_amount|floatformat:2 }} ريال</div>
+      <a href="{% url 'finance:in_progress' %}" class="inline-block mt-3 text-sm underline hover:no-underline">عرض الطلبات</a>
     </div>
-    <div class="card p-5">
-      <div class="text-slate-500 text-sm mb-1">إجمالي مبالغ الاتفاقيات</div>
-      <div class="text-2xl font-extrabold">{{ total_agreements_amount|default:0|floatformat:2 }} ر.س</div>
+
+    <div class="p-4 rounded-2xl shadow bg-white">
+      <div class="text-gray-500 text-sm">إجمالي الفواتير المدفوعة</div>
+      <div class="text-2xl font-bold mt-1">{{ paid_sum|default:0|floatformat:2 }} ريال</div>
+      <a href="{% url 'finance:invoice_list' %}?status=paid" class="inline-block mt-3 text-sm underline hover:no-underline">عرض الفواتير المدفوعة</a>
     </div>
-    <div class="card p-5">
-      <div class="text-slate-500 text-sm mb-1">إجمالي غير مدفوع</div>
-      <div class="text-2xl font-extrabold text-amber-600">{{ unpaid_sum|default:0|floatformat:2 }} ر.س</div>
+
+    <div class="p-4 rounded-2xl shadow bg-white">
+      <div class="text-gray-500 text-sm">إجمالي الفواتير غير المدفوعة</div>
+      <div class="text-2xl font-bold mt-1">{{ unpaid_sum|default:0|floatformat:2 }} ريال</div>
+      <a href="{% url 'finance:invoice_list' %}?status=unpaid" class="inline-block mt-3 text-sm underline hover:no-underline">عرض الفواتير غير المدفوعة</a>
     </div>
-    <div class="card p-5">
-      <div class="text-slate-500 text-sm mb-1">إجمالي مدفوع</div>
-      <div class="text-2xl font-extrabold text-emerald-600">{{ paid_sum|default:0|floatformat:2 }} ر.س</div>
+
+    <div class="p-4 rounded-2xl shadow bg-white">
+      <div class="text-gray-500 text-sm">ضريبة القيمة المضافة (مجموع)</div>
+      <div class="text-2xl font-bold mt-1">{{ vat_total|default:0|floatformat:2 }} ريال</div>
+      <a href="{% url 'finance:collections_report' %}" class="inline-block mt-3 text-sm underline hover:no-underline">تقرير التحصيل</a>
+    </div>
+
+    <div class="p-4 rounded-2xl shadow bg-white">
+      <div class="text-gray-500 text-sm">عمولة المنصة (مجموع)</div>
+      <div class="text-2xl font-bold mt-1">{{ platform_fee_total|default:0|floatformat:2 }} ريال</div>
+      <a href="{% url 'finance:collections_report' %}" class="inline-block mt-3 text-sm underline hover:no-underline">تفاصيل بالطرق</a>
+    </div>
+
+    <div class="p-4 rounded-2xl shadow bg-white">
+      <div class="text-gray-500 text-sm">مبالغ محتجزة بسبب نزاعات</div>
+      <div class="text-2xl font-bold mt-1">{{ disputed_total|default:0|floatformat:2 }} ريال</div>
+      <a href="{% url 'finance:collections_report' %}?status=paid" class="inline-block mt-3 text-sm underline hover:no-underline">تتبّع التحصيل</a>
     </div>
   </div>
 
-  <div class="grid md:grid-cols-3 gap-4 mt-6">
-    <a href="{% url 'finance:client_payments' %}" class="card p-5 hover:shadow-lg">
-      <div class="font-bold mb-1">مدفوعات العملاء</div>
-      <div class="text-slate-500 text-sm">عرض كل فواتير العملاء (حسب الحساب الحالي إن كان عميلًا).</div>
-    </a>
-    <a href="{% url 'finance:employee_dues' %}" class="card p-5 hover:shadow-lg">
-      <div class="font-bold mb-1">مستحقات الموظفين</div>
-      <div class="text-slate-500 text-sm">عرض فواتير اتفاقيات الموظف (أو حسب المستخدم الحالي إن كان موظفًا).</div>
-    </a>
-    <a href="{% url 'finance:inprogress' %}" class="card p-5 hover:shadow-lg">
-      <div class="font-bold mb-1">طلبات التنفيذ</div>
-      <div class="text-slate-500 text-sm">إدارة التحصيل للطلبات قيد التنفيذ.</div>
-    </a>
+  <div class="mt-8 grid grid-cols-1 lg:grid-cols-3 gap-6">
+    <div class="lg:col-span-2 p-4 rounded-2xl shadow bg-white">
+      <div class="flex items-center justify-between">
+        <h2 class="text-lg font-bold">تحويلات بانتظار تأكيد مالي (مرجع بنكي مُدخل)</h2>
+        <a href="{% url 'finance:confirm_transfers' %}" class="text-sm underline hover:no-underline">فتح صفحة التأكيد</a>
+      </div>
+      <div class="mt-3 overflow-x-auto">
+        <table class="min-w-full text-sm">
+          <thead>
+            <tr class="text-gray-600 border-b">
+              <th class="py-2 px-3 text-right">فاتورة</th>
+              <th class="py-2 px-3 text-right">طلب</th>
+              <th class="py-2 px-3 text-right">المبلغ</th>
+              <th class="py-2 px-3 text-right">مرجع التحويل</th>
+              <th class="py-2 px-3"></th>
+            </tr>
+          </thead>
+          <tbody>
+            {% if pending_bank_confirms %}
+            {% for inv in pending_bank_confirms %}
+            <tr class="border-b">
+              <td class="py-2 px-3">#{{ inv.id }}</td>
+              <td class="py-2 px-3">R{{ inv.agreement.request_id }}</td>
+              <td class="py-2 px-3">{{ inv.total_amount|floatformat:2 }}</td>
+              <td class="py-2 px-3">{{ inv.paid_ref }}</td>
+              <td class="py-2 px-3">
+                <a href="{% url 'finance:invoice_detail' inv.id %}" class="btn btn-sm">تفاصيل</a>
+              </td>
+            </tr>
+            {% endfor %}
+            {% else %}
+            <tr>
+              <td colspan="5" class="py-4 px-3 text-gray-500">لا توجد تحويلات بانتظار التأكيد حاليًا.</td>
+            </tr>
+            {% endif %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="p-4 rounded-2xl shadow bg-white">
+      <h2 class="text-lg font-bold">إعدادات النِّسَب</h2>
+      <p class="text-sm text-gray-600 mt-1">نسبة عمولة المنصة و VAT (بين 0 و 1).</p>
+      <div class="mt-3">
+        {% if settings_url %}
+        <a href="{{ settings_url }}" class="btn w-full">فتح صفحة الإعدادات</a>
+        {% else %}
+        <a href="{% url 'finance:settings' %}" class="btn w-full">فتح صفحة الإعدادات</a>
+        {% endif %}
+      </div>
+
+      <div class="mt-6">
+        <h3 class="font-bold text-sm">صافي الموظفين (على أساس الفواتير)</h3>
+        <div class="text-2xl font-bold mt-1">{{ employee_dues_total|default:0|floatformat:2 }} ريال</div>
+        <a href="{% url 'finance:employee_dues' %}" class="inline-block mt-3 text-sm underline hover:no-underline">عرض مستحقات الموظفين</a>
+      </div>
+    </div>
   </div>
-</section>
+</div>
 {% endblock %}

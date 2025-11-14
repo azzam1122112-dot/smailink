@@ -3,109 +3,119 @@
 {% block content %}
 <div class="max-w-3xl mx-auto py-8 rtl" dir="rtl">
 
-  <!-- رأس الصفحة -->
+  {# ===== رأس الصفحة ===== #}
   <div class="mb-6 flex items-center justify-between">
-    <h1 class="text-2xl md:text-3xl font-extrabold tracking-tight text-slate-900">
+    <h1 class="text-2xl md:text-3xl font-extrabold tracking-tight text-slate-900 dark:text-white">
       إنشاء طلب جديد
     </h1>
     <a href="{% url 'marketplace:request_list' %}"
-       class="inline-flex items-center gap-2 px-3 py-2 rounded-xl border border-slate-200 hover:bg-slate-50 text-slate-700 transition">
-      <span class="i-lucide:arrow-right rtl:rotate-180"></span>
+       class="inline-flex items-center gap-2 px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-200 transition">
+      <span class="i-lucide:arrow-right rtl:rotate-180" aria-hidden="true"></span>
       العودة للطلبات
     </a>
   </div>
 
-  <!-- بطاقة النموذج -->
-  <div class="bg-white/90 backdrop-blur rounded-2xl shadow-glass-lg border border-slate-200 p-6">
+  {# ===== بطاقة النموذج ===== #}
+  <div class="bg-white/90 dark:bg-slate-800/80 backdrop-blur rounded-2xl shadow-glass-lg border border-slate-200 dark:border-slate-700 p-6">
 
-    <!-- تنبيه للأخطاء العامة -->
+    {# تنبيه للأخطاء العامة #}
     {% if form.non_field_errors %}
-      <div class="mb-4 rounded-xl border border-rose-200 bg-rose-50 p-3 text-rose-700 text-sm">
+      <div class="mb-4 rounded-xl border border-rose-200 dark:border-rose-900 bg-rose-50 dark:bg-rose-900/20 p-3 text-rose-700 dark:text-rose-200 text-sm">
         {{ form.non_field_errors }}
       </div>
     {% endif %}
 
-    <form id="createRequestForm" method="post" {% if form.is_multipart %}enctype="multipart/form-data"{% endif %} class="space-y-6" autocomplete="off">
+    <form id="createRequestForm" method="post" {% if form.is_multipart %}enctype="multipart/form-data"{% endif %} class="space-y-6" autocomplete="off" novalidate>
       {% csrf_token %}
 
-      <!-- العنوان -->
+      {# ===== العنوان ===== #}
       <div>
-        <label for="{{ form.title.id_for_label }}" class="block mb-1 font-semibold text-slate-800">
+        <label for="{{ form.title.id_for_label }}" class="block mb-1 font-semibold text-slate-800 dark:text-slate-100">
           العنوان
         </label>
         {{ form.title }}
         {% if form.title.errors %}
-          <p class="mt-1 text-sm text-rose-600">{{ form.title.errors|join:", " }}</p>
+          <p class="mt-1 text-sm text-rose-600 dark:text-rose-300">{{ form.title.errors|join:", " }}</p>
         {% endif %}
-        <div class="mt-1 flex items-center justify-between text-xs text-slate-500">
+        <div class="mt-1 flex items-center justify-between text-xs text-slate-500 dark:text-slate-400">
           <span>اختر عنوانًا واضحًا موجزًا</span>
           <span id="titleCounter">0/120</span>
         </div>
       </div>
 
-      <!-- التفاصيل -->
+      {# ===== التفاصيل ===== #}
       <div>
-        <label for="{{ form.details.id_for_label }}" class="block mb-1 font-semibold text-slate-800">
+        <label for="{{ form.details.id_for_label }}" class="block mb-1 font-semibold text-slate-800 dark:text-slate-100">
           التفاصيل
         </label>
         {{ form.details }}
         {% if form.details.errors %}
-          <p class="mt-1 text-sm text-rose-600">{{ form.details.errors|join:", " }}</p>
+          <p class="mt-1 text-sm text-rose-600 dark:text-rose-300">{{ form.details.errors|join:", " }}</p>
         {% endif %}
-        <div class="mt-1 flex items-center justify-between text-xs text-slate-500">
+        <div class="mt-1 flex items-center justify-between text-xs text-slate-500 dark:text-slate-400">
           <span>اشرح المطلوب، النطاق، والمخرجات المتوقعة</span>
           <span id="detailsCounter">0/2000</span>
         </div>
       </div>
 
-      <!-- المدة التقديرية والسعر -->
+      {# ===== المدة التقديرية والسعر ===== #}
       <div class="grid md:grid-cols-2 gap-4">
         <div>
-          <label for="{{ form.estimated_duration_days.id_for_label }}" class="block mb-1 font-semibold text-slate-800">
+          <label for="{{ form.estimated_duration_days.id_for_label }}" class="block mb-1 font-semibold text-slate-800 dark:text-slate-100">
             المدة التقديرية (أيام)
           </label>
           {{ form.estimated_duration_days }}
           {% if form.estimated_duration_days.errors %}
-            <p class="mt-1 text-sm text-rose-600">{{ form.estimated_duration_days.errors|join:", " }}</p>
+            <p class="mt-1 text-sm text-rose-600 dark:text-rose-300">{{ form.estimated_duration_days.errors|join:", " }}</p>
           {% endif %}
         </div>
         <div>
-          <label for="{{ form.estimated_price.id_for_label }}" class="block mb-1 font-semibold text-slate-800">
+          <label for="{{ form.estimated_price.id_for_label }}" class="block mb-1 font-semibold text-slate-800 dark:text-slate-100">
             السعر التقريبي
           </label>
           {{ form.estimated_price }}
           {% if form.estimated_price.errors %}
-            <p class="mt-1 text-sm text-rose-600">{{ form.estimated_price.errors|join:", " }}</p>
+            <p class="mt-1 text-sm text-rose-600 dark:text-rose-300">{{ form.estimated_price.errors|join:", " }}</p>
           {% endif %}
-          <div class="mt-1 text-xs text-slate-500">
+          <div class="mt-1 text-xs text-slate-500 dark:text-slate-400">
             <span>معاينة: </span><span id="pricePreview">—</span>
           </div>
         </div>
       </div>
 
-      <!-- الروابط -->
+      {# ===== الروابط ===== #}
       <div>
-        <label for="{{ form.links.id_for_label }}" class="block mb-1 font-semibold text-slate-800">
+        <label for="{{ form.links.id_for_label }}" class="block mb-1 font-semibold text-slate-800 dark:text-slate-100">
           روابط (اختياري)
         </label>
         {{ form.links }}
         {% if form.links.errors %}
-          <p class="mt-1 text-sm text-rose-600">{{ form.links.errors|join:", " }}</p>
+          <p class="mt-1 text-sm text-rose-600 dark:text-rose-300">{{ form.links.errors|join:", " }}</p>
         {% endif %}
-        <p class="mt-1 text-xs text-slate-500">
+        <p class="mt-1 text-xs text-slate-500 dark:text-slate-400">
           يمكنك إدخال أكثر من رابط؛ كل واحد في سطر منفصل. سنفحص صحة الروابط قبل الإرسال.
         </p>
         <div id="linksErrors" class="mt-1 text-xs text-rose-600 hidden"></div>
       </div>
 
-      <!-- أزرار الإجراء -->
+      {# ===== المرفقات (اختياري) ===== #}
+      <div>
+        <label class="block mb-1 font-semibold text-slate-800 dark:text-slate-100" for="attachments">
+          مرفقات (اختياري)
+        </label>
+        <input id="attachments" name="attachments" type="file" multiple accept="image/*,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/zip" capture class="input file:mr-3 file:rounded-lg file:border file:px-3 file:py-1">
+        <p class="mt-1 text-xs text-slate-500 dark:text-slate-400">الحد الأقصى لكل ملف: 10MB. الصيغ الشائعة للصور/المستندات/الأرشيفات مسموحة.</p>
+        <ul id="attachmentsList" class="mt-2 space-y-1 text-xs text-slate-600 dark:text-slate-300"></ul>
+      </div>
+
+      {# ===== أزرار الإجراء ===== #}
       <div class="flex items-center gap-3 pt-2">
         <button id="submitBtn"
-                class="px-5 py-3 rounded-xl bg-indigo-600 text-white hover:bg-indigo-700 disabled:opacity-60 disabled:cursor-not-allowed transition">
+                class="px-5 py-3 rounded-xl bg-indigo-600 text-white hover:bg-indigo-700 focus:ring-2 focus:ring-offset-1 focus:ring-indigo-500 disabled:opacity-60 disabled:cursor-not-allowed transition">
           إنشاء الطلب
         </button>
         <a href="{% url 'marketplace:request_list' %}"
-           class="px-5 py-3 rounded-xl border border-slate-200 hover:bg-slate-50 transition">
+           class="px-5 py-3 rounded-xl border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800 transition">
           إلغاء
         </a>
       </div>
@@ -114,7 +124,7 @@
   </div>
 </div>
 
-<!-- سكربت تحسين تجربة المستخدم (بدون مكتبات خارجية) -->
+{# ===== سكربت تحسين تجربة المستخدم (بدون مكتبات خارجية) ===== #}
 <script>
 (function () {
   var form = document.getElementById('createRequestForm');
@@ -123,8 +133,7 @@
   // تحويل الأرقام العربية إلى إنجليزية (للعدادات والسعر)
   function toEngDigits(str) {
     if (!str) return str;
-    var map = {'٠':'0','١':'1','٢':'2','٣':'3','٤':'4','٥':'5','٦':'6','٧':'7','٨':'8','٩':'9',
-               '۰':'0','۱':'1','۲':'2','۳':'3','۴':'4','۵':'5','۶':'6','۷':'7','۸':'8','۹':'9'};
+    var map = {'٠':'0','١':'1','٢':'2','٣':'3','٤':'4','٥':'5','٦':'6','٧':'7','٨':'8','٩':'9','۰':'0','۱':'1','۲':'2','۳':'3','۴':'4','۵':'5','۶':'6','۷':'7','۸':'8','۹':'9'};
     return String(str).replace(/[٠-٩۰-۹]/g, function (d) { return map[d] || d; });
   }
 
@@ -157,7 +166,7 @@
   var pricePreview = document.getElementById('pricePreview');
   function parsePrice(v) {
     if (v === undefined || v === null) return NaN;
-    v = toEngDigits(String(v)).replace(/[,\s]/g, '');
+    v = toEngDigits(String(v)).replace(/[\,\s]/g, '');
     var n = parseFloat(v);
     return isNaN(n) ? NaN : n;
   }
@@ -195,16 +204,50 @@
     linksErrors.textContent = '';
     return true;
   }
-  if (linksArea) {
-    linksArea.addEventListener('blur', validateLinks);
+  if (linksArea) { linksArea.addEventListener('blur', validateLinks); }
+
+  // عرض قائمة المرفقات وفحص القيود (≤10MB والصيغ)
+  var att = document.getElementById('attachments');
+  var attList = document.getElementById('attachmentsList');
+  var MAX = 10 * 1024 * 1024; // 10MB
+  var TYPES = ['image/', 'application/pdf', 'application/msword', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', 'application/vnd.ms-excel', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', 'application/zip'];
+  function validType(file) {
+    if (!file || !file.type) return true; // نسمح إذا لم يحدد المتصفح النوع
+    if (file.type.startsWith('image/')) return true;
+    return TYPES.indexOf(file.type) !== -1;
+  }
+  function refreshAttList(files) {
+    if (!attList) return;
+    attList.innerHTML = '';
+    for (var i = 0; i < files.length; i++) {
+      var f = files[i];
+      var li = document.createElement('li');
+      var okSize = f.size <= MAX;
+      var okType = validType(f);
+      li.textContent = f.name + ' — ' + Math.round(f.size / 1024) + 'KB' + (okSize && okType ? '' : ' (مرفوض)');
+      if (!okSize || !okType) li.className = 'text-rose-600';
+      attList.appendChild(li);
+    }
+  }
+  if (att) {
+    att.addEventListener('change', function () { refreshAttList(att.files || []); });
   }
 
   // منع إرسال النموذج إذا كان هناك أخطاء واضحة
   if (form) {
     form.addEventListener('submit', function (e) {
       var okLinks = validateLinks();
-      if (!okLinks) {
+      // تحقق المرفقات
+      var okAtt = true;
+      if (att && att.files && att.files.length > 0) {
+        for (var i = 0; i < att.files.length; i++) {
+          var f = att.files[i];
+          if (f.size > MAX || !validType(f)) { okAtt = false; break; }
+        }
+      }
+      if (!okLinks || !okAtt) {
         e.preventDefault();
+        if (!okAtt) { alert('أحد المرفقات يتجاوز 10MB أو نوعه غير مسموح.'); }
         return false;
       }
       if (submitBtn) submitBtn.disabled = true;

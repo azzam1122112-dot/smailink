@@ -1,0 +1,14 @@
+<div class="flex items-center gap-2">
+  <div class="font-bold">مرحبًا، {{ request.user|default:"مسؤول" }}</div>
+  <span class="text-sm text-slate-500">آخر تحديث: {{ now|default:today|date:"d/m/Y" }}</span>
+</div>
+<div class="flex items-center gap-2">
+  {% url 'website:home' as home_url %}
+  {% if home_url %}<a href="{{ home_url }}" class="btn btn-gray"><i class="fa fa-house"></i><span>الموقع</span></a>{% endif %}
+  <form method="get" action="" class="hidden md:block">
+    <div class="flex items-center gap-2">
+      <input class="card" style="padding:.45rem .8rem" type="search" name="q" value="{{ q }}" placeholder="بحث سريع…">
+      <button class="btn btn-blue" type="submit"><i class="fa fa-search"></i><span>بحث</span></button>
+    </div>
+  </form>
+</div>

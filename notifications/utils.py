@@ -1,136 +1,61 @@
 from __future__ import annotations
+import logging
+from typing import Any, Optional
 
-from typing import Iterable, Optional, TYPE_CHECKING, Any
 from django.conf import settings
 from django.core.mail import send_mail
-from django.db import transaction
-from django.urls import reverse
+from django.contrib.contenttypes.models import ContentType
 
-# لتجنب تحذير "Variable not allowed in type expression" في محررات النوع:
-# نستورد النوع الحقيقي فقط وقت الفحص الساكن، وليس وقت التشغيل.
-if TYPE_CHECKING:
-    from core.models import Notification as NotificationModel  # type: ignore[assignment]
-else:
-    NotificationModel = Any  # في وقت التشغيل لا نستخدم النوع بالأنوتيشن
+from .models import Notification
 
-# محاولة استيراد نموذج Notification وقت التشغيل (قد لا يكون موجودًا في بعض البيئات)
-try:
-    from core.models import Notification  # noqa: F401
-except Exception:
-    Notification = None  # سيجعل دوال الإشعار ترجع None ولن تكسر التنفيذ
+logger = logging.getLogger(__name__)
 
-
-def _site_base_url() -> str:
-    """
-    يُعيد SITE_BASE_URL من الإعدادات بصيغة آمنة (بدون سلاش أخير).
-    """
-    url = getattr(settings, "SITE_BASE_URL", "").strip()
-    return url[:-1] if url.endswith("/") else url
-
+def _send_email_safely(subject: str, body: str, to_email: str | None) -> None:
+    try:
+        if getattr(settings, "DEFAULT_FROM_EMAIL", None) and to_email:
+            send_mail(subject, body or "", settings.DEFAULT_FROM_EMAIL, [to_email], fail_silently=True)
+    except Exception:
+        logger.exception("notifications: failed to send email")
 
 def create_notification(
     *,
-    user,
+    recipient,
     title: str,
-    body: str,
-    link: Optional[str] = None,
-    level: str = "info",
-) -> Optional["NotificationModel"]:
+    body: str = "",
+    url: str = "",
+    actor=None,
+    target: Any | None = None,
+    send_email: bool = False,
+) -> Optional[Notification]:
     """
-    ينشئ إشعارًا للمستخدم. يرجع كائن Notification أو None في حال عدم توفر الموديل.
+    ينشئ تنبيهًا للمستخدم مع ربط اختياري بـ target (GenericFK) + رابط اختياري.
+    يرجع Notification عند النجاح أو None عند الفشل (لا يرمي استثناءات).
     """
-    if Notification is None:
+    try:
+        ct = None
+        obj_id = None
+        if target is not None:
+            try:
+                ct = ContentType.objects.get_for_model(target.__class__)
+                obj_id = getattr(target, "pk", None)
+            except Exception:
+                ct = None
+                obj_id = None
+
+        n = Notification.objects.create(
+            recipient=recipient,
+            actor=actor,
+            title=title[:160],
+            body=body or "",
+            url=url or "",
+            content_type=ct,
+            object_id=obj_id,
+        )
+
+        if send_email:
+            _send_email_safely(title, body, getattr(recipient, "email", None))
+
+        return n
+    except Exception:
+        logger.exception("notifications: failed to create notification")
         return None
-
-    with transaction.atomic():
-        return Notification.objects.create(  # type: ignore[attr-defined]
-            user=user,
-            title=title[:200],
-            body=body[:2000],
-            link=(link or "")[:500],
-            level=level,
-        )
-
-
-def notify_user(
-    user,
-    *,
-    title: str,
-    body: str,
-    link: Optional[str] = None,
-    level: str = "info",
-    by_email: bool = False,
-    email_subject: Optional[str] = None,
-) -> None:
-    """
-    يُنشئ إشعارًا للمستخدم، واختياريًا يرسل بريدًا (لا يكسر التدفق عند الفشل).
-    """
-    create_notification(user=user, title=title, body=body, link=link, level=level)
-
-    if by_email and getattr(user, "email", None):
-        try:
-            send_mail(
-                subject=email_subject or title,
-                message=body,
-                from_email=getattr(settings, "DEFAULT_FROM_EMAIL", "no-reply@samilink.sa"),
-                recipient_list=[user.email],
-                fail_silently=True,
-            )
-        except Exception:
-            pass  # لا نفشل سير النظام بسبب البريد
-
-
-def notify_users(
-    users: Iterable,
-    *,
-    title: str,
-    body: str,
-    link: Optional[str] = None,
-    level: str = "info",
-    by_email: bool = False,
-    email_subject: Optional[str] = None,
-) -> int:
-    """
-    يرسل إشعارًا لمجموعة مستخدمين. يُرجع عدد المستلمين.
-    """
-    cnt = 0
-    for u in users:
-        notify_user(
-            u,
-            title=title,
-            body=body,
-            link=link,
-            level=level,
-            by_email=by_email,
-            email_subject=email_subject,
-        )
-        cnt += 1
-    return cnt
-
-
-def notify_finance_of_invoice(invoice, *, base_url: Optional[str] = None) -> int:
-    """
-    يُنبّه موظفي المالية عند إنشاء/تعديل فاتورة مرحلة.
-    يعتمد على users.role='finance' وإلا يسقط إلى is_staff.
-    """
-    from django.contrib.auth import get_user_model
-
-    User = get_user_model()
-    qs = User.objects.filter(role="finance", is_active=True)
-    if not qs.exists():
-        qs = User.objects.filter(is_staff=True, is_active=True)
-
-    # بناء رابط الفاتورة
-    base = (base_url or _site_base_url()).strip()
-    if base:
-        link = f"{base}{reverse('finance:invoice_detail', args=[invoice.id])}"
-    else:
-        # الأفضل تمرير build_absolute_uri من الـ view عند الإمكان
-        link = reverse("finance:invoice_detail", args=[invoice.id])
-
-    title = f"فاتورة مرحلة #{invoice.id}"
-    body = (
-        f"تم إنشاء/تحديث فاتورة بقيمة {getattr(invoice, 'amount', '')} ر.س "
-        f"للأتفاقية #{getattr(getattr(invoice, 'agreement', None), 'id', '')}."
-    )
-    return notify_users(qs, title=title, body=body, link=link, level="info")

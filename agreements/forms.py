@@ -1,35 +1,33 @@
-# agreements/forms.py
 from __future__ import annotations
 
-from decimal import Decimal, ROUND_HALF_UP
-
+from decimal import Decimal, ROUND_HALF_UP, InvalidOperation
 from django import forms
+from django.core.exceptions import ValidationError
 from django.forms import BaseInlineFormSet, inlineformset_factory
-from django.utils.text import Truncator
 from django.utils.html import strip_tags
+from django.utils.text import Truncator
 
 from .models import Agreement, Milestone, AgreementClause
 
-
-# ========================= أدوات تنظيف نصوص آمنة =========================
-def _clean_text(v: str) -> str:
-    """
-    تنقية نص بسيط: إزالة HTML، ضغط المسافات، وحفظ قيمة مختصرة.
-    """
+# ========================= أدوات مساعدة =========================
+def _clean_text_simple(v: str | None, max_len: int | None = None) -> str:
     if v is None:
-        return v
+        return ""
     v = strip_tags(v or "")
     v = " ".join(v.split())
+    if max_len:
+        v = Truncator(v).chars(max_len)
     return v
 
+def _to_money(value) -> Decimal:
+    try:
+        d = Decimal(str(value))
+    except (InvalidOperation, TypeError, ValueError):
+        raise forms.ValidationError("قيمة رقمية غير صالحة.")
+    return d.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
 
 # ========================= نماذج الاتفاقية =========================
 class AgreementForm(forms.ModelForm):
-    """
-    نموذج الإنشاء (قبل الإقفال):
-    يحتوي الحقول الجوهرية. بعد الإنشاء ستُقفل duration_days/total_amount
-    على مستوى الواجهة والخادم (نستخدم AgreementEditForm للتعديل لاحقًا).
-    """
     class Meta:
         model = Agreement
         fields = ["title", "text", "duration_days", "total_amount"]
@@ -46,22 +44,34 @@ class AgreementForm(forms.ModelForm):
             "total_amount": forms.NumberInput(attrs={"class": "input", "step": "0.01", "min": 0}),
         }
 
-    def clean_title(self):
-        title = _clean_text(self.cleaned_data.get("title", "")).strip()
+    def clean_title(self) -> str:
+        title = _clean_text_simple(self.cleaned_data.get("title", ""), max_len=200)
         if not title:
             raise forms.ValidationError("يرجى إدخال عنوان الاتفاقية.")
-        return Truncator(title).chars(200)
+        return title
 
-    def clean_text(self):
-        text = _clean_text(self.cleaned_data.get("text", "")).strip()
-        return Truncator(text).chars(10000)
+    def clean_text(self) -> str:
+        return _clean_text_simple(self.cleaned_data.get("text", ""), max_len=10000)
+
+    def clean_duration_days(self) -> int:
+        v = self.cleaned_data.get("duration_days")
+        if v is None:
+            raise forms.ValidationError("المدة إجبارية.")
+        if v < 1 or v > 3650:
+            raise forms.ValidationError("المدة يجب أن تكون بين 1 و 3650 يومًا.")
+        return v
+
+    def clean_total_amount(self) -> Decimal:
+        v = self.cleaned_data.get("total_amount")
+        amt = _to_money(v)
+        if amt < Decimal("0.00"):
+            raise forms.ValidationError("الإجمالي يجب أن يكون صفرًا أو أكبر.")
+        if amt > Decimal("100000000.00"):
+            raise forms.ValidationError("الإجمالي كبير جدًا.")
+        return amt
 
 
 class AgreementEditForm(forms.ModelForm):
-    """
-    نموذج التعديل بعد الإنشاء:
-    يسمح بتعديل العنوان/النص فقط — بينما الحقول الجوهرية مقفلة.
-    """
     class Meta:
         model = Agreement
         fields = ["title", "text"]
@@ -71,137 +81,128 @@ class AgreementEditForm(forms.ModelForm):
             "text": forms.Textarea(attrs={"class": "input", "rows": 6, "placeholder": "نص الاتفاقية (اختياري)"}),
         }
 
-    def clean_title(self):
-        title = _clean_text(self.cleaned_data.get("title", "")).strip()
+    def clean_title(self) -> str:
+        title = _clean_text_simple(self.cleaned_data.get("title", ""), max_len=200)
         if not title:
             raise forms.ValidationError("يرجى إدخال عنوان الاتفاقية.")
-        return Truncator(title).chars(200)
+        return title
 
-    def clean_text(self):
-        text = _clean_text(self.cleaned_data.get("text", "")).strip()
-        return Truncator(text).chars(10000)
+    def clean_text(self) -> str:
+        return _clean_text_simple(self.cleaned_data.get("text", ""), max_len=10000)
 
-
-# ========================= دفعات/مراحل الاتفاقية =========================
+# ========================= مراحل الاتفاقية (بدون مبالغ) =========================
 class MilestoneForm(forms.ModelForm):
     class Meta:
         model = Milestone
-        fields = ["title", "amount", "due_days", "order"]
-        labels = {
-            "title": "عنوان الدفعة/المرحلة",
-            "amount": "المبلغ (ريال)",
-            "due_days": "مستحق بعد (أيام)",
-            "order": "ترتيب",
-        }
+        fields = ["title", "due_days", "order"]
         widgets = {
-            "title": forms.TextInput(attrs={"class": "input", "placeholder": "مثال: دفعة مقدّم"}),
-            "amount": forms.NumberInput(attrs={"class": "input", "step": "0.01", "min": 0}),
-            "due_days": forms.NumberInput(attrs={"class": "input", "min": 1}),
-            "order": forms.NumberInput(attrs={"class": "input", "min": 1}),
+            "title": forms.TextInput(attrs={"dir": "rtl", "placeholder": "مثال: تسليم النسخة الأولية"}),
+            "due_days": forms.NumberInput(attrs={"min": 1}),
         }
 
-    def clean_title(self):
-        title = _clean_text(self.cleaned_data.get("title", "")).strip()
-        if not title:
-            raise forms.ValidationError("يرجى إدخال عنوان الدفعة.")
-        return Truncator(title).chars(160)
+    def clean(self):
+        cleaned = super().clean()
+        # لا مبالغ في هذه المرحلة، نضمن صفر
+        self.instance.amount = Decimal("0.00")
+        # ترتيب أدنى شيء 1 (سنعيد ترقيمها لاحقًا كمان)
+        if cleaned.get("order") is None or cleaned.get("order") < 1:
+            cleaned["order"] = 1
+        return cleaned
 
 
-class _BaseMilestoneFormSet(BaseInlineFormSet):
-    """
-    تحققات مستوى الـ FormSet:
-    - وجود صف واحد على الأقل (min_num=1).
-    - عدم تكرار ترتيب order، وأن يبدأ من 1.
-    - مجموع المبالغ == إجمالي الاتفاقية (بسماحية 0.01).
-    """
+class BaseMilestoneFormSet(BaseInlineFormSet):
     def clean(self):
         super().clean()
+        # اضمن أن فيه على الأقل نموذج غير محذوف وصالح
+        alive = 0
+        for form in self.forms:
+            if not form.cleaned_data:
+                continue
+            if form.cleaned_data.get("DELETE"):
+                continue
+            alive += 1
+        if alive < 1:
+            raise ValidationError("يجب أن تحتوي الاتفاقية على مرحلة واحدة على الأقل.")
 
-        if any(self.errors):
-            # لو في أخطاء حقول، لا نُكرر الرسائل
-            return
+    def save(self, commit=True):
+        """
+        نحفظ، نحذف المعلّم عليها DELETE، ثم نعيد ترقيم order = 1..N.
+        كما نضمن amount=0.00 للمراحل.
+        """
+        instances = super().save(commit=False)
 
-        instance: Agreement = self.instance
-        forms_active = [f for f in self.forms if not getattr(f, "cleaned_data", {}).get("DELETE", False)]
+        # احذف المؤشّر عليها بالحذف
+        for form in self.forms:
+            if form.cleaned_data and form.cleaned_data.get("DELETE") and form.instance.pk:
+                form.instance.delete()
 
-        if not forms_active:
-            raise forms.ValidationError("يجب إضافة دفعة واحدة على الأقل.")
+        # احفظ/عدّل الباقي
+        kept = []
+        for obj in instances:
+            # قد يكون محذوفًا (بدون pk) أو غير صالح
+            if getattr(obj, "pk", None) is None and any(
+                f.cleaned_data.get("DELETE") and f.instance is obj for f in self.forms if f.cleaned_data
+            ):
+                continue
+            # صفر المبلغ دائمًا
+            obj.amount = Decimal("0.00")
+            if commit:
+                obj.save()
+            kept.append(obj)
 
-        # 1) الترتيب: بداية من 1 + بدون تكرار
-        orders = []
-        for f in forms_active:
-            order = f.cleaned_data.get("order")
-            if not order or order < 1:
-                raise forms.ValidationError("ترتيب كل دفعة يجب أن يكون 1 أو أكبر.")
-            orders.append(order)
-        if len(set(orders)) != len(orders):
-            raise forms.ValidationError("ترتيب الدفعات لا يجب أن يحتوي على قيَم مكررة.")
+        # أعد جلب جميع المراحل غير المحذوفة للاتفاقية (سواء كانت قديمة أو جديدة)
+        parent = self.instance  # Agreement
+        all_qs = Milestone.objects.filter(agreement=parent).order_by("id")
+        # رقّم 1..N بالترتيب المرغوب (هنا id، أو بدّلها حسب ترتيبك)
+        order_no = 1
+        for obj in all_qs:
+            if obj.order != order_no:
+                obj.order = order_no
+                if commit:
+                    obj.save(update_fields=["order"])
+            order_no += 1
 
-        # 2) المبالغ: غير سالبة + مجموعها == إجمالي الاتفاقية
-        total = Decimal("0.00")
-        for f in forms_active:
-            amount = f.cleaned_data.get("amount")
-            if amount is None or amount < 0:
-                raise forms.ValidationError("مبلغ كل دفعة يجب أن يكون رقمًا موجبًا أو صفرًا.")
-            total += amount
-
-        # سماحية تقريب طفيفة 0.01
-        tol = (total - instance.total_amount).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
-        if tol != Decimal("0.00"):
-            raise forms.ValidationError(
-                f"مجموع مبالغ الدفعات ({total}) لا يساوي إجمالي الاتفاقية ({instance.total_amount})."
-            )
+        self.save_m2m()
+        return kept
 
 
 MilestoneFormSet = inlineformset_factory(
     Agreement,
     Milestone,
     form=MilestoneForm,
-    formset=_BaseMilestoneFormSet,
+    formset=BaseMilestoneFormSet,
+    fields=["title", "due_days", "order"],
     extra=1,
-    max_num=50,     # مرونة عالية
     can_delete=True,
     validate_min=True,
     min_num=1,
 )
 
-
 # ========================= تثبيت بنود الاتفاقية =========================
 class AgreementClauseSelectForm(forms.Form):
-    """
-    شاشة تثبيت البنود بعد إنشاء الاتفاقية:
-      - اختيار 1+ من البنود الجاهزة (يُدار تفعيلها من الأدمن).
-      - إضافة بنود مخصّصة (سطر لكل بند).
-    """
     clauses = forms.ModelMultipleChoiceField(
-        label=("اختر البنود الجاهزة"),
+        label="اختر البنود الجاهزة",
         queryset=AgreementClause.objects.none(),
         widget=forms.CheckboxSelectMultiple,
         required=False,
-        help_text=("يمكن تحديد أكثر من بند. البنود الظاهرة مفعّلة فقط."),
+        help_text="يمكن تحديد أكثر من بند. تظهر البنود المفعّلة فقط.",
     )
     custom_clauses = forms.CharField(
-        label=("بنود مخصصة (اختياري)"),
+        label="بنود مخصّصة (اختياري)",
         required=False,
-        widget=forms.Textarea(
-            attrs={
-                "rows": 5,
-                "dir": "rtl",
-                "placeholder": "اكتب كل بند في سطر مستقل",
-            }
-        ),
-        help_text=("اكتب كل بند في سطر مستقل. التنقية النهائية تتم داخل نموذج العنصر."),
+        widget=forms.Textarea(attrs={"rows": 5, "dir": "rtl", "placeholder": "اكتب كل بند في سطر مستقل"}),
+        help_text="اكتب كل بند في سطر مستقل. تتم تنقية كل بند لاحقًا.",
     )
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        # عرض البنود المفعّلة فقط وبترتيب العنوان
         self.fields["clauses"].queryset = AgreementClause.objects.filter(is_active=True).order_by("title")
 
     def cleaned_custom_lines(self) -> list[str]:
-        """
-        تُرجع قائمة البنود المخصصة سطرًا-بسطر (بدون HTML).
-        ملاحظة: التنقية النهائية تتم في AgreementClauseItem.clean().
-        """
         data = self.cleaned_data.get("custom_clauses") or ""
-        return [ln.strip() for ln in data.splitlines() if ln.strip()]
+        lines: list[str] = []
+        for ln in data.splitlines():
+            t = _clean_text_simple(ln, max_len=800)
+            if t:
+                lines.append(t)
+        return lines[:50]

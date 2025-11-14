@@ -1,14 +1,14 @@
 {# marketplace/templates/marketplace/request_detail.html #}
 {% extends "base.html" %}
 {% block title %}طلب #{{ req.pk }}{% endblock %}
+
 {% block content %}
 <section class="py-8 max-w-6xl mx-auto rtl" dir="rtl">
-
   <div class="rounded-2xl border bg-white/80 dark:bg-slate-800/70 backdrop-blur shadow-glass-lg overflow-hidden">
 
     {# ===== Toasts ===== #}
     {% if messages %}
-    <div class="p-4 border-b bg-gradient-to-l from-emerald-50 to-sky-50 dark:from-slate-800 dark:to-slate-900">
+    <div class="p-4 border-b bg-gradient-to-l from-emerald-50 to-sky-50 dark:from-slate-800 dark:to-slate-900" aria-live="polite">
       <div class="space-y-2" id="messages-area">
         {% for message in messages %}
           <div class="rounded-xl border px-4 py-3 text-sm flex items-start gap-2
@@ -16,9 +16,9 @@
                       {% elif message.tags == 'warning' %} bg-amber-50 border-amber-200 text-amber-800 dark:bg-amber-900/20 dark:border-amber-900 dark:text-amber-200
                       {% elif message.tags == 'error' %} bg-rose-50 border-rose-200 text-rose-700 dark:bg-rose-900/20 dark:border-rose-200
                       {% else %} bg-slate-50 border-slate-200 text-slate-800 dark:bg-slate-900/30 dark:border-slate-800 dark:text-slate-200 {% endif %}">
-            <div class="mt-0.5">•</div>
+            <div class="mt-0.5" aria-hidden="true">•</div>
             <div class="whitespace-pre-line">{{ message }}</div>
-            <button type="button" class="ms-auto text-xs text-slate-500 hover:underline" data-close-alert>إغلاق</button>
+            <button type="button" class="ms-auto text-xs text-slate-500 hover:underline" data-close-alert aria-label="إغلاق التنبيه">إغلاق</button>
           </div>
         {% endfor %}
       </div>
@@ -69,7 +69,7 @@
         <div class="mt-4 flex flex-wrap items-center gap-2">
 
           {% if request.user.id == req.client_id or request.user.id == req.assigned_employee_id or request.user.is_staff or request.user.role == 'admin' %}
-            <a href="{% url 'disputes:open' req.pk %}" class="btn btn-danger">فتح نزاع</a>
+            <a href="{% url 'disputes:open_by_request' req.pk %}" class="btn btn-danger" rel="nofollow">فتح نزاع</a>
           {% endif %}
 
           {% if request.user.is_staff or request.user.role == 'admin' %}
@@ -80,21 +80,21 @@
                     onsubmit="return confirm('سيتم تعليم الطلب «قيد التنفيذ». متابعة؟');">
                 {% csrf_token %}
                 <input type="hidden" name="status" value="in_progress">
-                <button class="btn btn-secondary btn-xs">قيد التنفيذ</button>
+                <button class="btn btn-secondary btn-xs" aria-label="تعيين قيد التنفيذ">قيد التنفيذ</button>
               </form>
 
               <form method="post" action="{% url 'marketplace:request_change_status' req.pk %}" class="inline"
                     onsubmit="return confirm('سيتم تعليم الطلب «بانتظار اتفاقية». متابعة؟');">
                 {% csrf_token %}
                 <input type="hidden" name="status" value="agreement_pending">
-                <button class="btn btn-secondary btn-xs">بانتظار اتفاقية</button>
+                <button class="btn btn-secondary btn-xs" aria-label="تعيين بانتظار اتفاقية">بانتظار اتفاقية</button>
               </form>
 
               <form method="post" action="{% url 'marketplace:request_change_status' req.pk %}" class="inline"
                     onsubmit="return confirm('تعليم الطلب «مكتمل» يدويًا؟ يُفضَّل اكتماله تلقائيًا بعد السداد.');">
                 {% csrf_token %}
                 <input type="hidden" name="status" value="completed">
-                <button class="btn btn-success btn-xs">مكتمل</button>
+                <button class="btn btn-success btn-xs" aria-label="تعيين مكتمل">مكتمل</button>
               </form>
 
               <form method="post" action="{% url 'marketplace:request_cancel' req.pk %}" class="inline flex items-center gap-2"
@@ -118,7 +118,6 @@
 
         </div>
       {% endif %}
-
     </div>
 
     <div class="p-6 space-y-6">
@@ -131,7 +130,8 @@
             <div class="text-slate-800 dark:text-amber-200 font-semibold">لوحة تحكم المدير العام</div>
           </div>
           <div class="mt-3 flex flex-wrap items-center gap-2">
-            <form method="post" action="{% url 'marketplace:admin_request_reset_to_new' req.pk %}"
+            {# تم توحيد الاسم إلى marketplace:request_reset_to_new مع توفير Alias للقديم #}
+            <form method="post" action="{% url 'marketplace:request_reset_to_new' req.pk %}"
                   onsubmit="return confirm('سيُعاد الطلب كجديد: سيتم إزالة الإسناد ورفض العروض الحالية للأرشفة. تأكيد؟');">
               {% csrf_token %}
               <button class="px-3 py-2 rounded-lg border bg-white dark:bg-slate-900 hover:bg-slate-50 dark:hover:bg-slate-800">إرجاع كجديد</button>
@@ -220,13 +220,9 @@
         <div class="rounded-xl border p-4 bg-slate-50 dark:bg-slate-900/40">
           <div class="font-bold text-slate-800 dark:text-white mb-1">الموظف المسند</div>
           <div class="text-slate-700 dark:text-slate-200">
-            {% if req.assigned_employee %}
-              {{ req.assigned_employee }}
-            {% elif req.selected_offer %}
-              {{ req.selected_offer.employee }}
-            {% else %}
-              — لا يوجد إسناد بعد —
-            {% endif %}
+            {% if req.assigned_employee %}{{ req.assigned_employee }}
+            {% elif req.selected_offer %}{{ req.selected_offer.employee }}
+            {% else %}— لا يوجد إسناد بعد —{% endif %}
           </div>
         </div>
       </div>
@@ -265,7 +261,7 @@
               <div class="flex items-center gap-2">
                 <span>الجوال:</span>
                 <a class="text-indigo-700 dark:text-indigo-300 hover:underline" dir="ltr" href="tel:{{ req.client.phone }}">{{ req.client.phone }}</a>
-                <a class="text-emerald-700 dark:text-emerald-300 hover:underline" target="_blank" rel="noopener noreferrer"
+                <a class="text-emerald-700 dark:text-emerald-300 hover:underline" target="_blank" rel="noopener noreferrer nofollow"
                    href="https://api.whatsapp.com/send?phone={{ req.client.phone|urlencode }}">واتساب</a>
               </div>
               {% endif %}
@@ -284,23 +280,21 @@
             <div class="font-semibold text-slate-800 dark:text-white mb-2">الموظف المسند</div>
             <div class="space-y-2 text-slate-700 dark:text-slate-200">
               <div>الاسم:
-                <b>
-                  {% if req.assigned_employee %}{{ req.assigned_employee }}{% else %}{{ req.selected_offer.employee }}{% endif %}
-                </b>
+                <b>{% if req.assigned_employee %}{{ req.assigned_employee }}{% else %}{{ req.selected_offer.employee }}{% endif %}</b>
               </div>
 
               {% if req.assigned_employee and req.assigned_employee.phone %}
               <div class="flex items-center gap-2">
                 <span>الجوال:</span>
                 <a class="text-indigo-700 dark:text-indigo-300 hover:underline" dir="ltr" href="tel:{{ req.assigned_employee.phone }}">{{ req.assigned_employee.phone }}</a>
-                <a class="text-emerald-700 dark:text-emerald-300 hover:underline" target="_blank" rel="noopener noreferrer"
+                <a class="text-emerald-700 dark:text-emerald-300 hover:underline" target="_blank" rel="noopener noreferrer nofollow"
                    href="https://api.whatsapp.com/send?phone={{ req.assigned_employee.phone|urlencode }}">واتساب</a>
               </div>
               {% elif req.selected_offer and req.selected_offer.employee and req.selected_offer.employee.phone %}
               <div class="flex items-center gap-2">
                 <span>الجوال:</span>
                 <a class="text-indigo-700 dark:text-indigo-300 hover:underline" dir="ltr" href="tel:{{ req.selected_offer.employee.phone }}">{{ req.selected_offer.employee.phone }}</a>
-                <a class="text-emerald-700 dark:text-emerald-300 hover:underline" target="_blank" rel="noopener noreferrer"
+                <a class="text-emerald-700 dark:text-emerald-300 hover:underline" target="_blank" rel="noopener noreferrer nofollow"
                    href="https://api.whatsapp.com/send?phone={{ req.selected_offer.employee.phone|urlencode }}">واتساب</a>
               </div>
               {% endif %}
@@ -436,12 +430,48 @@
           </div>
         </div>
 
-        {# ===== الدفعات/المراحل (Milestones) ===== #}
+        {# ===== المراحل المختصرة ===== #}
         {% with ag=req.agreement %}
+        <div class="rounded-2xl border bg-white/80 dark:bg-slate-900/40 p-4">
+          <div class="flex items-center justify-between gap-2">
+            <h3 class="font-semibold text-slate-800 dark:text-slate-100">المـراحــل</h3>
+            <div class="text-xs text-slate-500 dark:text-slate-400">تُحدّث تلقائيًا بعد اعتماد العميل لكل مرحلة</div>
+          </div>
+
+          <div class="mt-3 overflow-x-auto">
+            <table class="w-full text-sm">
+              <thead>
+                <tr class="text-start text-slate-600 dark:text-slate-300">
+                  <th class="p-2 text-start">#</th>
+                  <th class="p-2 text-start">عنوان المرحلة</th>
+                  <th class="p-2 text-start">تاريخ الاعتماد</th>
+                </tr>
+              </thead>
+              <tbody>
+                {% for ms in ag.milestones.all %}
+                <tr class="border-t">
+                  <td class="p-2">{{ forloop.counter }}</td>
+                  <td class="p-2 truncate">{{ ms.title|default:"—" }}</td>
+                  <td class="p-2">
+                    {% if ms.approved_at %}{{ ms.approved_at|date:"Y-m-d H:i" }}{% else %}
+                      <span class="px-2 py-0.5 rounded bg-amber-100 text-amber-700 text-xs">غير معتمدة بعد</span>
+                    {% endif %}
+                  </td>
+                </tr>
+                {% empty %}
+                <tr>
+                  <td class="p-2 text-slate-500 dark:text-slate-400" colspan="3">لا توجد مراحل بعد.</td>
+                </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        {# ===== بطاقات المراحل التفصيلية ===== #}
         <div class="rounded-xl border bg-white dark:bg-slate-800 p-4">
           <div class="flex items-center justify-between mb-3">
-            <div class="text-slate-500 dark:text-slate-400 text-sm">الدفعات</div>
-            <div class="text-xs text-slate-500 dark:text-slate-400">تُنشأ الفواتير تلقائيًا بعد اعتماد العميل</div>
+            <div class="text-slate-500 dark:text-slate-400 text-sm">تفاصيل كل مرحلة</div>
           </div>
 
           <div class="space-y-4">
@@ -454,9 +484,7 @@
                     <span class="px-2 py-0.5 rounded-lg text-[11px] border bg-white/70 dark:bg-slate-800/70 text-slate-700 dark:text-slate-300">#{{ ms.id }}</span>
                   </div>
                   <div class="text-sm text-slate-600 dark:text-slate-300 mt-1">
-                    الترتيب: {{ ms.order }} —
-                    المهلة: {{ ms.due_days|default:"—" }} يوم —
-                    المبلغ: <b>{{ ms.amount }}</b> ر.س
+                    الترتيب: {{ ms.order }} — المهلة: {{ ms.due_days|default:"—" }} يوم
                   </div>
 
                   {% if ms.delivered_note %}
@@ -472,7 +500,9 @@
 
                   <div class="mt-2 text-xs text-slate-600 dark:text-slate-300 flex flex-wrap items-center gap-2">
                     {% if ms.invoice %}
-                      <span>الفاتورة: <a class="text-indigo-700 dark:text-indigo-300 hover:underline" href="{% url 'finance:invoice_detail' ms.invoice.id %}">#{{ ms.invoice.id }}</a></span>
+                      <span>الفاتورة:
+                        <a class="text-indigo-700 dark:text-indigo-300 hover:underline" href="{% url 'finance:invoice_detail' ms.invoice.id %}">#{{ ms.invoice.id }}</a>
+                      </span>
                       <span>الحالة:
                         {% if ms.invoice.is_paid %}<b class="text-emerald-700 dark:text-emerald-300">مدفوعة</b>
                         {% elif ms.invoice.is_unpaid %}<b class="text-amber-700 dark:text-amber-300">غير مدفوعة</b>
@@ -480,14 +510,12 @@
                       </span>
                       <span>الإصدار: {{ ms.invoice.issued_at|date:"Y-m-d H:i" }}</span>
                       <span>الاستحقاق: {% if ms.invoice.due_at %}{{ ms.invoice.due_at|date:"Y-m-d H:i" }}{% else %}—{% endif %}</span>
-                    {% else %}
-                      <span class="text-slate-500">لا توجد فاتورة بعد — (تظهر بعد اعتماد العميل للمرحلة).</span>
                     {% endif %}
                   </div>
                 </div>
 
                 <div class="flex items-center flex-wrap gap-2">
-                  {% if ms.is_paid %}
+                  {% if ms.invoice and ms.invoice.is_paid %}
                     <span class="px-2 py-1 rounded bg-emerald-100 text-emerald-700 dark:bg-emerald-900/20 dark:text-emerald-200 text-xs">مدفوعة</span>
                   {% elif ms.is_approved %}
                     <span class="px-2 py-1 rounded bg-emerald-100 text-emerald-700 dark:bg-emerald-900/20 dark:text-emerald-200 text-xs">معتمدة</span>
@@ -504,25 +532,29 @@
               </div>
 
               <div class="mt-4 flex flex-wrap items-start gap-3">
-                {# الموظف: تسليم/إعادة تسليم المرحلة — مسموح بعد الرفض أيضًا #}
+                {# الموظف: تسليم/إعادة تسليم #}
                 {% if request.user.is_authenticated and request.user.id == req.assigned_employee_id %}
-                  {% if not ms.is_paid and not ms.is_approved and not ms.is_pending_review %}
-                    <form method="post" action="{% url 'agreements:milestone_deliver' ms.id %}#ms-{{ ms.id }}"
-                          class="flex items-start gap-2"
-                          onsubmit="return confirm('سيتم تعليم هذه المرحلة كـ (تم التسليم) مع حفظ الملاحظة إن وُجدت. تأكيد؟');">
-                      {% csrf_token %}
-                      <textarea name="note" rows="2" class="input !p-2 !text-xs" placeholder="ملاحظة التسليم (اختياري)"></textarea>
-                      <button class="btn btn-secondary">تسليم المرحلة</button>
-                    </form>
+                  {% if not ms.invoice or not ms.invoice.is_paid %}
+                    {% if not ms.is_approved and not ms.is_pending_review %}
+                      <form method="post" action="{% url 'agreements:milestone_deliver' ag.id ms.id %}#ms-{{ ms.id }}"
+                            class="flex items-start gap-2"
+                            onsubmit="return confirm('سيتم تعليم هذه المرحلة كـ تم التسليم مع حفظ الملاحظة إن وُجدت. تأكيد؟');">
+                        {% csrf_token %}
+                        <textarea name="note" rows="2" class="input !p-2 !text-xs" placeholder="ملاحظة التسليم (اختياري)"></textarea>
+                        <button class="btn btn-secondary">تسليم المرحلة</button>
+                      </form>
+                    {% else %}
+                      <button class="btn btn-secondary opacity-60 cursor-not-allowed" disabled title="لا يمكن التسليم الآن">تسليم المرحلة</button>
+                    {% endif %}
                   {% else %}
-                    <button class="btn btn-secondary opacity-60 cursor-not-allowed" disabled title="لا يمكن التسليم الآن">تسليم المرحلة</button>
+                    <button class="btn btn-secondary opacity-60 cursor-not-allowed" disabled title="الفاتورة مدفوعة">تسليم المرحلة</button>
                   {% endif %}
                 {% endif %}
 
                 {# العميل: اعتماد/رفض — فقط أثناء المراجعة #}
                 {% if request.user.is_authenticated and request.user.id == req.client_id %}
                   {% if ms.is_pending_review %}
-                    <form method="post" action="{% url 'agreements:milestone_approve' ms.id %}#ms-{{ ms.id }}"
+                    <form method="post" action="{% url 'agreements:milestone_approve' ag.id ms.id %}#ms-{{ ms.id }}"
                           onsubmit="return confirm('سيتم اعتماد هذه المرحلة والانتقال لإصدار الفاتورة. تأكيد الاعتماد؟');">
                       {% csrf_token %}
                       <button class="btn btn-success">اعتماد</button>
@@ -537,12 +569,12 @@
                         <div class="p-4 border-b bg-rose-50 dark:bg-rose-900/20">
                           <div id="rej-title-{{ ms.id }}" class="font-semibold text-rose-700 dark:text-rose-200">رفض المرحلة: {{ ms.title }}</div>
                         </div>
-                        <form method="post" action="{% url 'agreements:milestone_reject' ms.id %}#ms-{{ ms.id }}"
+                        <form method="post" action="{% url 'agreements:milestone_reject' ag.id ms.id %}#ms-{{ ms.id }}"
                               onsubmit="return confirm('سيتم رفض هذه المرحلة مع السبب المدخل. تأكيد الرفض؟');">
                           {% csrf_token %}
                           <div class="p-4 space-y-3">
                             <label class="text-sm text-slate-700 dark:text-slate-200" for="rej-text-{{ ms.id }}">سبب الرفض</label>
-                            <textarea id="rej-text-{{ ms.id }}" name="reason" rows="4" class="input" placeholder="فضلاً اكتب سببًا واضحًا (3 أحرف على الأقل)"></textarea>
+                            <textarea id="rej-text-{{ ms.id }}" name="reason" rows="4" class="input" placeholder="فضلاً اكتب سببًا واضحًا"></textarea>
                             <p class="text-xs text-slate-500 dark:text-slate-400">لن يتم قبول الرفض بدون سبب واضح.</p>
                           </div>
                           <div class="p-4 border-t flex items-center justify-end gap-2">
@@ -558,11 +590,9 @@
                   {% endif %}
                 {% endif %}
 
-                {# رابط الفاتورة إن وُجدت #}
                 {% if ms.invoice %}
                   <a href="{% url 'finance:invoice_detail' ms.invoice.id %}" class="btn btn-ghost">عرض الفاتورة</a>
                 {% endif %}
-
               </div>
             </div>
             {% empty %}
@@ -570,60 +600,6 @@
             {% endfor %}
           </div>
         </div>
-
-        {# ===== ملخّص الدفعات ===== #}
-        {% if ag.invoices.all %}
-        <div class="rounded-2xl border bg-white/80 dark:bg-slate-900/40 p-4">
-          <div class="flex items-center justify-between gap-2">
-            <h3 class="font-semibold text-slate-800 dark:text-slate-100">🧾 الدفعات (الفواتير)</h3>
-            <div class="text-xs text-slate-500 dark:text-slate-400">تتحدّث تلقائيًا بعد اعتماد العميل لكل مرحلة</div>
-          </div>
-          <div class="mt-3 overflow-x-auto">
-            <table class="w-full text-sm">
-              <thead>
-                <tr class="text-start text-slate-600 dark:text-slate-300">
-                  <th class="p-2 text-start">#</th>
-                  <th class="p-2 text-start">المرحلة</th>
-                  <th class="p-2 text-start">المبلغ</th>
-                  <th class="p-2 text-start">الحالة</th>
-                  <th class="p-2 text-start">تاريخ الإصدار</th>
-                  <th class="p-2 text-start">موعد السداد</th>
-                  <th class="p-2 text-start">إجراء</th>
-                </tr>
-              </thead>
-              <tbody>
-                {% for inv in ag.invoices.all %}
-                <tr class="border-t">
-                  <td class="p-2">{{ forloop.counter }}</td>
-                  <td class="p-2">{% if inv.milestone %}{{ inv.milestone.title }}{% else %}-{% endif %}</td>
-                  <td class="p-2">{{ inv.amount }}</td>
-                  <td class="p-2">
-                    {% if inv.is_paid %}<span class="badge bg-emerald-100 text-emerald-700">مدفوعة</span>
-                    {% elif inv.is_unpaid %}<span class="badge bg-amber-100 text-amber-700">غير مدفوعة</span>
-                    {% else %}<span class="badge bg-slate-100 text-slate-700">{{ inv.get_status_display|default:inv.status }}</span>
-                    {% endif %}
-                  </td>
-                  <td class="p-2">{{ inv.issued_at|date:"Y-m-d H:i" }}</td>
-                  <td class="p-2">{% if inv.due_at %}{{ inv.due_at|date:"Y-m-d H:i" }}{% else %}—{% endif %}</td>
-                  <td class="p-2">
-                    <a href="{% url 'finance:invoice_detail' inv.pk %}" class="btn btn-xs">فتح</a>
-                    {% if request.user.role == 'finance' or request.user.is_staff %}
-                      <form method="post" action="{% url 'finance:invoice_mark_paid' inv.pk %}" class="inline" onsubmit="return confirm('تأكيد وسم هذه الفاتورة كمدفوعة؟');">
-                        {% csrf_token %}
-                        <button class="btn btn-success btn-xs" {% if inv.is_paid %}disabled{% endif %}>وسم مدفوعة</button>
-                      </form>
-                    {% endif %}
-                  </td>
-                </tr>
-                {% empty %}
-                <tr><td class="p-2" colspan="7" class="text-slate-500">لا توجد فواتير بعد.</td></tr>
-                {% endfor %}
-              </tbody>
-            </table>
-          </div>
-          <p class="text-xs text-slate-500 mt-2">* تُنشَأ الفاتورة تلقائيًا بعد اعتماد العميل للمرحلة. نافذة السداد الافتراضية 3 أيام.</p>
-        </div>
-        {% endif %}
         {% endwith %}
       {% else %}
         {% if req.status == 'offer_selected' %}
@@ -674,18 +650,17 @@
         <div class="flex items-center justify-between mb-3">
           <div class="text-slate-500 dark:text-slate-400 text-sm">المحادثة</div>
         </div>
-        <iframe src="{{ thread_embed_url }}" class="w-full h-[540px] rounded-xl border"></iframe>
+        <iframe src="{{ thread_embed_url }}" class="w-full h-[540px] rounded-xl border" loading="lazy" referrerpolicy="no-referrer"></iframe>
       </div>
       {% endif %}
 
     </div>
   </div>
-
 </section>
 
 <script>
 (function () {
-  // Toasts auto-dismiss
+  // ===== Toasts auto-dismiss =====
   setTimeout(function() {
     const msgs = document.querySelectorAll('#messages-area > *');
     msgs.forEach(function(el) {
@@ -704,7 +679,7 @@
     }
   });
 
-  // ===== Modals (رفض المرحلة) =====
+  // ===== Simple modal manager (رفض المرحلة) =====
   let lastFocused = null;
   function openModal(modal) {
     if (!modal) return;
@@ -712,23 +687,25 @@
     modal.classList.remove('hidden');
     modal.setAttribute('aria-hidden', 'false');
     document.documentElement.classList.add('overflow-y-hidden');
-    const ta = modal.querySelector('textarea');
-    if (ta) { setTimeout(function(){ ta.focus(); ta.select && ta.select(); }, 30); }
+    const ta = modal.querySelector('textarea, [autofocus]');
+    if (ta) { setTimeout(function(){ ta.focus(); if (ta.select) ta.select(); }, 30); }
   }
   function closeModal(modal) {
     if (!modal) return;
     modal.classList.add('hidden');
     modal.setAttribute('aria-hidden', 'true');
     document.documentElement.classList.remove('overflow-y-hidden');
-    if (lastFocused && typeof lastFocused.focus === 'function') { lastFocused.focus(); }
+    if (lastFocused && typeof lastFocused.focus === 'function') lastFocused.focus();
   }
 
   document.addEventListener('click', function(e) {
     const openBtn = e.target.closest('[data-reject-modal]');
     if (openBtn) {
       const sel = openBtn.getAttribute('data-reject-modal');
-      const modal = document.querySelector(sel);
-      if (modal) openModal(modal);
+      try {
+        const modal = document.querySelector(sel);
+        if (modal) openModal(modal);
+      } catch(_) {}
     }
     if (e.target.matches('[data-close-modal]')) {
       const modal = e.target.closest('.fixed.inset-0');
@@ -736,7 +713,7 @@
     }
   });
 
-  // ESC to close
+  // ESC to close modal
   document.addEventListener('keydown', function(e) {
     if (e.key === 'Escape') {
       const opened = document.querySelector('.fixed.inset-0:not(.hidden)');

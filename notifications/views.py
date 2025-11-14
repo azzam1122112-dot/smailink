@@ -1,268 +1,144 @@
-from django.conf import settings
+from __future__ import annotations
+
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
-from django.db import connection
-from django.http import JsonResponse, HttpResponseBadRequest
+from django.core.paginator import Paginator
+from django.http import HttpRequest, HttpResponse, HttpResponseForbidden
 from django.shortcuts import get_object_or_404, redirect, render
-from django.views.decorators.http import require_GET, require_POST
 
-# استيراد الموديل
 from .models import Notification
 
 
-# =========================
-# Helpers دفاعية للحقول
-# =========================
-def _user_field_candidates():
-    # أسماء محتملة لعلاقة المستخدم
-    return ["user", "recipient", "owner", "account", "to_user"]
-
-def _is_read_field_candidates():
-    # فلاغ المقروء
-    return ["is_read", "read", "seen", "is_seen", "has_read"]
-
-def _created_field_candidates():
-    # تاريخ/توقيت الإنشاء
-    return ["created_at", "created", "timestamp", "date_created", "inserted_at"]
-
-def _pick_model_field_only(candidates):
-    """اختر أول اسم حقل موجود على الموديل (Model _meta)."""
-    fields = set(f.name for f in Notification._meta.get_fields())
-    for c in candidates:
-        if c in fields:
-            return c
-    return None
-
-def _column_exists(col_name):
-    """تحقق من وجود عمود حقيقي بهذا الاسم في جدول الإشعارات (SQLite/Postgres…)."""
-    try:
-        with connection.cursor() as cur:
-            table = Notification._meta.db_table
-            cur.execute(f"PRAGMA table_info({table})")  # يعمل مع SQLite؛ في Postgres سيُتجاهَل دون كسر
-            rows = cur.fetchall()
-        # rows: [(cid, name, type, notnull, dflt_value, pk), ...]
-        names = {r[1] for r in rows} if rows else set()
-        return col_name in names if names else True  # لو ما قدر يحصلها، لا نمنع التنفيذ
-    except Exception:
-        return True
-
-def _pick_existing_db_field(candidates):
+@login_required
+def list_view(request: HttpRequest) -> HttpResponse:
     """
-    اختر أول حقل Model موجود وله عمود فعلي في قاعدة البيانات (لتفادي OperationalError).
+    قائمة التنبيهات (الأحدث أولاً) مع ترقيم.
+    فلاتر بسيطة: status=unread|read|all (افتراضي all)
     """
-    for c in candidates:
-        if _pick_model_field_only([c]) and _column_exists(c):
-            return c
-    return None
+    status_q = (request.GET.get("status") or "all").lower()
+    qs = Notification.objects.filter(recipient=request.user)
+
+    if status_q == "unread":
+        qs = qs.filter(is_read=False)
+    elif status_q == "read":
+        qs = qs.filter(is_read=True)
+
+    paginator = Paginator(qs, 20)
+    page_obj = paginator.get_page(request.GET.get("page"))
+
+    return render(
+        request,
+        "notifications/notifications_list.html",
+        {"page_obj": page_obj, "status_q": status_q},
+    )
 
 
-# =========================
-# API خفيفة للجرس في الهيدر
-# =========================
+@login_required
+def detail(request: HttpRequest, pk: int) -> HttpResponse:
+    """
+    عرض تنبيه مفرد (يُعلّم كمقروء تلقائيًا ثم يوجّه للرابط إن وُجد).
+    """
+    n = get_object_or_404(Notification, pk=pk)
+    if n.recipient_id != request.user.id:
+        return HttpResponseForbidden("غير مسموح")
+
+    if not n.is_read:
+        n.mark_read(save=True)
+
+    # إن وُجد رابط → نحيله له، وإلا نعرض بطاقة التنبيه
+    if n.url:
+        return redirect(n.get_absolute_url())
+
+    return render(request, "notifications/notification_detail.html", {"n": n})
+
+
+@login_required
+def mark_read(request: HttpRequest, pk: int) -> HttpResponse:
+    """
+    تعليم تنبيه محدّد كمقروء.
+    """
+    n = get_object_or_404(Notification, pk=pk)
+    if n.recipient_id != request.user.id:
+        return HttpResponseForbidden("غير مسموح")
+    if not n.is_read:
+        n.mark_read(save=True)
+    messages.success(request, "تم تعليم التنبيه كمقروء.")
+    return redirect(request.GET.get("next") or "notifications:list")
+
+
+@login_required
+def mark_all_read(request: HttpRequest) -> HttpResponse:
+    """
+    تعليم جميع تنبيهات المستخدم كمقروءة (تحديث دفعي).
+    """
+    Notification.objects.filter(recipient=request.user, is_read=False).update(is_read=True)
+    messages.success(request, "تم تعليم جميع التنبيهات كمقروءة.")
+    return redirect(request.GET.get("next") or "notifications:list")
+
+
+@login_required
+def delete(request: HttpRequest, pk: int) -> HttpResponse:
+    """
+    حذف تنبيه مفرد.
+    """
+    n = get_object_or_404(Notification, pk=pk)
+    if n.recipient_id != request.user.id and not request.user.is_staff:
+        return HttpResponseForbidden("غير مسموح")
+    n.delete()
+    messages.warning(request, "تم حذف التنبيه.")
+    return redirect(request.GET.get("next") or "notifications:list")
+
+
+@login_required
+def delete_all(request: HttpRequest) -> HttpResponse:
+    """
+    حذف جميع التنبيهات (للمستخدم الحالي فقط).
+    """
+    Notification.objects.filter(recipient=request.user).delete()
+    messages.warning(request, "تم حذف جميع التنبيهات.")
+    return redirect("notifications:list")
+
+from django.views.decorators.http import require_GET, require_POST
+from django.http import JsonResponse
+from django.utils.html import strip_tags
+
+# ... (بقية الاستيرادات وواجهات العرض الحالية)
+
 @login_required
 @require_GET
-def api_unread_count(request):
-    uf = _pick_existing_db_field(_user_field_candidates())
-    rf = _pick_existing_db_field(_is_read_field_candidates())
-    if not uf or not rf:
-        return JsonResponse({"count": 0})
-    qs = Notification.objects.filter(**{uf: request.user, rf: False})
-    return JsonResponse({"count": qs.count()})
+def api_unread_count(request: HttpRequest) -> JsonResponse:
+    """
+    API: إرجاع عدد التنبيهات غير المقروءة للمستخدم الحالي.
+    """
+    count = Notification.unread_count_for(request.user)
+    return JsonResponse({"count": count})
 
 @login_required
 @require_GET
-def api_list(request):
-    uf = _pick_existing_db_field(_user_field_candidates())
-    rf = _pick_existing_db_field(_is_read_field_candidates())
-    cf = _pick_existing_db_field(_created_field_candidates()) or "id"
-
-    if not uf:
-        return JsonResponse({"results": []})
-
-    limit = int(request.GET.get("limit", "10"))
-    limit = 5 if limit < 5 else (50 if limit > 50 else limit)
-
-    qs = (Notification.objects
-          .filter(**{uf: request.user})
-          .order_by(f"-{cf}")[:limit])
-
-    data = []
-    for n in qs:
-        data.append({
-            "id": n.pk,
-            "title": getattr(n, "title", "") or str(n),
-            "body": getattr(n, "body", "") or "",
-            "url": getattr(n, "url", "") or "",
-            "is_read": bool(getattr(n, rf, False)) if rf else False,
-            "created_at": getattr(n, cf, None) if cf else None,
-        })
-    return JsonResponse({"results": data})
-
-@login_required
-@require_POST
-def api_mark_read(request):
-    nid = request.POST.get("id")
-    if not nid:
-        return HttpResponseBadRequest("missing id")
-    uf = _pick_existing_db_field(_user_field_candidates())
-    rf = _pick_existing_db_field(_is_read_field_candidates())
-    if not uf or not rf:
-        return JsonResponse({"ok": False})
-
-    obj = get_object_or_404(Notification, pk=nid, **{uf: request.user})
-    setattr(obj, rf, True)
-    obj.save(update_fields=[rf])
-    return JsonResponse({"ok": True})
-
-@login_required
-@require_POST
-def api_mark_all_read(request):
-    uf = _pick_existing_db_field(_user_field_candidates())
-    rf = _pick_existing_db_field(_is_read_field_candidates())
-    if not uf or not rf:
-        return JsonResponse({"ok": False})
-    Notification.objects.filter(**{uf: request.user, rf: False}).update(**{rf: True})
-    return JsonResponse({"ok": True})
-
-
-# =========================
-# صفحات HTML جميلة وقابلة للاستخدام
-# =========================
-@login_required
-def page_index(request):
+def api_recent(request):
     """
-    صفحة الإشعارات مع:
-    - تبويب: الكل / غير مقروء عبر only=unread
-    - بحث نصّي q
-    - ترقيم صفحات page/per
+    API: ترجع آخر 10 إشعارات للمستخدم الحالي (مقروءة وغير مقروءة).
     """
-    uf = _pick_existing_db_field(_user_field_candidates())
-    rf = _pick_existing_db_field(_is_read_field_candidates())
-    cf = _pick_existing_db_field(_created_field_candidates()) or "id"
-
-    qs = Notification.objects.all()
-    if uf:
-        qs = qs.filter(**{uf: request.user})
-
-    # فلترة غير مقروء
-    only = (request.GET.get("only") or "").strip()
-    if only == "unread" and rf:
-        qs = qs.filter(**{rf: False})
-
-    # بحث بسيط في العنوان/المتن إن وُجدت الحقول
-    q = (request.GET.get("q") or "").strip()
-    if q:
-        from django.db.models import Q
-        q_expr = Q()
-        if _pick_model_field_only(["title"]):
-            q_expr |= Q(title__icontains=q)
-        if _pick_model_field_only(["body"]):
-            q_expr |= Q(body__icontains=q)
-        if q_expr:
-            qs = qs.filter(q_expr)
-
-    qs = qs.order_by(f"-{cf}")
-
-    # ترقيم
-    try:
-        page = max(1, int(request.GET.get("page", "1")))
-    except Exception:
-        page = 1
-    try:
-        per = int(request.GET.get("per", "10"))
-        per = 5 if per < 5 else (50 if per > 50 else per)
-    except Exception:
-        per = 10
-
-    total = qs.count()
-    start = (page - 1) * per
-    end = start + per
-    rows = list(qs[start:end])
-
-    # أسماء الحقول للعرض
-    rf_model = _pick_model_field_only(_is_read_field_candidates())
-    cf_model = _pick_model_field_only(_created_field_candidates())
-
-    items = []
-    for n in rows:
-        items.append({
-            "obj": n,
-            "id": n.pk,
-            "title": getattr(n, "title", "") or str(n),
-            "body": getattr(n, "body", "") or "",
-            "url": getattr(n, "url", "") or "",
-            "is_read": bool(getattr(n, rf_model, False)) if rf_model else False,
-            "created_at": getattr(n, cf_model, None) if cf_model else None,
-        })
-
-    ctx = {
-        "items": items,
-        "page": page,
-        "per": per,
-        "total": total,
-        "has_prev": page > 1,
-        "has_next": end < total,
-        "prev_page": page - 1,
-        "next_page": page + 1,
-        "only": only,
-        "q": q,
-    }
-    return render(request, "notifications/index.html", ctx)
-
+    qs = Notification.objects.filter(recipient=request.user).order_by("-created_at")[:10]
+    data = [{
+        "id": n.id,
+        "title": n.title or "تنبيه جديد",
+        "body": n.body or "",
+        "is_read": n.is_read,
+        "created_at": n.created_at.strftime("%Y-%m-%d %H:%M"),
+        "url": n.get_absolute_url(),
+    } for n in qs]
+    return JsonResponse({"items": data})
 
 @login_required
 @require_POST
-def page_mark_read(request, pk: int):
-    uf = _pick_existing_db_field(_user_field_candidates())
-    rf = _pick_existing_db_field(_is_read_field_candidates())
-    if not uf or not rf:
-        messages.error(request, "لا يمكن تعديل حالة الإشعار حالياً.")
-        return redirect("notifications:index")
-
-    obj = get_object_or_404(Notification, pk=pk, **{uf: request.user})
-    setattr(obj, rf, True)
-    obj.save(update_fields=[rf])
-    messages.success(request, "تم تعليم الإشعار كمقروء.")
-    return redirect("notifications:index")
-
-
-@login_required
-@require_POST
-def page_mark_all_read(request):
-    uf = _pick_existing_db_field(_user_field_candidates())
-    rf = _pick_existing_db_field(_is_read_field_candidates())
-    if not uf or not rf:
-        messages.error(request, "لا يمكن تعديل حالة الإشعارات حالياً.")
-        return redirect("notifications:index")
-
-    Notification.objects.filter(**{uf: request.user, rf: False}).update(**{rf: True})
-    messages.success(request, "تم تعليم كل الإشعارات كمقروءة.")
-    return redirect("notifications:index")
-
-
-@login_required
-@require_POST
-def page_delete(request, pk: int):
-    uf = _pick_existing_db_field(_user_field_candidates())
-    if not uf:
-        messages.error(request, "لا يمكن حذف الإشعار حالياً.")
-        return redirect("notifications:index")
-
-    obj = get_object_or_404(Notification, pk=pk, **{uf: request.user})
-    obj.delete()
-    messages.success(request, "تم حذف الإشعار.")
-    return redirect("notifications:index")
-
-
-@login_required
-@require_POST
-def page_delete_all_read(request):
-    uf = _pick_existing_db_field(_user_field_candidates())
-    rf = _pick_existing_db_field(_is_read_field_candidates())
-    if not uf or not rf:
-        messages.error(request, "لا يمكن حذف الإشعارات حالياً.")
-        return redirect("notifications:index")
-
-    Notification.objects.filter(**{uf: request.user, rf: True}).delete()
-    messages.success(request, "تم حذف جميع الإشعارات المقروءة.")
-    return redirect("notifications:index")
+def api_mark_read(request: HttpRequest, pk: int) -> JsonResponse:
+    """
+    API: تعليم تنبيه محدّد كمقروء (للمالك فقط).
+    """
+    n = get_object_or_404(Notification, pk=pk)
+    if n.recipient_id != request.user.id:
+        return JsonResponse({"ok": False, "detail": "غير مسموح"}, status=403)
+    if not n.is_read:
+        n.mark_read(save=True)
+    return JsonResponse({"ok": True})

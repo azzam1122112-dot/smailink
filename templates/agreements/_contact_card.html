@@ -1,46 +1,80 @@
-{# components/_user_card.html #}
-{# متغيّرات اختيارية يمكن تمريرها مع include:
-   - context_msg: نص افتراضي لرسالة واتساب (سيمرّ عبر urlencode)
-   - show_actions: افتراضي True لإظهار أزرار التفاعل
-   - accent: 'indigo'/'emerald' ... لتخصيص التدرّج اللوني (افتراضي indigo-sky)
+{# components/_user_card.html – نسخة مُحسّنة 2025-11-11 #}
+{# خيارات include:
+   - context_msg: نص رسالة واتساب الافتراضي (يُمرَّر عبر urlencode) – افتراضي: "مرحبًا، بخصوص طلبك على المنصّة"
+   - show_actions: إظهار الأزرار (True/False) – افتراضي: True
+   - accent: سِمة لونية 'indigo'/'emerald'/'sky'/'rose'/'amber'/'violet'… – افتراضي: 'indigo'
 #}
 
 {% with _show_actions=show_actions|default_if_none:True %}
 {% with _context_msg=context_msg|default:"مرحبًا، بخصوص طلبك على المنصّة" %}
 {% with _uid="uc-"|add:(user.id|default:user.email|default:"x")|slugify %}
+{% with _accent=accent|default:"indigo" %}
 
-<div id="{{ _uid }}" class="rounded-2xl border bg-white/70 backdrop-blur shadow-glass-lg overflow-hidden" data-component="user-card">
-  <!-- هيدر متدرّج باسم المستخدم والدور (إن وُجد) -->
-  <div class="px-5 py-4 bg-gradient-to-l from-indigo-50 to-sky-50 border-b">
+{# تعيين درجات لونية حسب الـ accent (Tailwind classes) #}
+{% if _accent == "emerald" %}
+  {% with _from="from-emerald-50" _to="to-teal-50" _badge="bg-emerald-100 text-emerald-700" _pill="bg-emerald-600 hover:bg-emerald-700" %}
+{% elif _accent == "sky" %}
+  {% with _from="from-sky-50" _to="to-cyan-50" _badge="bg-sky-100 text-sky-700" _pill="bg-sky-600 hover:bg-sky-700" %}
+{% elif _accent == "rose" %}
+  {% with _from="from-rose-50" _to="to-amber-50" _badge="bg-rose-100 text-rose-700" _pill="bg-rose-600 hover:bg-rose-700" %}
+{% elif _accent == "amber" %}
+  {% with _from="from-amber-50" _to="to-yellow-50" _badge="bg-amber-100 text-amber-700" _pill="bg-amber-600 hover:bg-amber-700" %}
+{% elif _accent == "violet" %}
+  {% with _from="from-violet-50" _to="to-fuchsia-50" _badge="bg-violet-100 text-violet-700" _pill="bg-violet-600 hover:bg-violet-700" %}
+{% else %}
+  {# indigo الافتراضي #}
+  {% with _from="from-indigo-50" _to="to-sky-50" _badge="bg-indigo-100 text-indigo-700" _pill="bg-indigo-600 hover:bg-indigo-700" %}
+{% endif %}
+
+<div id="{{ _uid }}"
+     class="rounded-2xl border bg-white/70 dark:bg-slate-800/70 backdrop-blur shadow-glass-lg overflow-hidden rtl"
+     data-component="user-card"
+     dir="rtl" role="region" aria-label="بطاقة المستخدم">
+
+  <!-- رأس البطاقة -->
+  <div class="px-5 py-4 bg-gradient-to-l {{ _from }} {{ _to }} dark:from-slate-800 dark:to-slate-700 border-b">
     <div class="flex items-center gap-3">
       <!-- أفاتار -->
       <div class="relative shrink-0">
         {% if user.avatar_url %}
-          <img src="{{ user.avatar_url }}" alt="صورة {{ user.name|default:user.email|default:'المستخدم' }}"
+          <img src="{{ user.avatar_url }}"
+               alt="صورة {{ user.name|default:user.email|default:'المستخدم' }}"
                class="h-12 w-12 rounded-full ring-2 ring-white object-cover"
-               loading="lazy" referrerpolicy="no-referrer">
+               loading="lazy" referrerpolicy="no-referrer" decoding="async">
         {% else %}
-          <div class="h-12 w-12 rounded-full bg-indigo-600 text-white grid place-items-center text-lg font-bold select-none">
+          <div class="h-12 w-12 rounded-full {{ _pill|cut:' hover:bg-' }} text-white grid place-items-center text-lg font-bold select-none"
+               aria-hidden="true">
             {% if user.name %}{{ user.name|first }}{% else %}👤{% endif %}
           </div>
         {% endif %}
+        {# حالة الاتصال الاختيارية (لو مررت user.is_online) #}
+        {% if user.is_online %}
+          <span class="absolute -bottom-0.5 -left-0.5 h-3.5 w-3.5 rounded-full bg-emerald-500 ring-2 ring-white dark:ring-slate-800"
+                title="متصل الآن" aria-label="متصل"></span>
+        {% endif %}
       </div>
 
+      <!-- الاسم والدور -->
       <div class="min-w-0">
         <div class="flex items-center gap-2 flex-wrap">
-          <h3 class="text-slate-900 font-extrabold text-base md:text-lg truncate">
+          <h3 class="text-slate-900 dark:text-white font-extrabold text-base md:text-lg truncate">
             {{ user.name|default:user.email|default:"مستخدم" }}
           </h3>
           {% if user.role %}
-            <span class="px-2 py-0.5 rounded-xl text-[11px] md:text-xs bg-slate-100 text-slate-700">
+            <span class="px-2 py-0.5 rounded-xl text-[11px] md:text-xs bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-200">
               {{ user.role }}
+            </span>
+          {% endif %}
+          {% if user.is_verified %}
+            <span class="inline-flex items-center px-1.5 py-0.5 rounded-lg text-[11px] md:text-xs {{ _badge }}">
+              تم التحقق ✓
             </span>
           {% endif %}
         </div>
         {% if user.email %}
-          <p class="text-slate-600 text-xs md:text-sm truncate">{{ user.email }}</p>
+          <p class="text-slate-600 dark:text-slate-300 text-xs md:text-sm truncate">{{ user.email }}</p>
         {% else %}
-          <p class="text-slate-500 text-xs">لا يوجد بريد مسجّل</p>
+          <p class="text-slate-500 dark:text-slate-400 text-xs">لا يوجد بريد مسجّل</p>
         {% endif %}
       </div>
     </div>
@@ -48,25 +82,26 @@
 
   <!-- جسم البطاقة -->
   <div class="p-5 space-y-4">
-
     <!-- معلومات سريعة -->
     <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
-      <div class="p-3 rounded-xl bg-slate-50 border">
-        <div class="text-xs text-slate-500">البريد الإلكتروني</div>
-        <div class="mt-0.5 font-medium text-slate-800 break-all">
+      <div class="p-3 rounded-xl bg-slate-50 dark:bg-slate-900/40 border dark:border-slate-700">
+        <div class="text-xs text-slate-500 dark:text-slate-400">البريد الإلكتروني</div>
+        <div class="mt-0.5 font-medium text-slate-800 dark:text-slate-100 break-all">
           {{ user.email|default:"— غير متوفر —" }}
         </div>
       </div>
-      <div class="p-3 rounded-xl bg-slate-50 border">
-        <div class="text-xs text-slate-500">رقم الجوال</div>
-        <div class="mt-0.5 font-medium text-slate-800">
+
+      <div class="p-3 rounded-xl bg-slate-50 dark:bg-slate-900/40 border dark:border-slate-700">
+        <div class="text-xs text-slate-500 dark:text-slate-400">رقم الجوال</div>
+        <div class="mt-0.5 font-medium text-slate-800 dark:text-slate-100">
           {% if user.phone %}{{ user.phone }}{% else %}— غير متوفر —{% endif %}
         </div>
       </div>
+
       {% if user.company %}
-      <div class="p-3 rounded-xl bg-slate-50 border">
-        <div class="text-xs text-slate-500">المنظمة</div>
-        <div class="mt-0.5 font-medium text-slate-800">
+      <div class="p-3 rounded-xl bg-slate-50 dark:bg-slate-900/40 border dark:border-slate-700 sm:col-span-2">
+        <div class="text-xs text-slate-500 dark:text-slate-400">المنظمة</div>
+        <div class="mt-0.5 font-medium text-slate-800 dark:text-slate-100">
           {{ user.company }}
         </div>
       </div>
@@ -75,15 +110,16 @@
 
     {% if _show_actions %}
     <!-- أزرار التفاعل -->
-    <div class="flex flex-wrap items-center gap-2">
+    <div class="flex flex-wrap items-center gap-2" role="group" aria-label="إجراءات التواصل">
       {% if user.email %}
         <a href="mailto:{{ user.email }}"
-           class="px-3 py-2 rounded-xl border hover:bg-slate-50 text-slate-700"
-           rel="noopener">
+           class="px-3 py-2 rounded-xl border dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-100"
+           rel="noopener noreferrer">
           بريد إلكتروني
         </a>
+
         <button type="button"
-                class="px-3 py-2 rounded-xl border hover:bg-slate-50 text-slate-700"
+                class="px-3 py-2 rounded-xl border dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-100"
                 data-copy="{{ user.email }}"
                 aria-label="نسخ البريد الإلكتروني">
           نسخ البريد
@@ -91,63 +127,48 @@
       {% endif %}
 
       {% if user.phone %}
-        {# رابط واتساب عبر السيرفر مع رسالة سياقية قابلة للتمرير من include #}
+        {# واتساب عبر السيرفر – يُخفي الرقم الحقيقي ويطبّع الرسالة #}
         <a href="{% url 'core:whatsapp_user' user.id %}?msg={{ _context_msg|urlencode }}"
-           class="px-3 py-2 rounded-xl bg-emerald-600 text-white hover:bg-emerald-700"
-           data-wp-msg="{{ _context_msg }}">
+           class="px-3 py-2 rounded-xl {{ _pill }} text-white"
+           data-wp-msg="{{ _context_msg }}"
+           rel="noopener noreferrer">
           واتساب
         </a>
+
         <a href="tel:{{ user.phone|urlencode }}"
-           class="px-3 py-2 rounded-xl border hover:bg-slate-50 text-slate-700"
-           rel="noopener">
+           class="px-3 py-2 rounded-xl border dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-100"
+           rel="noopener noreferrer">
           اتصال
         </a>
+
         <button type="button"
-                class="px-3 py-2 rounded-xl border hover:bg-slate-50 text-slate-700"
+                class="px-3 py-2 rounded-xl border dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-100"
                 data-copy="{{ user.phone }}"
                 aria-label="نسخ رقم الجوال">
           نسخ الجوال
         </button>
       {% else %}
-        <span class="px-3 py-2 rounded-xl bg-slate-100 text-slate-500 text-xs">
+        <span class="px-3 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 text-xs">
           لا يتوفر رقم واتساب
         </span>
       {% endif %}
     </div>
     {% endif %}
-
   </div>
 </div>
 
-<!-- سكربت خفيف ذاتي-التحديد لكل بطاقة عبر الـ id (يدعم تعدد النسخ دون تعارض) -->
+<!-- سكربت ذاتي لنطاق البطاقة -->
 <script>
 (function () {
   var root = document.getElementById('{{ _uid }}');
   if (!root) return;
 
-  // نسخ إلى الحافظة
-  var btns = root.querySelectorAll('[data-copy]');
-  if (btns.length && navigator.clipboard) {
-    btns.forEach(function (btn) {
-      btn.addEventListener('click', function () {
-        var val = btn.getAttribute('data-copy') || '';
-        if (!val) return;
-        navigator.clipboard.writeText(val).then(function () {
-          toast('تم النسخ ✓');
-        }).catch(function () {
-          // fallback بسيط
-          try {
-            var ta = document.createElement('textarea');
-            ta.value = val; document.body.appendChild(ta);
-            ta.select(); document.execCommand('copy'); ta.remove();
-            toast('تم النسخ ✓');
-          } catch (e) {}
-        });
-      });
-    });
-  }
+  // حماية بسيطة ضد تكرار الربط
+  if (root.dataset.bound === '1') return;
+  root.dataset.bound = '1';
 
-  // دالة Toast محلية
+  // نسخ إلى الحافظة مع fallback آمن
+  var btns = root.querySelectorAll('[data-copy]');
   function toast(msg) {
     var t = document.createElement('div');
     t.textContent = msg || '';
@@ -155,9 +176,46 @@
     t.setAttribute('aria-live', 'polite');
     t.className = 'fixed bottom-4 left-1/2 -translate-x-1/2 bg-slate-900 text-white text-sm px-3 py-1.5 rounded-xl shadow z-[60]';
     document.body.appendChild(t);
-    setTimeout(function(){ t.remove(); }, 1400);
+    setTimeout(function(){ if (t && t.parentNode) t.parentNode.removeChild(t); }, 1400);
   }
+
+  btns.forEach(function (btn) {
+    btn.addEventListener('click', function () {
+      var val = btn.getAttribute('data-copy') || '';
+      if (!val) return;
+
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(val).then(function () {
+          toast('تم النسخ ✓');
+        }).catch(function () {
+          fallback();
+        });
+      } else {
+        fallback();
+      }
+
+      function fallback() {
+        try {
+          var ta = document.createElement('textarea');
+          ta.value = val;
+          ta.style.position = 'fixed';
+          ta.style.left = '-9999px';
+          document.body.appendChild(ta);
+          ta.select();
+          document.execCommand('copy');
+          if (ta && ta.parentNode) ta.parentNode.removeChild(ta);
+          toast('تم النسخ ✓');
+        } catch (e) {
+          toast('تعذّر النسخ');
+        }
+      }
+    }, { passive: true });
+  });
 })();
 </script>
 
-{% endwith %}{% endwith %}{% endwith %}
+{% endwith %} {# _from/_to/_badge/_pill #}
+{% endwith %} {# _accent #}
+{% endwith %} {# _uid #}
+{% endwith %} {# _context_msg #}
+{% endwith %} {# _show_actions #}

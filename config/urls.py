@@ -7,6 +7,7 @@ from django.conf.urls.static import static
 urlpatterns = [
     # لوحة الإدارة
     path("admin/", admin.site.urls),
+    path("dashboard/", include(("dashboard.urls", "dashboard"), namespace="dashboard")),
 
     # تطبيقات ذات مسارات واضحة
     path("accounts/", include(("accounts.urls", "accounts"), namespace="accounts")),

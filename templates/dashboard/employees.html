@@ -1,0 +1,65 @@
+{% extends "base.html" %}
+{% block title %}إدارة الموظفين{% endblock %}
+{% block content %}
+<div class="container-xl mx-auto space-y-5">
+  <div class="flex items-center justify-between">
+    <h1 class="text-2xl md:text-3xl font-extrabold">إدارة الموظفين</h1>
+    <div class="text-sm text-slate-600">عرض وإدارة حسابات الموظفين</div>
+  </div>
+
+  <form method="get" class="card p-4 grid md:grid-cols-3 gap-3">
+    <input class="input" type="text" name="q" value="{{ q }}" placeholder="بحث بالاسم أو البريد…" />
+    <button class="px-4 py-3 rounded-xl text-white font-semibold bg-brand-600 hover:bg-brand-700">بحث</button>
+    <a href="." class="px-4 py-3 rounded-xl font-semibold border border-slate-200 text-slate-700 hover:bg-slate-50 text-center">تصفير</a>
+  </form>
+
+  <div class="card overflow-x-auto">
+    <table class="w-full text-sm">
+      <thead>
+        <tr class="text-right text-slate-600">
+          <th class="py-3 px-3">#</th>
+          <th class="py-3 px-3">الاسم</th>
+          <th class="py-3 px-3">البريد</th>
+          <th class="py-3 px-3">الدور</th>
+          <th class="py-3 px-3">تاريخ الانضمام</th>
+          <th class="py-3 px-3">إجراءات</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for u in page_obj %}
+        <tr class="border-t border-slate-200">
+          <td class="py-2 px-3">{{ u.id }}</td>
+          <td class="py-2 px-3">
+            {% if u.name %}{{ u.name }}
+            {% else %}{% if u.get_full_name %}{{ u.get_full_name }}{% else %}{{ u.username }}{% endif %}{% endif %}
+          </td>
+          <td class="py-2 px-3">{{ u.email }}</td>
+          <td class="py-2 px-3">{% if u.role %}{{ u.role }}{% else %}-{% endif %}</td>
+          <td class="py-2 px-3">{% if u.date_joined %}{{ u.date_joined|date:"Y-m-d" }}{% else %}-{% endif %}</td>
+          <td class="py-2 px-3">
+            <div class="flex gap-2">
+              <a href="{% url 'admin:accounts_user_change' u.id %}" class="px-3 py-1.5 rounded-lg bg-brand-50 text-brand-700 hover:bg-brand-100">تحرير</a>
+              <a href="{% url 'admin:accounts_user_delete' u.id %}" class="px-3 py-1.5 rounded-lg bg-danger-50 text-danger-600 hover:bg-danger-100">حذف</a>
+            </div>
+          </td>
+        </tr>
+        {% empty %}
+        <tr><td class="py-4 px-3" colspan="6">لا توجد نتائج.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  {% if page_obj %}
+  <div class="flex items-center justify-center gap-2">
+    {% if page_obj.has_previous %}
+      <a class="px-3 py-2 rounded-lg border border-slate-200" href="?page={{ page_obj.previous_page_number }}&q={{ q }}">السابق</a>
+    {% endif %}
+    <span class="px-3 py-2 rounded-lg bg-slate-100">صفحة {{ page_obj.number }} من {{ page_obj.paginator.num_pages }}</span>
+    {% if page_obj.has_next %}
+      <a class="px-3 py-2 rounded-lg border border-slate-200" href="?page={{ page_obj.next_page_number }}&q={{ q }}">التالي</a>
+    {% endif %}
+  </div>
+  {% endif %}
+</div>
+{% endblock %}

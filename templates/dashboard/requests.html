@@ -1,0 +1,75 @@
+{% extends "base.html" %}
+{% block title %}إدارة الطلبات{% endblock %}
+{% block content %}
+<div class="container-xl mx-auto space-y-5">
+  <div class="flex items-center justify-between">
+    <h1 class="text-2xl md:text-3xl font-extrabold">إدارة الطلبات</h1>
+    <div class="text-sm text-slate-600">مراجعة الطلبات حسب الحالة ونطاق التاريخ</div>
+  </div>
+
+  <form method="get" class="card p-4 grid md:grid-cols-5 gap-3">
+    <input class="input md:col-span-2" type="text" name="q" value="{{ q }}" placeholder="بحث بالعنوان/الوصف/العميل…" />
+    <input class="input" type="date" name="start" value="{{ start }}" />
+    <input class="input" type="date" name="end" value="{{ end }}" />
+    <select class="input" name="state">
+      <option value="">كل الحالات</option>
+      {% if state %}<option value="{{ state }}" selected>{{ state }}</option>{% endif %}
+    </select>
+    <div class="md:col-span-5 flex gap-2">
+      <button class="px-4 py-3 rounded-xl text-white font-semibold bg-brand-600 hover:bg-brand-700">بحث</button>
+      <a href="." class="px-4 py-3 rounded-xl font-semibold border border-slate-200 text-slate-700 hover:bg-slate-50">تصفير</a>
+    </div>
+  </form>
+
+  <div class="card overflow-x-auto">
+    <table class="w-full text-sm">
+      <thead>
+        <tr class="text-right text-slate-600">
+          <th class="py-3 px-3">#</th>
+          <th class="py-3 px-3">العنوان</th>
+          <th class="py-3 px-3">العميل</th>
+          <th class="py-3 px-3">الحالة</th>
+          <th class="py-3 px-3">تاريخ الإنشاء</th>
+          <th class="py-3 px-3">إجراءات</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% if page_obj %}
+          {% for r in page_obj %}
+          <tr class="border-t border-slate-200">
+            <td class="py-2 px-3">R{{ r.id }}</td>
+            <td class="py-2 px-3">{{ r.title|default:"-" }}</td>
+            <td class="py-2 px-3">{% if r.created_by %}{{ r.created_by }}{% else %}-{% endif %}</td>
+            <td class="py-2 px-3">{% if r.state %}{{ r.state }}{% else %}-{% endif %}</td>
+            <td class="py-2 px-3">{% if r.created_at %}{{ r.created_at|date:"Y-m-d" }}{% else %}-{% endif %}</td>
+            <td class="py-2 px-3">
+              <div class="flex gap-2">
+                <a href="{% url 'marketplace:request_detail' r.id %}" class="px-3 py-1.5 rounded-lg bg-brand-50 text-brand-700 hover:bg-brand-100">فتح</a>
+                <a href="{% url 'marketplace:admin_request_reassign' r.id %}" class="px-3 py-1.5 rounded-lg border border-slate-200 hover:bg-slate-50">إعادة إسناد</a>
+                <a href="{% url 'marketplace:admin_request_delete' r.id %}" class="px-3 py-1.5 rounded-lg bg-danger-50 text-danger-600 hover:bg-danger-100">حذف</a>
+              </div>
+            </td>
+          </tr>
+          {% empty %}
+          <tr><td class="py-4 px-3" colspan="6">لا توجد نتائج.</td></tr>
+          {% endfor %}
+        {% else %}
+          <tr><td class="py-4 px-3" colspan="6">النموذج Request غير متوفر حاليًا.</td></tr>
+        {% endif %}
+      </tbody>
+    </table>
+  </div>
+
+  {% if page_obj %}
+  <div class="flex items-center justify-center gap-2">
+    {% if page_obj.has_previous %}
+      <a class="px-3 py-2 rounded-lg border border-slate-200" href="?page={{ page_obj.previous_page_number }}&q={{ q }}&state={{ state }}&start={{ start }}&end={{ end }}">السابق</a>
+    {% endif %}
+    <span class="px-3 py-2 rounded-lg bg-slate-100">صفحة {{ page_obj.number }} من {{ page_obj.paginator.num_pages }}</span>
+    {% if page_obj.has_next %}
+      <a class="px-3 py-2 rounded-lg border border-slate-200" href="?page={{ page_obj.next_page_number }}&q={{ q }}&state={{ state }}&start={{ start }}&end={{ end }}">التالي</a>
+    {% endif %}
+  </div>
+  {% endif %}
+</div>
+{% endblock %}

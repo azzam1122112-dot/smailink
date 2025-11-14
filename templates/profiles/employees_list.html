@@ -1,351 +1,154 @@
-{% extends "base.html" %}
-{% load static %}
-{% block title %}دليل الفريق - SamiLink{% endblock %}
+{% extends "base.html" %} {% load static %} {% block title %}التقنيون الموثوقون
+- سامي لينك{% endblock %} {% block content %}
+<div class="container">
+  <div class="section-header">
+    <div class="section-badge">فريق موثوق</div>
+    <h2 class="section-title">التقنيون الموثوقون في سامي لينك</h2>
+    <p class="section-description">
+      نخبة من التقنيين السعوديين تم التحقق من هوياتهم وخبراتهم قبل قبولهم في
+      المنصة
+    </p>
+  </div>
 
-{% block extra_head %}
-<style>
-  .employee-card {
-    transition: all 0.3s ease;
-  }
-  
-  .employee-card:hover {
-    transform: translateY(-5px);
-  }
-  
-  .skill-tag {
-    transition: all 0.2s ease;
-  }
-  
-  .skill-tag:hover {
-    transform: scale(1.05);
-  }
-  
-  .availability-badge {
-    animation: pulse 2s infinite;
-  }
-  
-  @keyframes pulse {
-    0%, 100% { opacity: 1; }
-    50% { opacity: 0.7; }
-  }
-  
-  .filter-tag {
-    transition: all 0.2s ease;
-  }
-  
-  .filter-tag:hover {
-    transform: translateY(-1px);
-  }
-  
-  .empty-state {
-    background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%);
-  }
-  
-  .dark .empty-state {
-    background: linear-gradient(135deg, #1e293b 0%, #334155 100%);
-  }
-</style>
-{% endblock %}
-
-{% block content %}
-<section class="max-w-7xl mx-auto px-4 py-8" dir="rtl">
-  <!-- العنوان وشريط الأدوات -->
-  <div class="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-6 mb-8">
-    <div class="text-center lg:text-right">
-      <h1 class="text-3xl md:text-4xl font-extrabold text-slate-900 dark:text-white tracking-tight">دليل فريقنا</h1>
-      <p class="text-slate-600 dark:text-slate-400 text-lg mt-2 max-w-2xl">
-        تعرف على فريقنا من الخبراء والمختصين في مجال الخدمات التقنية
-      </p>
+  <!-- عوامل التصفية والبحث -->
+  <div class="filters-section" style="margin-bottom: 2rem">
+    <div class="flex flex-wrap gap-4 items-center justify-between">
+      <div class="flex flex-wrap gap-2">
+        <button class="filter-btn active">الكل</button>
+        <button class="filter-btn">متصل الآن</button>
+        <button class="filter-btn">أعلى تقييم</button>
+        <button class="filter-btn">الأكثر طلبات</button>
+      </div>
+      <div class="search-box">
+        <input
+          type="text"
+          placeholder="ابحث عن تقني أو مهارة..."
+          class="search-input"
+        />
+      </div>
     </div>
+  </div>
 
-    <form method="get" class="w-full lg:w-[42rem]">
-      <div class="flex flex-col sm:flex-row items-stretch gap-3">
-        <div class="relative flex-1">
-          <input
-            type="text"
-            name="q"
-            value="{{ request.GET.q }}"
-            placeholder="ابحث بالاسم، التخصص، أو المهارة..."
-            class="w-full rounded-2xl border border-slate-300 dark:border-slate-600 p-4 pr-12 focus:ring-2 focus:ring-primary-500 focus:border-primary-500 outline-none bg-white dark:bg-slate-800 text-slate-900 dark:text-white transition-colors"
-          >
-          <span class="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 dark:text-slate-500">
-            <i class="fas fa-search"></i>
-          </span>
+  <!-- شبكة التقنيين -->
+  <div class="employees-grid">
+    {% for employee in employees %}
+    <div class="employee-card scroll-reveal">
+      <!-- رأس البطاقة -->
+      <div class="employee-card-header">
+        <div class="employee-avatar">
+          <img
+            src="{% if employee.photo %}{{ employee.photo.url }}{% else %}{% static 'img/avatar-placeholder.png' %}{% endif %}"
+            alt="{{ employee.user.name }}"
+            loading="lazy"
+          />
+          <div
+            class="avatar-status {% if forloop.counter|divisibleby:2 %}status-online{% else %}status-offline{% endif %}"
+          ></div>
         </div>
 
-        <!-- فرز -->
-        <select
-          name="sort"
-          class="rounded-2xl border border-slate-300 dark:border-slate-600 p-4 bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:ring-2 focus:ring-primary-500 outline-none transition-colors min-w-[180px]"
-        >
-          <option value="" {% if not request.GET.sort %}selected{% endif %}>ترتيب حسب</option>
-          <option value="rating" {% if request.GET.sort == 'rating' %}selected{% endif %}>الأعلى تقييمًا</option>
-          <option value="recent" {% if request.GET.sort == 'recent' %}selected{% endif %}>الأحدث انضمامًا</option>
-          <option value="projects" {% if request.GET.sort == 'projects' %}selected{% endif %}>الأكثر إنجازًا</option>
-          <option value="name" {% if request.GET.sort == 'name' %}selected{% endif %}>الاسم (أ-ي)</option>
-        </select>
+        <div class="employee-basic-info">
+          <h3 class="employee-name">{{ employee.user.name|default:"تقني" }}</h3>
+          <div class="employee-title">
+            {{ employee.specialty|default:"تقني معتمد" }}
+          </div>
 
-        <button
-          class="rounded-2xl px-6 bg-gradient-to-r from-primary-600 to-primary-700 text-white font-semibold hover:from-primary-700 hover:to-primary-800 transition-all duration-300 shadow-lg hover:shadow-xl flex items-center gap-2 justify-center min-w-[120px]"
-        >
-          <i class="fas fa-search"></i>
-          <span>بحث</span>
-        </button>
-      </div>
-    </form>
-  </div>
+          <div class="employee-location">
+            <span>📍</span>
+            <span>{{ employee.city|default:"الرياض" }}</span>
+          </div>
 
-  <!-- شرائط فلاتر سريعة -->
-  {% if specialties %}
-  <div class="mb-8">
-    <div class="flex items-center gap-3 mb-4">
-      <h3 class="text-lg font-semibold text-slate-700 dark:text-slate-300">التخصصات:</h3>
-      <a href="?" class="text-sm text-primary-600 hover:text-primary-700 font-medium transition-colors">
-        <i class="fas fa-times ml-1"></i>
-        إعادة الضبط
-      </a>
-    </div>
-    <div class="flex flex-wrap gap-3">
-      {% for spec in specialties %}
-        <a href="?q={{ request.GET.q }}&sort={{ request.GET.sort }}&specialty={{ spec.slug }}"
-           class="filter-tag px-4 py-2 rounded-xl border text-sm font-medium transition-all duration-200
-                  {% if request.GET.specialty == spec.slug %}
-                  bg-primary-600 border-primary-600 text-white shadow-lg
-                  {% else %}
-                  bg-white dark:bg-slate-800 border-slate-300 dark:border-slate-600 text-slate-700 dark:text-slate-300 hover:bg-primary-50 dark:hover:bg-primary-900/30 hover:border-primary-300 dark:hover:border-primary-600 hover:text-primary-700 dark:hover:text-primary-300
-                  {% endif %}">
-          <i class="fas fa-tag text-xs ml-2"></i>
-          {{ spec.name }}
-        </a>
-      {% endfor %}
-    </div>
-  </div>
-  {% endif %}
-
-  <!-- إحصائيات سريعة -->
-  <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
-    <div class="stat-card text-center">
-      <div class="text-2xl font-bold text-primary-600 mb-1">{{ employees|length }}</div>
-      <div class="text-slate-600 dark:text-slate-400 text-sm">إجمالي الأعضاء</div>
-    </div>
-    <div class="stat-card text-center">
-      <div class="text-2xl font-bold text-primary-600 mb-1">{{ available_count|default:0 }}</div>
-      <div class="text-slate-600 dark:text-slate-400 text-sm">متاحون الآن</div>
-    </div>
-    <div class="stat-card text-center">
-      <div class="text-2xl font-bold text-primary-600 mb-1">{{ verified_count|default:0 }}</div>
-      <div class="text-slate-600 dark:text-slate-400 text-sm">موثّقون</div>
-    </div>
-    <div class="stat-card text-center">
-      <div class="text-2xl font-bold text-primary-600 mb-1">{{ specialties|length }}</div>
-      <div class="text-slate-600 dark:text-slate-400 text-sm">تخصص مختلف</div>
-    </div>
-  </div>
-
-  <!-- شبكة البطاقات -->
-  <div class="grid sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-    {% for emp in employees %}
-    <article class="employee-card group rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 shadow-sm hover:shadow-2xl transition-all duration-300 overflow-hidden">
-      <a href="{% url 'profiles:employee_detail' emp.slug %}" class="block">
-        <div class="h-48 bg-gradient-to-br from-primary-50 to-primary-100 dark:from-primary-900/20 dark:to-primary-800/20 relative overflow-hidden">
-          {% if emp.photo %}
-            <img
-              src="{{ emp.photo.url }}"
-              alt="{{ emp.user.name|default:emp.user.email }}"
-              class="absolute inset-0 w-full h-full object-cover opacity-90 group-hover:scale-105 transition-transform duration-500"
-              loading="lazy"
+          <div class="employee-rating">
+            <div class="rating-stars">
+              <span class="rating-star filled">★</span>
+              <span class="rating-star filled">★</span>
+              <span class="rating-star filled">★</span>
+              <span class="rating-star filled">★</span>
+              <span class="rating-star">★</span>
+            </div>
+            <span class="rating-value"
+              >{{ employee.rating|floatformat:1 }}</span
             >
-          {% else %}
-            <div class="absolute inset-0 w-full h-full bg-gradient-to-br from-primary-500 to-primary-600 grid place-items-center">
-              <i class="fas fa-user text-white text-4xl"></i>
-            </div>
-          {% endif %}
-          <div class="absolute inset-0 bg-gradient-to-t from-black/40 to-transparent"></div>
-
-          <!-- شارات التوفر والتحقق -->
-          <div class="absolute top-3 right-3 flex flex-col gap-2">
-            {% if emp.is_available %}
-              <span class="availability-badge px-3 py-1 rounded-full text-xs bg-emerald-500 text-white border border-emerald-600 shadow-lg flex items-center gap-1">
-                <i class="fas fa-circle text-[8px]"></i>
-                متاح
-              </span>
-            {% endif %}
+            <span class="rating-count">({{ employee.reviews_count }})</span>
           </div>
-          
-          <div class="absolute top-3 left-3 flex flex-col gap-2">
-            {% if emp.is_verified %}
-              <span class="px-3 py-1 rounded-full text-xs bg-blue-500 text-white border border-blue-600 shadow-lg flex items-center gap-1">
-                <i class="fas fa-check"></i>
-                موثّق
-              </span>
-            {% endif %}
-          </div>
-        </div>
-
-        <div class="p-5">
-          <h3 class="font-bold text-xl text-slate-900 dark:text-white line-clamp-1 group-hover:text-primary-600 transition-colors">
-            {{ emp.user.name|default:emp.user.email }}
-          </h3>
-          <p class="text-slate-600 dark:text-slate-400 line-clamp-1 mt-1">
-            {% if emp.title %}{{ emp.title }}{% elif emp.specialty %}{{ emp.specialty }}{% else %}—{% endif %}
-          </p>
-
-          <!-- تقييم نجوم -->
-          {% if emp.rating %}
-          <div class="mt-3 flex items-center" title="التقييم {{ emp.rating }}/5">
-            <div class="flex text-amber-500">
-              {% with r=emp.rating|floatformat:0 %}
-                {% for i in "12345" %}
-                  {% if forloop.counter <= r %}
-                    <i class="fas fa-star"></i>
-                  {% else %}
-                    <i class="far fa-star"></i>
-                  {% endif %}
-                {% endfor %}
-              {% endwith %}
-            </div>
-            <span class="text-slate-500 dark:text-slate-400 text-sm mr-2">({{ emp.rating }})</span>
-          </div>
-          {% endif %}
-
-          <!-- المهارات -->
-          {% if emp.skills_list %}
-          <div class="mt-4 flex flex-wrap gap-2">
-            {% for s in emp.skills_list|slice:":4" %}
-              <span class="skill-tag px-3 py-1 rounded-full bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-300 text-xs font-medium border border-slate-200 dark:border-slate-600">
-                {{ s }}
-              </span>
-            {% endfor %}
-            {% if emp.skills_list|length > 4 %}
-              <span class="px-2 py-1 rounded-full bg-primary-100 dark:bg-primary-900/30 text-primary-700 dark:text-primary-300 text-xs font-medium">
-                +{{ emp.skills_list|length|add:"-4" }}
-              </span>
-            {% endif %}
-          </div>
-          {% endif %}
-        </div>
-      </a>
-
-      <!-- أزرار التواصل -->
-      <div class="px-5 pb-5">
-        <div class="flex items-center gap-2">
-          <a href="{% url 'profiles:whatsapp_redirect' emp.user_id %}"
-             class="flex-1 text-center rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white py-3 font-semibold transition-all duration-300 shadow-lg hover:shadow-xl flex items-center justify-center gap-2">
-            <i class="fab fa-whatsapp text-lg"></i>
-            <span>واتساب</span>
-          </a>
-          
-          {% if emp.user.email %}
-          <a href="mailto:{{ emp.user.email }}"
-             class="w-12 h-12 rounded-xl border border-slate-300 dark:border-slate-600 hover:bg-slate-50 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-400 grid place-items-center transition-all duration-300 hover:scale-105"
-             title="إرسال بريد">
-            <i class="fas fa-envelope"></i>
-          </a>
-          {% endif %}
-          
-          <a href="{% url 'profiles:employee_detail' emp.slug %}"
-             class="w-12 h-12 rounded-xl border border-slate-300 dark:border-slate-600 hover:bg-slate-50 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-400 grid place-items-center transition-all duration-300 hover:scale-105"
-             title="عرض الملف">
-            <i class="fas fa-eye"></i>
-          </a>
         </div>
       </div>
-    </article>
+
+      <!-- شارات الحالة -->
+      <div class="employee-badges">
+        {% if employee.kyc_status == 'verified' %}
+        <span class="badge-sm badge-verified-sm">✅ موثّق</span>
+        {% endif %} {% if forloop.counter <= 3 %}
+        <span class="badge-sm badge-featured-sm">⭐ متميز</span>
+        {% endif %}
+      </div>
+
+      <!-- إحصائيات سريعة -->
+      <div class="employee-stats">
+        <div class="employee-stat">
+          <span class="stat-number">{{ employee.completed_jobs }}</span>
+          <span class="stat-label">مشروع</span>
+        </div>
+        <div class="employee-stat">
+          <span class="stat-number"
+            >{{ employee.client_satisfaction|floatformat:0 }}%</span
+          >
+          <span class="stat-label">رضا</span>
+        </div>
+        <div class="employee-stat">
+          <span class="stat-number">{{ employee.avg_response_minutes }}</span>
+          <span class="stat-label">دقيقة</span>
+        </div>
+      </div>
+
+      <!-- المهارات -->
+      <div class="employee-skills">
+        <div class="skills-title">أبرز المهارات</div>
+        <div class="skills-tags">
+          {% for skill in employee.skills_list|slice:":4" %}
+          <span class="skill-tag-small">{{ skill }}</span>
+          {% empty %}
+          <span class="skill-tag-small">مهارات تقنية</span>
+          {% endfor %} {% if employee.skills_list|length > 4 %}
+          <span class="skill-tag-small"
+            >+{{ employee.skills_list|length|add:"-4" }}</span
+          >
+          {% endif %}
+        </div>
+      </div>
+
+      <!-- حالة التوفر -->
+      <div class="availability">
+        <div
+          class="availability-dot {% if forloop.counter|divisibleby:2 %}available{% else %}busy{% endif %}"
+        ></div>
+        <span
+          >{% if forloop.counter|divisibleby:2 %}متصل الآن{% else %}مشغول{%
+          endif %}</span
+        >
+      </div>
+
+      <!-- أزرار الإجراءات -->
+      <div class="employee-actions">
+        <a
+          href="{% url 'profiles:employee_detail' emp.pk %}"
+          class="hover:underline"
+        >
+          {{ emp.user.name|default:'موظف' }}
+        </a>
+        <button class="btn-contact" title="التواصل السريع">💬</button>
+      </div>
+    </div>
     {% empty %}
-      <div class="col-span-full">
-        <div class="empty-state rounded-2xl border border-slate-200 dark:border-slate-700 p-12 text-center">
-          <div class="w-32 h-32 mx-auto mb-6 bg-gradient-to-br from-primary-100 to-primary-200 dark:from-primary-900/30 dark:to-primary-800/30 rounded-full grid place-items-center">
-            <i class="fas fa-users text-4xl text-primary-600 dark:text-primary-400"></i>
-          </div>
-          <h3 class="text-2xl font-bold text-slate-800 dark:text-white mb-3">لا يوجد أعضاء للعرض</h3>
-          <p class="text-slate-600 dark:text-slate-400 text-lg mb-6 max-w-md mx-auto">
-            {% if request.GET.q or request.GET.specialty %}
-              لم نتمكن من العثور على أعضاء يتطابقون مع بحثك. جرب مصطلحات بحث أخرى أو أزل بعض الفلاتر.
-            {% else %}
-              لا يوجد أعضاء في الفريق حالياً. سيتم إضافة الملفات قريباً.
-            {% endif %}
-          </p>
-          {% if request.GET.q or request.GET.specialty %}
-            <a href="?" class="inline-flex items-center gap-2 px-6 py-3 rounded-xl bg-primary-600 hover:bg-primary-700 text-white font-semibold transition-all duration-300 shadow-lg hover:shadow-xl">
-              <i class="fas fa-undo"></i>
-              إعادة تعيين البحث
-            </a>
-          {% endif %}
-        </div>
+    <div class="employee-card employee-card-empty">
+      <div>
+        <div style="font-size: 3rem; margin-bottom: 1rem">👥</div>
+        <p>لا يوجد تقنيون متاحون حالياً</p>
+        <p style="font-size: 0.875rem; margin-top: 0.5rem">
+          سيتم إضافة التقنيين قريباً
+        </p>
       </div>
+    </div>
     {% endfor %}
   </div>
-
-  <!-- ترقيم الصفحات -->
-  {% if is_paginated %}
-  <nav class="mt-12 flex items-center justify-center gap-3">
-    {% if page_obj.has_previous %}
-      <a class="px-4 py-2 rounded-xl border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 transition-all duration-300 hover:scale-105 flex items-center gap-2"
-         href="?q={{ request.GET.q }}&sort={{ request.GET.sort }}{% if request.GET.specialty %}&specialty={{ request.GET.specialty }}{% endif %}&page={{ page_obj.previous_page_number }}">
-        <i class="fas fa-chevron-right"></i>
-        <span>السابق</span>
-      </a>
-    {% endif %}
-    
-    <span class="px-4 py-2 rounded-xl bg-primary-600 text-white font-semibold shadow-lg">
-      الصفحة {{ page_obj.number }} من {{ page_obj.paginator.num_pages }}
-    </span>
-    
-    {% if page_obj.has_next %}
-      <a class="px-4 py-2 rounded-xl border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 transition-all duration-300 hover:scale-105 flex items-center gap-2"
-         href="?q={{ request.GET.q }}&sort={{ request.GET.sort }}{% if request.GET.specialty %}&specialty={{ request.GET.specialty }}{% endif %}&page={{ page_obj.next_page_number }}">
-        <span>التالي</span>
-        <i class="fas fa-chevron-left"></i>
-      </a>
-    {% endif %}
-  </nav>
-  {% endif %}
-</section>
-{% endblock %}
-
-{% block extra_js %}
-<script>
-  document.addEventListener('DOMContentLoaded', function() {
-    // تأثيرات للبطاقات عند التمرير
-    const employeeCards = document.querySelectorAll('.employee-card');
-    
-    const cardObserver = new IntersectionObserver((entries) => {
-      entries.forEach(entry => {
-        if (entry.isIntersecting) {
-          entry.target.style.opacity = '1';
-          entry.target.style.transform = 'translateY(0)';
-        }
-      });
-    }, { threshold: 0.1 });
-    
-    employeeCards.forEach(card => {
-      card.style.opacity = '0';
-      card.style.transform = 'translateY(20px)';
-      card.style.transition = 'opacity 0.6s, transform 0.6s';
-      cardObserver.observe(card);
-    });
-    
-    // تأثيرات للفلاتر
-    const filterTags = document.querySelectorAll('.filter-tag');
-    filterTags.forEach(tag => {
-      tag.addEventListener('mouseenter', function() {
-        this.style.transform = 'translateY(-2px)';
-      });
-      tag.addEventListener('mouseleave', function() {
-        this.style.transform = 'translateY(0)';
-      });
-    });
-    
-    // تأثيرات للإحصائيات
-    const statCards = document.querySelectorAll('.stat-card');
-    statCards.forEach(card => {
-      card.addEventListener('mouseenter', function() {
-        this.style.transform = 'scale(1.05)';
-      });
-      card.addEventListener('mouseleave', function() {
-        this.style.transform = 'scale(1)';
-      });
-    });
-  });
-</script>
+</div>
 {% endblock %}

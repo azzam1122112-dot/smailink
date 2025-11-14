@@ -3,32 +3,139 @@
 
 {% block content %}
 <section class="py-10 max-w-6xl mx-auto rtl" dir="rtl">
-  <h1 class="text-2xl font-bold mb-6 text-slate-800 dark:text-white">الطلبات قيد النزاع</h1>
+
+  {# ===== العنوان ===== #}
+  <div class="mb-6 flex items-center justify-between gap-3">
+    <h1 class="text-2xl md:text-3xl font-extrabold tracking-tight text-slate-900 dark:text-white">الطلبات قيد النزاع</h1>
+    <div class="text-slate-500 dark:text-slate-400 text-sm">{% now "Y-m-d H:i" %}</div>
+  </div>
 
   {% if requests %}
-    <div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-      {% for req in requests %}
-        <div class="card p-5 flex flex-col justify-between">
-          <div>
-            <h2 class="text-lg font-semibold text-slate-900 dark:text-white mb-1">{{ req.title|default:"طلب بدون عنوان" }}</h2>
-            <p class="text-sm text-slate-500 dark:text-slate-400 mb-3">{{ req.created_at|date:"Y-m-d H:i" }}</p>
-            {% if req.client %}
-              <p class="text-sm"><i class="fas fa-user text-primary-500"></i> {{ req.client.name|default:req.client.email }}</p>
-            {% endif %}
-            <p class="mt-2 text-sm text-slate-600 dark:text-slate-300">
-              الحالة الحالية: <span class="font-semibold text-red-600">نزاع</span>
-            </p>
+    <div class="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
+      {% for r in requests %}
+        <article class="group relative bg-white/80 dark:bg-slate-800/70 backdrop-blur border border-slate-200 dark:border-slate-700 rounded-2xl p-5 shadow-glass-lg hover:shadow-xl transition-all duration-300">
+
+          {# شريط الحالة الجانبي #}
+          <div class="absolute top-0 right-0 h-full w-1 rounded-l-lg bg-rose-500"></div>
+
+          <div class="flex flex-col h-full justify-between">
+            <div>
+              <div class="flex items-start justify-between gap-3 mb-2">
+                <h2 class="text-lg font-extrabold text-slate-900 dark:text-white leading-6 line-clamp-2">
+                  {{ r.title|default:"طلب بدون عنوان" }}
+                </h2>
+                <span class="px-2 py-1 text-xs rounded-xl border bg-rose-50 text-rose-700 dark:bg-rose-900/20 dark:text-rose-200 shrink-0">
+                  {{ r.get_status_display|default:r.status|default:"نزاع" }}
+                </span>
+              </div>
+
+              {# العميل #}
+              <p class="text-slate-700 dark:text-slate-200 text-sm">
+                <span class="font-semibold text-slate-900 dark:text-white">العميل:</span>
+                {% if r.client %}
+                  {{ r.client.name|default:r.client.email|default:"—" }}
+                {% else %}
+                  —
+                {% endif %}
+              </p>
+              {% if r.client and r.client.phone %}
+                <p class="text-slate-500 dark:text-slate-400 text-xs" dir="ltr">{{ r.client.phone }}</p>
+              {% endif %}
+
+              {# الموظف المسند إن وُجد #}
+              <p class="mt-1 text-slate-600 dark:text-slate-300 text-sm">
+                <span class="font-semibold">الموظف:</span>
+                {% if r.assigned_employee %}
+                  {{ r.assigned_employee }}
+                {% elif r.selected_offer %}
+                  {{ r.selected_offer.employee }}
+                {% else %}
+                  —
+                {% endif %}
+              </p>
+
+              {# مؤشرات سريعة #}
+              <div class="mt-3 flex flex-wrap items-center gap-2 text-[13px]">
+                <span class="px-2 py-1 rounded-lg border bg-white/70 dark:bg-slate-900/50 text-slate-700 dark:text-slate-300">#{{ r.pk }}</span>
+                <span class="px-2 py-1 rounded-lg border bg-slate-100 text-slate-700 dark:bg-slate-700/40 dark:text-slate-200">مجمّد</span>
+                {% if r.created_at %}
+                  <span class="px-2 py-1 rounded-lg border bg-slate-50 text-slate-600 dark:bg-slate-900/40 dark:text-slate-300">أنشئ: {{ r.created_at|date:"Y-m-d H:i" }}</span>
+                {% endif %}
+                {% if r.updated_at %}
+                  <span class="px-2 py-1 rounded-lg border bg-slate-50 text-slate-600 dark:bg-slate-900/40 dark:text-slate-300">آخر تحديث: {{ r.updated_at|date:"Y-m-d H:i" }}</span>
+                {% endif %}
+              </div>
+
+              {# لمحة من التفاصيل #}
+              {% if r.details %}
+                <div class="mt-3 text-slate-600 dark:text-slate-300 text-sm whitespace-pre-line line-clamp-3">
+                  {{ r.details|urlize }}
+                </div>
+              {% endif %}
+
+              {# معلومات النزاع إن توفرت #}
+              {% if r.dispute %}
+                <div class="mt-3 rounded-lg border border-rose-200 dark:border-rose-900 bg-rose-50 dark:bg-rose-900/20 p-3">
+                  {% if r.dispute.title %}
+                    <div class="text-sm font-semibold text-rose-700 dark:text-rose-200">{{ r.dispute.title }}</div>
+                  {% endif %}
+                  {% if r.dispute.reason %}
+                    <div class="mt-1 text-sm text-rose-700/90 dark:text-rose-200/90 whitespace-pre-line">{{ r.dispute.reason }}</div>
+                  {% endif %}
+                  {% if r.dispute.created_at %}
+                    <div class="mt-1 text-xs text-rose-600 dark:text-rose-300">تاريخ فتح النزاع: {{ r.dispute.created_at|date:"Y-m-d H:i" }}</div>
+                  {% endif %}
+                </div>
+              {% endif %}
+            </div>
+
+            {# إجراءات #}
+            <div class="mt-4 grid grid-cols-1 gap-2">
+              {% if r.short_code %}
+                <a href="{% url 'marketplace:request_detail_short' r.short_code %}"
+                   class="inline-flex items-center justify-center w-full px-4 py-2 rounded-xl bg-gradient-to-l from-rose-600 to-amber-600 text-white text-sm font-semibold hover:from-rose-700 hover:to-amber-700 transition">
+                  عرض التفاصيل
+                </a>
+              {% else %}
+                <a href="{% url 'marketplace:request_detail' r.pk %}"
+                   class="inline-flex items-center justify-center w-full px-4 py-2 rounded-xl bg-gradient-to-l from-rose-600 to-amber-600 text-white text-sm font-semibold hover:from-rose-700 hover:to-amber-700 transition">
+                  عرض التفاصيل
+                </a>
+              {% endif %}
+
+              {# زر فتح النزاع موجود عادة داخل تفاصيل الطلب؛ هنا نظهر رابط النزاع إن وُجد #}
+              {% if r.dispute %}
+                <a href="{% url 'disputes:detail' r.dispute.pk %}"
+                   class="inline-flex items-center justify-center w-full px-4 py-2 rounded-xl border border-rose-300 text-rose-700 dark:text-rose-300 bg-white dark:bg-slate-900 hover:bg-rose-50 dark:hover:bg-rose-900/20">
+                  تفاصيل النزاع
+                </a>
+              {% endif %}
+            </div>
           </div>
-          <div class="mt-4">
-            <a href="{{ req.get_absolute_url }}" class="nav-cta block text-center py-2">عرض التفاصيل</a>
-          </div>
-        </div>
+        </article>
       {% endfor %}
     </div>
+
+    {# ترقيم الصفحات إن كان queryset مُجزّأ #}
+    {% if is_paginated %}
+      <div class="flex justify-center gap-2 mt-6">
+        {% if page_obj.has_previous %}
+          <a class="px-3 py-1 rounded-lg border bg-white dark:bg-slate-900 hover:bg-slate-50 dark:hover:bg-slate-800" href="?page={{ page_obj.previous_page_number }}">السابق</a>
+        {% endif %}
+        <span class="px-3 py-1 rounded-lg border bg-slate-50 dark:bg-slate-800 text-slate-700 dark:text-slate-200">{{ page_obj.number }} / {{ page_obj.paginator.num_pages }}</span>
+        {% if page_obj.has_next %}
+          <a class="px-3 py-1 rounded-lg border bg-white dark:bg-slate-900 hover:bg-slate-50 dark:hover:bg-slate-800" href="?page={{ page_obj.next_page_number }}">التالي</a>
+        {% endif %}
+      </div>
+    {% endif %}
+
   {% else %}
-    <div class="p-10 text-center text-slate-500 dark:text-slate-400 bg-white dark:bg-slate-800 rounded-2xl shadow-sm">
-      لا توجد طلبات قيد النزاع حاليًا.
+    <div class="text-center py-16 bg-white/60 dark:bg-slate-800/60 backdrop-blur border border-dashed border-slate-300 dark:border-slate-600 rounded-2xl">
+      <div class="text-6xl mb-3 opacity-40" aria-hidden="true">🛑</div>
+      <p class="text-lg text-slate-600 dark:text-slate-300 font-medium">لا توجد طلبات قيد النزاع حاليًا</p>
+      <p class="text-sm text-slate-400 dark:text-slate-500 mt-1">ستظهر الطلبات المتنازع عليها هنا عند حدوثها</p>
     </div>
   {% endif %}
+
 </section>
 {% endblock %}

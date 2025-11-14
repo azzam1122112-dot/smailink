@@ -1,0 +1,54 @@
+{# finance/templates/finance/confirm_transfers.html #}
+{% extends "base.html" %}
+{% load humanize %}
+
+{% block title %}تأكيد تحويلات العملاء{% endblock %}
+
+{% block content %}
+<div class="container mx-auto px-4 py-6" dir="rtl">
+  <div class="mb-4">
+    <h1 class="text-2xl font-extrabold">تأكيد تحويلات العملاء</h1>
+    <p class="text-sm text-gray-600 mt-1">فواتير غير مدفوعة لديها مرجع تحويل بنكي مُدخل من العميل.</p>
+  </div>
+
+  <div class="overflow-x-auto rounded-2xl shadow bg-white">
+    <table class="min-w-full text-sm">
+      <thead>
+        <tr class="text-gray-600 border-b">
+          <th class="py-2 px-3 text-right">#</th>
+          <th class="py-2 px-3 text-right">الاتفاقية/الطلب</th>
+          <th class="py-2 px-3 text-right">المبلغ</th>
+          <th class="py-2 px-3 text-right">المرجع البنكي</th>
+          <th class="py-2 px-3"></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% if invoices %}
+        {% for inv in invoices %}
+        <tr class="border-b">
+          <td class="py-2 px-3">#{{ inv.id }}</td>
+          <td class="py-2 px-3">A{{ inv.agreement_id }}{% if inv.agreement and inv.agreement.request_id %} / R{{ inv.agreement.request_id }}{% endif %}</td>
+          <td class="py-2 px-3">{{ inv.total_amount|floatformat:2 }}</td>
+          <td class="py-2 px-3">{{ inv.paid_ref }}</td>
+          <td class="py-2 px-3">
+            <form method="post" action="{% url 'finance:mark_invoice_paid' inv.id %}" class="inline">
+              {% csrf_token %}
+              <input type="hidden" name="method" value="bank">
+              <input type="hidden" name="ref_code" value="{{ inv.ref_code }}">
+              <input type="hidden" name="paid_ref" value="{{ inv.paid_ref }}">
+              <button class="btn btn-sm">وسم كمدفوعة</button>
+            </form>
+            <a href="{% url 'finance:invoice_detail' inv.id %}" class="btn btn-sm">تفاصيل</a>
+          </td>
+        </tr>
+        {% endfor %}
+        {% else %}
+        <tr>
+          <td colspan="5" class="py-4 px-3 text-gray-500">لا توجد تحويلات بانتظار التأكيد.</td>
+        </tr>
+        {% endif %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

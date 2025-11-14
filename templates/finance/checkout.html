@@ -1,0 +1,146 @@
+{# finance/templates/finance/checkout.html #}
+{% extends "base.html" %}
+{% load humanize %}
+
+{% block title %}الدفع للاتفاقية A{{ agreement.id }}{% endblock %}
+
+{% block content %}
+<div class="container mx-auto px-4 py-6" dir="rtl">
+  <!-- عنوان + معلومات أساسية -->
+  <div class="mb-4">
+    <h1 class="text-2xl font-extrabold">الدفع للاتفاقية A{{ agreement.id }}</h1>
+    <p class="text-sm text-gray-600 mt-1">
+      R{{ agreement.request_id }} — الموظف:
+      {% if agreement.employee %}{{ agreement.employee }}{% else %}—{% endif %}
+    </p>
+  </div>
+
+  <!-- كرت المبلغ الرئيسي (المبلغ النهائي للعميل) -->
+  <div class="mb-6">
+    <div class="rounded-2xl bg-gradient-to-l from-blue-600 to-indigo-600 text-white p-4 shadow-lg flex items-center justify-between gap-4">
+      <div>
+        <div class="text-xs uppercase opacity-80">إجمالي المبلغ المستحق للدفع</div>
+        <div class="text-3xl font-extrabold mt-1">
+          {{ totals.grand_total|floatformat:2 }}
+          <span class="text-sm font-normal opacity-80">ر.س</span>
+        </div>
+        <div class="text-xs mt-1 opacity-90">
+          يشمل قيمة المشروع + عمولة المنصة + ضريبة القيمة المضافة.
+        </div>
+      </div>
+      <div class="hidden sm:block text-right text-xs leading-relaxed opacity-95">
+        <div>اتفاقية رقم: A{{ agreement.id }}</div>
+        <div>طلب رقم: R{{ agreement.request_id }}</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+    <!-- تفصيل السعر -->
+    <div class="rounded-2xl shadow bg-white p-4">
+      <h2 class="font-bold mb-3">تفصيل السعر</h2>
+      <div class="grid grid-cols-2 gap-3 text-sm">
+        <div class="text-gray-500">قيمة المشروع (P)</div>
+        <div>{{ totals.P|floatformat:2 }}</div>
+
+        <div class="text-gray-500">عمولة المنصة</div>
+        <div>
+          {{ totals.platform_fee|floatformat:2 }}
+          <span class="text-xs text-gray-400">({{ totals.fee_percent|floatformat:2 }}٪)</span>
+        </div>
+
+        <div class="text-gray-500">الأساس الخاضع للضريبة</div>
+        <div>{{ totals.taxable|floatformat:2 }}</div>
+
+        <div class="text-gray-500">VAT</div>
+        <div>
+          {{ totals.vat_amount|floatformat:2 }}
+          <span class="text-xs text-gray-400">({{ totals.vat_percent|floatformat:2 }}٪)</span>
+        </div>
+
+        <div class="text-gray-700 font-bold">الإجمالي للدفع</div>
+        <div class="font-bold">{{ totals.grand_total|floatformat:2 }}</div>
+      </div>
+
+      <div class="mt-4 p-3 bg-blue-50 rounded-lg text-sm">
+        <div class="font-semibold mb-1">بيانات التحويل البنكي</div>
+        <div>الرجاء التحويل إلى الحساب البنكي الموضح أدناه ثم إدخال مرجع التحويل البنكي في النموذج المجاور.</div>
+        <div class="mt-2 text-gray-700 space-y-1">
+          <div>البنك: {{ BANK_NAME }}</div>
+          <div>الاسم: {{ BANK_ACCOUNT_NAME }}</div>
+          <div>
+            IBAN:
+            {% if BANK_IBAN_MASKED %}
+              {{ BANK_IBAN_MASKED }}
+            {% else %}
+              {{ BANK_IBAN }}
+            {% endif %}
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- الفاتورة + مرجع التحويل -->
+    <div class="rounded-2xl shadow bg-white p-4">
+      <h2 class="font-bold mb-3">الفاتورة</h2>
+
+      <div class="text-sm space-y-1">
+        <div>
+          <span class="text-gray-500">رقم الفاتورة:</span>
+          <span class="font-semibold">#{{ invoice.id }}</span>
+        </div>
+        <div>
+          <span class="text-gray-500">الحالة:</span>
+          <span class="font-semibold">{{ invoice.get_status_display }}</span>
+        </div>
+        <div>
+          <span class="text-gray-500">الإجمالي المستحق:</span>
+          <span class="font-semibold">
+            {{ totals.grand_total|floatformat:2 }}
+          </span>
+        </div>
+      </div>
+
+      {% if invoice.is_paid %}
+        <div class="mt-4 p-3 bg-green-50 text-green-700 rounded-lg text-sm">
+          تم سداد الفاتورة. شكرًا لتعاونك 🌿
+        </div>
+      {% else %}
+        <form method="post"
+              action="{% url 'finance:confirm_bank_transfer' invoice.id %}"
+              class="mt-4 space-y-4">
+          {% csrf_token %}
+
+          <div>
+            <label class="text-sm text-gray-600 block mb-1">مرجع التحويل البنكي</label>
+            <input type="text"
+                   name="paid_ref"
+                   minlength="4"
+                   class="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                   placeholder="أدخل المرجع البنكي كما يظهر في إيصال البنك"
+                   required>
+            <p class="text-xs text-gray-400 mt-1">
+              مثال: رقم العملية أو رقم التحويل الظاهر في الإيصال البنكي.
+            </p>
+          </div>
+
+          <div class="border-t pt-3">
+            <h3 class="text-sm font-semibold mb-1">إيصال التحويل البنكي</h3>
+            <p class="text-xs text-gray-500 mb-2">
+              يمكنك الاحتفاظ بصورة أو ملف للإيصال لديك حاليًا.  
+              سيتم توفير ميزة رفع الإيصال من داخل المنصّة في مرحلة لاحقة.
+            </p>
+            <div class="inline-flex items-center px-3 py-2 text-xs font-medium rounded-lg border border-dashed border-gray-300 bg-gray-50 text-gray-400 cursor-not-allowed">
+              رفع إيصال التحويل (قريبًا)
+            </div>
+          </div>
+
+          <button type="submit" class="btn mt-1 w-full md:w-auto">
+            إرسال مرجع التحويل للتأكيد
+          </button>
+        </form>
+      {% endif %}
+    </div>
+  </div>
+</div>
+{% endblock %}

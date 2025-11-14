@@ -1,4 +1,3 @@
-# marketplace/models.py
 from __future__ import annotations
 
 from datetime import timedelta
@@ -16,14 +15,16 @@ User = settings.AUTH_USER_MODEL
 
 class Request(models.Model):
     """
-    طلب خدمة ضمن دورة: NEW → OFFER_SELECTED → AGREEMENT_PENDING → IN_PROGRESS → (COMPLETED | DISPUTED | CANCELLED)
+    طلب خدمة ضمن دورة:
+      NEW → OFFER_SELECTED → AGREEMENT_PENDING → IN_PROGRESS → (COMPLETED | DISPUTED | CANCELLED)
 
     ✦ اعتبارات أمان/جودة:
-      - تحقق من الدور عند الإسناد (employee فقط).
-      - تحقق من القيم الرقمية (مدة > 0، سعر ≥ 0).
-      - جميع دوال تغيّر الحالة ذرّية (transaction.atomic).
-      - خصائص قراءة مريحة للقوالب.
-      - دوال مساعدة لتحديث SLA ونوافذ العروض والانتقال بين الحالات.
+      - تحقّق من صلاحية الإسناد (المُعيَّن يجب أن يكون بدور employee).
+      - تحقّق من القيم الرقمية (مدة > 0، سعر ≥ 0).
+      - جميع انتقالات الحالة ذرّية (transaction.atomic).
+      - خصائص قراءة داعمة للقوالب.
+      - دعم نافذة العروض (5 أيام) و SLA إرسال الاتفاقية (3 أيام).
+      - توافق خلفي مع شاشات قديمة عبر Proxy Model: ServiceRequest.
     """
 
     class Status(models.TextChoices):
@@ -51,18 +52,18 @@ class Request(models.Model):
     # ---- الحالة الموحدة ----
     status = models.CharField(max_length=32, choices=Status.choices, default=Status.NEW, db_index=True)
 
-    # أعلام مساعدة (قد تُشتق لكن تُحفظ للتوافق مع تقارير/واجهات)
+    # أعلام مساعدة
     has_milestones = models.BooleanField(default=False)
     has_dispute = models.BooleanField(default=False)
 
-    # --- نافذة العروض/SLA ---
+    # --- نافذة العروض / SLA ---
     offers_window_ends_at = models.DateTimeField(
         "نهاية نافذة استقبال العروض (5 أيام)", null=True, blank=True, db_index=True
     )
     selected_at = models.DateTimeField(
         "وقت اختيار العرض (للحالة OFFER_SELECTED وما بعدها)", null=True, blank=True, db_index=True
     )
-    agreement_due_at = models.DateTimeField("موعد استحقاق إرسال الاتفاقية (SL A 3 أيام)", null=True, blank=True)
+    agreement_due_at = models.DateTimeField("موعد استحقاق إرسال الاتفاقية (SLA 3 أيام)", null=True, blank=True)
     sla_agreement_overdue = models.BooleanField("تجاوز مهلة إنشاء الاتفاقية (تم التنبيه؟)", default=False)
 
     # ---- طوابع زمنية ----
@@ -73,7 +74,7 @@ class Request(models.Model):
     # تحقق/سلامة بيانات
     # -------------------------
     def clean(self):
-        # 1) الموظف المعيّن يجب أن يحمل الدور employee (إن كان موجودًا)
+        # 1) الموظف المعيّن يجب أن يحمل الدور employee (إن وُجد)
         if self.assigned_employee and getattr(self.assigned_employee, "role", None) != "employee":
             raise ValidationError("الإسناد يجب أن يكون إلى مستخدم بدور 'employee'.")
 
@@ -85,14 +86,8 @@ class Request(models.Model):
         if self.estimated_price < 0:
             raise ValidationError("السعر التقديري لا يمكن أن يكون سالبًا.")
 
-        # 4) اتساق العلم مع الحالة
+        # 4) اتساق العلم مع الحالة (نسمح بالتعايش لأجل التوافق)
         if self.has_dispute and self.status != self.Status.DISPUTED:
-            # نسمح بالتعايش لأجل التوافق، لكن يُفضّل توحيد المصدر (status)
-            pass
-
-        # 5) اتساق SLA: لا نعدّل في clean()
-        if self.agreement_due_at and self.status == self.Status.AGREEMENT_PENDING:
-            # إن تجاوزت المهلة، يتم وضع العلم عبر flag_agreement_overdue_if_needed()
             pass
 
     def save(self, *args, skip_clean: bool = False, **kwargs):
@@ -105,7 +100,7 @@ class Request(models.Model):
         return super().save(*args, **kwargs)
 
     # -------------------------
-    # خصائص قراءة مريحة للقوالب
+    # خصائص قراءة للقوالب
     # -------------------------
     @property
     def agreement_overdue(self) -> bool:
@@ -154,12 +149,13 @@ class Request(models.Model):
     # -------------------------
     def ensure_offers_window(self, force: bool = False) -> None:
         """
-        يضبط نهاية نافذة العروض إلى (created_at + 5 أيام) إذا لم تكن مضبوطة.
+        يضبط نهاية نافذة العروض إلى (created_at + OFFERS_WINDOW_DAYS؛ الافتراضي 5) إذا لم تكن مضبوطة.
         استخدم force=True لإعادة ضبطها يدويًا.
         """
+        days = getattr(settings, "OFFERS_WINDOW_DAYS", 5)
         if force or not self.offers_window_ends_at:
             base = self.created_at or timezone.now()
-            self.offers_window_ends_at = base + timedelta(days=5)
+            self.offers_window_ends_at = base + timedelta(days=days)
 
     def flag_agreement_overdue_if_needed(self) -> bool:
         """
@@ -173,10 +169,10 @@ class Request(models.Model):
         return False
 
     # -------------------------
-    # انتقالات الحالة (تُستدعى من الفيوز/الخدمات)
+    # انتقالات الحالة
     # -------------------------
     @transaction.atomic
-    def mark_offer_selected_now(self, employee: User):
+    def mark_offer_selected_now(self, employee):
         """
         تحديثات موحّدة عند اختيار العرض/الإسناد (يضبط الـ SLA).
         """
@@ -199,20 +195,15 @@ class Request(models.Model):
 
     @transaction.atomic
     def transition_to_agreement_pending(self):
-        """
-        انتقال من OFFER_SELECTED إلى AGREEMENT_PENDING عند إنشاء الاتفاقية.
-        """
+        """من OFFER_SELECTED إلى AGREEMENT_PENDING عند إنشاء الاتفاقية."""
         if self.status != self.Status.OFFER_SELECTED:
             raise ValidationError("لا يمكن الانتقال إلى AGREEMENT_PENDING إلا من حالة OFFER_SELECTED.")
-        # يحافظ على agreement_due_at (المهلة محسوبة مسبقًا)
         self.status = self.Status.AGREEMENT_PENDING
         self.save(update_fields=["status", "updated_at"])
 
     @transaction.atomic
     def start_in_progress(self):
-        """
-        انتقال إلى IN_PROGRESS عند موافقة العميل على الاتفاقية.
-        """
+        """إلى IN_PROGRESS عند موافقة العميل على الاتفاقية."""
         if self.status != self.Status.AGREEMENT_PENDING:
             raise ValidationError("لا يمكن الانتقال إلى IN_PROGRESS إلا من حالة AGREEMENT_PENDING.")
         self.status = self.Status.IN_PROGRESS
@@ -220,22 +211,18 @@ class Request(models.Model):
 
     @transaction.atomic
     def mark_completed(self):
-        """
-        وضع الحالة مكتمل (عادة بعد اعتماد جميع المراحل/الفواتير).
-        """
+        """وضع الحالة مكتمل (عادة بعد اعتماد جميع المراحل/الفواتير)."""
         if self.status not in (self.Status.IN_PROGRESS, self.Status.DISPUTED):
             raise ValidationError("يمكن الإكمال فقط من حالات التنفيذ أو النزاع (بعد الحل).")
         self.status = self.Status.COMPLETED
         self.save(update_fields=["status", "updated_at"])
 
     # -------------------------
-    # دوال المدير العام (admin-only)
+    # إجراءات إدارية
     # -------------------------
     @transaction.atomic
     def admin_cancel(self):
-        """
-        إلغاء الطلب: يفك الإسناد، يوقف الـ SLA، ويضع الحالة 'cancelled'.
-        """
+        """إلغاء الطلب: يفك الإسناد، يوقف الـ SLA، ويضع الحالة 'cancelled'."""
         self.assigned_employee = None
         self.status = self.Status.CANCELLED
         self.selected_at = None
@@ -253,7 +240,7 @@ class Request(models.Model):
         - رفض جميع العروض الحالية (تبقى للأرشفة).
         - إزالة الإسناد.
         - تصفير الـ SLA.
-        - إعادة فتح نافذة العروض 5 أيام من الآن.
+        - إعادة فتح نافذة العروض OFFERS_WINDOW_DAYS من الآن.
         """
         try:
             from .models import Offer  # type: ignore
@@ -269,7 +256,8 @@ class Request(models.Model):
         self.selected_at = None
         self.agreement_due_at = None
         self.sla_agreement_overdue = False
-        self.offers_window_ends_at = timezone.now() + timedelta(days=5)
+        days = getattr(settings, "OFFERS_WINDOW_DAYS", 5)
+        self.offers_window_ends_at = timezone.now() + timedelta(days=days)
         self.save(update_fields=[
             "assigned_employee", "status", "selected_at",
             "agreement_due_at", "sla_agreement_overdue",
@@ -277,11 +265,8 @@ class Request(models.Model):
         ])
 
     @transaction.atomic
-    def reassign_to(self, employee: User):
-        """
-        إعادة إسناد قسرية إلى موظف آخر (admin-only).
-        لا تغيّر الحالة الجارية، فقط تبدّل الموظف.
-        """
+    def reassign_to(self, employee):
+        """إعادة إسناد قسرية إلى موظف آخر (admin-only)."""
         if not employee or getattr(employee, "role", None) != "employee":
             raise ValidationError("لا يمكن الإسناد إلا لمستخدم بدور 'employee'.")
         self.assigned_employee = employee
@@ -347,7 +332,7 @@ class Request(models.Model):
 class Offer(models.Model):
     """
     عرض واحد فعّال لكل تقني على الطلب (يمكن سحب العرض ثم إعادة التقديم داخل النافذة).
-    نافذة العروض = 5 أيام من إنشاء الطلب.
+    نافذة العروض = OFFERS_WINDOW_DAYS (افتراضي 5) من إنشاء الطلب.
     """
 
     class Status(models.TextChoices):
@@ -367,6 +352,7 @@ class Offer(models.Model):
 
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default=Status.PENDING)
     created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
         ordering = ["-created_at"]
@@ -393,15 +379,15 @@ class Offer(models.Model):
             ),
         ]
 
-    # صلاحيات أساسية
-    def can_view(self, user):
+    # صلاحيات أساسية (مستعملة في القوالب/الفيوز)
+    def can_view(self, user) -> bool:
         if not getattr(user, "is_authenticated", False):
             return False
         if getattr(user, "is_superuser", False) or getattr(user, "is_staff", False) or getattr(user, "role", "") in ("admin", "manager", "finance"):
             return True
         return user.id in (self.request.client_id, self.employee_id)
 
-    def can_select(self, user):
+    def can_select(self, user) -> bool:
         # الاختيار متاح للعميل فقط، ومن حالة NEW، وداخل نافذة العروض
         return (
             getattr(user, "is_authenticated", False)
@@ -411,7 +397,7 @@ class Offer(models.Model):
             and self.request.offers_window_active
         )
 
-    def can_reject(self, user):
+    def can_reject(self, user) -> bool:
         return (
             getattr(user, "is_authenticated", False)
             and user.id == self.request.client_id
@@ -419,18 +405,18 @@ class Offer(models.Model):
         )
 
     def clean(self):
+        # التحققات الرقمية
         if self.proposed_duration_days == 0:
             raise ValidationError("المدة المقترحة يجب أن تكون أكبر من صفر.")
         if self.proposed_price < 0:
             raise ValidationError("السعر المقترح لا يمكن أن يكون سالبًا.")
 
-        # التحقق من نافذة العروض (تحقق منطقي على الأقل على مستوى الموديل)
+        # التحقق من نافذة العروض
         req: Request = getattr(self, "request", None)
         if req:
             req.ensure_offers_window()
-            # يمنع تقديم/إعادة تفعيل عرض خارج النافذة عندما كان الطلب NEW
             if req.status == Request.Status.NEW and req.offers_window_ends_at and timezone.now() > req.offers_window_ends_at:
-                # نسمح بالحفظ لو كان العرض WITHDRAWN (أرشيفي) لكن نمنع العروض الفعالة الجديدة
+                # يُسمح بالحفظ لو كان العرض WITHDRAWN (أرشيفي) لكن تُمنع العروض الفعالة الجديدة
                 if self.status != self.Status.WITHDRAWN:
                     raise ValidationError("انتهت نافذة استقبال العروض لهذا الطلب.")
 
@@ -439,12 +425,16 @@ class Offer(models.Model):
 
 
 class Note(models.Model):
+    """
+    ملاحظات/ردود شبيهة بالتعليقات، مع خيار رؤية داخلية (is_internal).
+    """
     request = models.ForeignKey(Request, on_delete=models.CASCADE, related_name="notes")
     author = models.ForeignKey(User, on_delete=models.CASCADE)
     text = models.TextField("نص الملاحظة")
     parent = models.ForeignKey("self", on_delete=models.CASCADE, null=True, blank=True, related_name="replies")
     is_internal = models.BooleanField("رؤية مقيدة (داخلي)", default=False)
     created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
         ordering = ["-created_at"]
@@ -454,14 +444,27 @@ class Note(models.Model):
     def __str__(self):
         return f"Note#{self.pk} R{self.request_id} by {self.author_id}"
 
-class ServiceRequest(models.Model):
-    # ... حقولك الحالية (client, title, description, state, created_at ...)
-    # state يتوقع NEW أو ما يماثلها قبل الاتفاقية
+
+# ----------------------------------------------------------
+# توافق خلفي: Proxy Model لاسم ServiceRequest المستخدم سابقًا
+# ----------------------------------------------------------
+class ServiceRequest(Request):
+    """
+    Proxy على Request من أجل التوافق مع أجزاء قديمة من الكود والقوالب التي
+    كانت تستخدم الاسم ServiceRequest. لا جدول جديد.
+    """
+
+    class Meta:
+        proxy = True
+        verbose_name = "طلب"
+        verbose_name_plural = "طلبات"
 
     @property
     def in_offers_window(self) -> bool:
+        """توافق مع واجهات قديمة كانت تقرأ in_offers_window."""
+        days = getattr(settings, "OFFERS_WINDOW_DAYS", 5)
         if not self.created_at:
             return False
-        limit = self.created_at + timedelta(days=getattr(settings, "OFFERS_WINDOW_DAYS", 5))
-        # اعتبر الطلب ضمن نافذة العروض لو لم تُعتمد اتفاقية بعد وحالته تسمح بالعروض
-        return timezone.now() < limit and self.state in ("NEW", "OFFERING", "OPEN")
+        limit = self.created_at + timedelta(days=days)
+        # اعتبر الطلب ضمن نافذة العروض إذا كان NEW وما قبل انتهاء المهلة
+        return timezone.now() < limit and self.status == Request.Status.NEW

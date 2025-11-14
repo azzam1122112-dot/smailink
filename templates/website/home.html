@@ -1,111 +1,104 @@
 {% extends "base.html" %}
-{% block title %}SamiLink — الرئيسية{% endblock %}
-
-{% block extra_head %}
-<style>
-  .hero-gradient {
-    background: linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 50%, #bae6fd 100%);
-  }
-  
-  .dark .hero-gradient {
-    background: linear-gradient(135deg, #0c4a6e 0%, #075985 50%, #0369a1 100%);
-  }
-  
-  .floating-card {
-    animation: float 6s ease-in-out infinite;
-  }
-  
-  .floating-card:nth-child(2) {
-    animation-delay: 1s;
-  }
-  
-  .floating-card:nth-child(3) {
-    animation-delay: 2s;
-  }
-  
-  @keyframes float {
-    0%, 100% { transform: translateY(0); }
-    50% { transform: translateY(-10px); }
-  }
-  
-  .feature-icon {
-    @apply w-14 h-14 rounded-2xl bg-gradient-to-br from-primary-500 to-primary-600 text-white grid place-items-center text-xl shadow-lg;
-  }
-  
-  .stat-card {
-    @apply bg-white dark:bg-slate-800 rounded-2xl p-6 shadow-sm border border-slate-200 dark:border-slate-700 text-center transition-all duration-300 hover:shadow-md hover:border-primary-200 dark:hover:border-primary-800;
-  }
-</style>
-{% endblock %}
+{% load static %}
+{% block title %}منصة سامي لينك التقنية — وسيط سعودي موثوق{% endblock %}
 
 {% block content %}
-<!-- قسم البطل -->
-<section class="py-16 md:py-24 overflow-hidden">
-  <div class="max-w-7xl mx-auto px-4 grid lg:grid-cols-2 gap-12 items-center">
-    <div class="animate-fade-in">
-      <div class="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-primary-100 dark:bg-primary-900/30 text-primary-700 dark:text-primary-300 text-sm font-medium mb-6">
-        <i class="fas fa-rocket text-xs"></i>
-        <span>منصة متكاملة للخدمات التقنية</span>
+
+<!-- قسم البطل المحسن -->
+<section id="hero" class="hero-section">
+  <div class="container">
+    <div class="hero-content fade-in">
+      <div class="hero-text">
+        <div class="hero-badge">
+          <span>وسيط سعودي منظم</span>
+        </div>
+        
+        <h1 class="hero-title">
+          إدارة <span>احترافية</span> لدورة عملك من أول طلب حتى آخر فاتورة
+        </h1>
+        
+        <p class="hero-description">
+          منصة سامي لينك وسيط سعودي ١٠٠٪ ينظم العلاقة بين العملاء والتقنيين بدورة عمل واضحة، 
+          فواتير نظامية، وحماية مالية للطرفين بما يتوافق مع الأنظمة السعودية.
+        </p>
+        
+        <div class="hero-features">
+          <div class="hero-feature">
+            <div class="hero-feature-icon">✓</div>
+            <div class="hero-feature-text">إخفاء بيانات العميل أثناء مرحلة العروض لرفع مستوى الأمان والخصوصية</div>
+          </div>
+          <div class="hero-feature">
+            <div class="hero-feature-icon">✓</div>
+            <div class="hero-feature-text">مسار مالي منظم مع فواتير نظامية ورسوم وضريبة محددة بوضوح</div>
+          </div>
+          <div class="hero-feature">
+            <div class="hero-feature-icon">✓</div>
+            <div class="hero-feature-text">تقنيون سعوديون تم التحقق من هوياتهم وخبراتهم قبل الانضمام للمنصة</div>
+          </div>
+        </div>
+        
+        <div class="hero-actions">
+          {% if user.is_authenticated %}
+            {% if user.role == 'client' %}
+              <a href="{% url 'marketplace:my_requests' %}" class="btn btn-primary">
+                إدارة طلباتي
+              </a>
+            {% elif user.role == 'employee' or user.role == 'tech' %}
+              <a href="{% url 'marketplace:my_tasks' %}" class="btn btn-primary">
+                عرض مهامي
+              </a>
+            {% else %}
+              <a href="{% url 'dashboard:admin_dashboard' %}" class="btn btn-primary">
+                الانتقال للوحة التحكم
+              </a>
+            {% endif %}
+          {% else %}
+            <a href="{% url 'accounts:register' %}" class="btn btn-primary">
+              ابدأ الآن
+            </a>
+          {% endif %}
+          <a href="#how-it-works" class="btn btn-secondary">
+            تعرف على المنصة
+          </a>
+        </div>
       </div>
       
-      <h1 class="text-4xl md:text-5xl lg:text-6xl font-extrabold leading-tight">
-        إدارة 
-        <span class="gradient-text">الخدمات التقنية</span>
-        <br>بكل احترافية
-      </h1>
-      
-      <p class="mt-6 text-lg text-slate-600 dark:text-slate-400 leading-relaxed">
-        طلبات، عروض، اتفاقيات، مراحل، فواتير، نزاعات — كل ذلك بلوحات احترافية وإشعارات ذكية في منصة واحدة متكاملة.
-      </p>
-      
-      <div class="mt-8 flex flex-wrap gap-4">
-        <a href="{% url 'profiles:employees_list' %}" class="flex items-center gap-2 px-6 py-3.5 rounded-xl bg-gradient-to-r from-primary-600 to-primary-700 text-white hover:from-primary-700 hover:to-primary-800 transition-all duration-300 shadow-lg hover:shadow-xl font-medium">
-          <i class="fas fa-users text-sm"></i>
-          <span>دليل الفريق</span>
-        </a>
-        
-        <a href="{% url 'website:services' %}" class="flex items-center gap-2 px-6 py-3.5 rounded-xl bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-600 text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700 transition-all duration-300 font-medium shadow-sm hover:shadow-md">
-          <i class="fas fa-cogs text-sm"></i>
-          <span>استكشاف الخدمات</span>
-        </a>
-      </div>
-      
-      <div class="mt-10 flex items-center gap-6 text-sm text-slate-500 dark:text-slate-400">
-        <div class="flex items-center gap-2">
-          <i class="fas fa-check-circle text-primary-600 text-lg"></i>
-          <span>إدارة متكاملة</span>
-        </div>
-        <div class="flex items-center gap-2">
-          <i class="fas fa-check-circle text-primary-600 text-lg"></i>
-          <span>تقارير مفصلة</span>
-        </div>
-        <div class="flex items-center gap-2">
-          <i class="fas fa-check-circle text-primary-600 text-lg"></i>
-          <span>دعم فني</span>
-        </div>
-      </div>
-    </div>
-    
-    <div class="relative animate-fade-in">
-      <div class="hero-gradient rounded-3xl p-8 md:p-12 shadow-xl relative overflow-hidden">
-        <!-- العناصر العائمة -->
-        <div class="floating-card absolute top-8 left-8 w-20 h-20 bg-white/80 dark:bg-slate-800/80 rounded-2xl shadow-lg grid place-items-center text-2xl text-primary-600 backdrop-blur-sm">
-          <i class="fas fa-file-contract"></i>
-        </div>
-        
-        <div class="floating-card absolute bottom-12 right-12 w-16 h-16 bg-white/80 dark:bg-slate-800/80 rounded-2xl shadow-lg grid place-items-center text-xl text-primary-600 backdrop-blur-sm">
-          <i class="fas fa-chart-bar"></i>
-        </div>
-        
-        <div class="floating-card absolute top-12 right-20 w-12 h-12 bg-white/80 dark:bg-slate-800/80 rounded-xl shadow-lg grid place-items-center text-lg text-primary-600 backdrop-blur-sm">
-          <i class="fas fa-bell"></i>
-        </div>
-        
-        <!-- الرسم التوضيحي المركزي -->
-        <div class="relative z-10 grid place-items-center">
-          <div class="w-64 h-64 md:w-80 md:h-80 bg-gradient-to-br from-primary-500/20 to-primary-600/20 rounded-full grid place-items-center backdrop-blur-sm">
-            <div class="w-48 h-48 md:w-60 md:h-60 bg-gradient-to-br from-primary-400 to-primary-600 rounded-full grid place-items-center text-white shadow-2xl">
-              <i class="fas fa-link text-5xl md:text-6xl"></i>
+      <div class="hero-visual scroll-reveal">
+        <div class="hero-card">
+          <div class="hero-card-header">
+            <h2 class="hero-card-title">مسار واحد واضح لكل الأطراف</h2>
+            <p class="hero-card-description">رحلة منظمة من الطلب حتى التسليم</p>
+          </div>
+          
+          <div class="hero-steps">
+            <div class="hero-step">
+              <div class="step-number">1</div>
+              <div class="step-content">
+                <div class="step-title">طلب موحد وواضح</div>
+                <div class="step-description">
+                  يقوم العميل بتحديد الاحتياج التقني، نوع الخدمة، المدة المتوقعة والميزانية بشكل منظم.
+                </div>
+              </div>
+            </div>
+            
+            <div class="hero-step">
+              <div class="step-number">2</div>
+              <div class="step-content">
+                <div class="step-title">عروض من تقنيين موثوقين</div>
+                <div class="step-description">
+                  تصل عروض من تقنيين سعوديين معتمدين داخل المنصة، مع تفاصيل السعر، المدة، ونطاق العمل.
+                </div>
+              </div>
+            </div>
+            
+            <div class="hero-step">
+              <div class="step-number">3</div>
+              <div class="step-content">
+                <div class="step-title">اتفاقية بمراحل وتسوية آمنة</div>
+                <div class="step-description">
+                  بعد اختيار العرض الأنسب تُنشأ اتفاقية بمراحل دفع واضحة، وتتم إدارة التنفيذ والملاحظات داخل سامي لينك.
+                </div>
+              </div>
             </div>
           </div>
         </div>
@@ -114,182 +107,163 @@
   </div>
 </section>
 
-<!-- قسم الميزات -->
-<section class="py-16 bg-slate-50 dark:bg-slate-800/50">
-  <div class="max-w-7xl mx-auto px-4">
-    <div class="text-center mb-16">
-      <h2 class="text-3xl md:text-4xl font-extrabold mb-4">مميزات <span class="gradient-text">SamiLink</span></h2>
-      <p class="text-lg text-slate-600 dark:text-slate-400 max-w-2xl mx-auto">
-        منصة متكاملة توفر جميع الأدوات التي تحتاجها لإدارة خدماتك التقنية بكفاءة واحترافية
+<!-- قسم كيف تعمل المنصة -->
+<section id="how-it-works" class="section how-it-works">
+  <div class="container">
+    <div class="section-header scroll-reveal">
+      <div class="section-badge">عملية منظمة</div>
+      <h2 class="section-title">كيف تعمل منصة سامي لينك؟</h2>
+      <p class="section-description">
+        رحلة منظمة من الطلب حتى الإكمال، بخطوات بسيطة وواضحة لكل من العميل والتقني.
       </p>
     </div>
     
-    <div class="grid md:grid-cols-2 lg:grid-cols-3 gap-8">
-      <!-- ميزة 1 -->
-      <div class="card p-6 group hover:border-primary-300 dark:hover:border-primary-600 transition-all duration-300">
-        <div class="feature-icon group-hover:scale-110 transition-transform duration-300">
-          <i class="fas fa-tasks"></i>
-        </div>
-        <h3 class="text-xl font-bold mt-4 mb-2 text-slate-800 dark:text-white">إدارة الطلبات</h3>
-        <p class="text-slate-600 dark:text-slate-400">
-          تتبع وإدارة جميع طلبات الخدمات بسهولة مع تحديثات فورية لحالة كل طلب.
+    <div class="steps-grid">
+      <div class="step-card scroll-reveal">
+        <div class="step-number-large">١</div>
+        <div class="step-icon">📝</div>
+        <h3 class="step-title">إنشاء الطلب</h3>
+        <p class="step-description">
+          يقوم العميل بإنشاء طلب جديد، وتوضيح طبيعة المشروع أو المهمة، والمدة المتوقعة والميزانية، مع إمكانية إرفاق ملفات توضيحية.
         </p>
       </div>
       
-      <!-- ميزة 2 -->
-      <div class="card p-6 group hover:border-primary-300 dark:hover:border-primary-600 transition-all duration-300">
-        <div class="feature-icon group-hover:scale-110 transition-transform duration-300">
-          <i class="fas fa-handshake"></i>
-        </div>
-        <h3 class="text-xl font-bold mt-4 mb-2 text-slate-800 dark:text-white">الاتفاقيات والعروض</h3>
-        <p class="text-slate-600 dark:text-slate-400">
-          إنشاء وإدارة العروض والاتفاقيات باحترافية مع توقيع إلكتروني آمن.
+      <div class="step-card scroll-reveal">
+        <div class="step-number-large">٢</div>
+        <div class="step-icon">💼</div>
+        <h3 class="step-title">استقبال العروض</h3>
+        <p class="step-description">
+          تُرسل إشعارات للتقنيين المناسبين، ويقومون بتقديم عروضهم داخل المنصة مع تفاصيل السعر، المدة، وطريقة التنفيذ.
         </p>
       </div>
       
-      <!-- ميزة 3 -->
-      <div class="card p-6 group hover:border-primary-300 dark:hover:border-primary-600 transition-all duration-300">
-        <div class="feature-icon group-hover:scale-110 transition-transform duration-300">
-          <i class="fas fa-file-invoice-dollar"></i>
-        </div>
-        <h3 class="text-xl font-bold mt-4 mb-2 text-slate-800 dark:text-white">الفواتير والمدفوعات</h3>
-        <p class="text-slate-600 dark:text-slate-400">
-          إنشاء فواتير مفصلة ومتابعة المدفوعات بسهولة مع تقارير مالية شاملة.
+      <div class="step-card scroll-reveal">
+        <div class="step-number-large">٣</div>
+        <div class="step-icon">📄</div>
+        <h3 class="step-title">الاتفاقية والفواتير</h3>
+        <p class="step-description">
+          بعد اختيار العرض الأنسب، تُنشأ اتفاقية تحتوي على مراحل عمل ودفعات، وتُربط آليًا بفواتير تصدر من المنصة.
         </p>
       </div>
       
-      <!-- ميزة 4 -->
-      <div class="card p-6 group hover:border-primary-300 dark:hover:border-primary-600 transition-all duration-300">
-        <div class="feature-icon group-hover:scale-110 transition-transform duration-300">
-          <i class="fas fa-chart-line"></i>
-        </div>
-        <h3 class="text-xl font-bold mt-4 mb-2 text-slate-800 dark:text-white">تقارير وتحليلات</h3>
-        <p class="text-slate-600 dark:text-slate-400">
-          لوحات تحكم تفاعلية مع تقارير شاملة تساعدك على اتخاذ قرارات مستنيرة.
-        </p>
-      </div>
-      
-      <!-- ميزة 5 -->
-      <div class="card p-6 group hover:border-primary-300 dark:hover:border-primary-600 transition-all duration-300">
-        <div class="feature-icon group-hover:scale-110 transition-transform duration-300">
-          <i class="fas fa-bell"></i>
-        </div>
-        <h3 class="text-xl font-bold mt-4 mb-2 text-slate-800 dark:text-white">إشعارات ذكية</h3>
-        <p class="text-slate-600 dark:text-slate-400">
-          نظام إشعارات متكامل يبقيك على اطلاع بجميع التحديثات والمستجدات.
-        </p>
-      </div>
-      
-      <!-- ميزة 6 -->
-      <div class="card p-6 group hover:border-primary-300 dark:hover:border-primary-600 transition-all duration-300">
-        <div class="feature-icon group-hover:scale-110 transition-transform duration-300">
-          <i class="fas fa-users-cog"></i>
-        </div>
-        <h3 class="text-xl font-bold mt-4 mb-2 text-slate-800 dark:text-white">فريق العمل</h3>
-        <p class="text-slate-600 dark:text-slate-400">
-          إدارة فريق العمل بكفاءة مع توزيع المهام ومتابعة الأداء بشكل دقيق.
+      <div class="step-card scroll-reveal">
+        <div class="step-number-large">٤</div>
+        <div class="step-icon">✅</div>
+        <h3 class="step-title">التنفيذ والتسليم</h3>
+        <p class="step-description">
+          يتم متابعة التنفيذ ورسائل المحادثة ورفع الملفات عبر المنصة، مع إمكانية فتح نزاع عند الحاجة لضبط حقوق جميع الأطراف.
         </p>
       </div>
     </div>
   </div>
 </section>
 
-<!-- قسم الإحصائيات -->
-<section class="py-16">
-  <div class="max-w-7xl mx-auto px-4">
-    <div class="grid md:grid-cols-2 lg:grid-cols-4 gap-6">
-      <div class="stat-card">
-        <div class="text-3xl font-bold text-primary-600 mb-2">+500</div>
-        <div class="text-slate-600 dark:text-slate-400">مشروع مكتمل</div>
+<!-- قسم التقنيين الموثوقين -->
+<section id="team" class="section">
+  <div class="container">
+    <div class="section-header scroll-reveal">
+      <div class="section-badge">فريق موثوق</div>
+      <h2 class="section-title">التقنيون الموثوقون في سامي لينك</h2>
+      <p class="section-description">
+        نخبة من التقنيين السعوديين تم التحقق من هوياتهم وخبراتهم قبل قبولهم في المنصة.
+      </p>
+    </div>
+    
+    {% if team_members %}
+      <div class="team-grid">
+        {% for emp in team_members %}
+          <div class="team-card scroll-reveal">
+            <div class="team-avatar">
+              {% if emp.avatar_url %}
+                <img src="{{ emp.avatar_url }}" alt="{{ emp.full_name }}">
+              {% else %}
+                <div class="avatar-fallback">{{ emp.initials|default:"ت" }}</div>
+              {% endif %}
+            </div>
+            
+            <h3 class="team-name">{{ emp.full_name|default:emp.name|default:emp.email }}</h3>
+            <p class="team-role">{{ emp.speciality|default:"تقني معتمد" }}</p>
+            <p class="team-location">{{ emp.city|default:"الرياض" }}</p>
+            
+            <div class="team-status">
+              <span class="status-dot"></span>
+              <span>جاهز لاستقبال الطلبات</span>
+            </div>
+          </div>
+        {% endfor %}
+      </div>
+    {% else %}
+      <div class="info-card scroll-reveal">
+        <p class="info-text">
+          لا توجد قائمة منشورة للتقنيين الموثوقين في الوقت الحالي. يمكن إضافة وإدارة القائمة من لوحة الإدارة متى ما تم تجهيز الفريق.
+        </p>
+      </div>
+    {% endif %}
+    
+    <div class="text-center scroll-reveal" style="margin-top: 3rem;">
+      <a href="{% url 'profiles:employees_list' %}" class="btn btn-outline">
+        عرض جميع التقنيين
+      </a>
+    </div>
+  </div>
+</section>
+
+<!-- قسم التواصل -->
+<section id="contact" class="section contact-section">
+  <div class="container">
+    <div class="contact-grid">
+      <div class="contact-info scroll-reveal">
+        <div class="section-header" style="text-align: right;">
+          <div class="section-badge">دعم مستمر</div>
+          <h2 class="section-title">تواصل مع فريق سامي لينك</h2>
+          <p class="section-description" style="margin: 0;">
+            للاستفسارات، الشراكات، أو التجربة الأولى للمنصة؛ يسعدنا تواصلك معنا عبر البريد الإلكتروني أو الواتساب.
+          </p>
+        </div>
+        
+        <div class="contact-methods">
+          <div class="contact-method">
+            <div class="contact-icon">📧</div>
+            <div class="contact-details">
+              <div class="contact-label">البريد الإلكتروني الرسمي</div>
+              <a href="mailto:support@samilink.sa" class="contact-value">support@samilink.sa</a>
+            </div>
+          </div>
+          
+          <div class="contact-method">
+            <div class="contact-icon">💬</div>
+            <div class="contact-details">
+              <div class="contact-label">واتساب خدمة العملاء</div>
+              <a href="https://wa.me/966500000000" class="contact-value">+966 50 000 0000</a>
+            </div>
+          </div>
+          
+          <div class="contact-method">
+            <div class="contact-icon">🕒</div>
+            <div class="contact-details">
+              <div class="contact-label">أوقات العمل</div>
+              <div class="contact-value">الأحد - الخميس: ٨ ص - ٥ م</div>
+            </div>
+          </div>
+        </div>
       </div>
       
-      <div class="stat-card">
-        <div class="text-3xl font-bold text-primary-600 mb-2">+150</div>
-        <div class="text-slate-600 dark:text-slate-400">عميل راضٍ</div>
-      </div>
-      
-      <div class="stat-card">
-        <div class="text-3xl font-bold text-primary-600 mb-2">+50</div>
-        <div class="text-slate-600 dark:text-slate-400">خبير تقني</div>
-      </div>
-      
-      <div class="stat-card">
-        <div class="text-3xl font-bold text-primary-600 mb-2">24/7</div>
-        <div class="text-slate-600 dark:text-slate-400">دعم فني</div>
+      <div class="contact-sidebar scroll-reveal">
+        <div class="sidebar-badge">جاهزون لمرافقتك</div>
+        <h3 class="sidebar-title">من أول طلب حتى التسليم</h3>
+        <p class="sidebar-description">
+          يمكن تهيئة المنصة للاستخدام الداخلي في شركتك أو فريقك، مع صلاحيات مالية وإدارية متقدمة
+          وتقارير متابعة مخصصة بحسب احتياج الإدارة.
+        </p>
+        
+        <div style="margin-top: 1.5rem;">
+          <a href="mailto:support@samilink.sa?subject=طلب شراكة" class="btn btn-primary btn-sm">
+            طلب شراكة
+          </a>
+        </div>
       </div>
     </div>
   </div>
 </section>
 
-<!-- قسم دعوة للعمل -->
-<section class="py-16 bg-gradient-to-r from-primary-600 to-primary-800 text-white rounded-3xl mx-4 mb-16">
-  <div class="max-w-4xl mx-auto px-4 text-center">
-    <h2 class="text-3xl md:text-4xl font-extrabold mb-6">جاهز لبدء رحلتك مع <span class="text-yellow-300">SamiLink</span>؟</h2>
-    <p class="text-lg text-primary-100 mb-8 max-w-2xl mx-auto">
-      انضم إلى المئات من العملاء الذين يثقون بنا لإدارة خدماتهم التقنية بكفاءة واحترافية
-    </p>
-    
-    <div class="flex flex-wrap justify-center gap-4">
-      {% if request.user.is_authenticated %}
-        <a href="{% url 'marketplace:request_create' %}" class="px-6 py-3.5 rounded-xl bg-white text-primary-700 hover:bg-slate-100 transition-all duration-300 shadow-lg hover:shadow-xl font-medium">
-          <i class="fas fa-plus-circle mr-2"></i>
-          إنشاء طلب جديد
-        </a>
-      {% else %}
-        <a href="{% url 'accounts:register' %}" class="px-6 py-3.5 rounded-xl bg-white text-primary-700 hover:bg-slate-100 transition-all duration-300 shadow-lg hover:shadow-xl font-medium">
-          <i class="fas fa-user-plus mr-2"></i>
-          إنشاء حساب جديد
-        </a>
-        <a href="{% url 'accounts:login' %}" class="px-6 py-3.5 rounded-xl bg-transparent border border-white text-white hover:bg-white/10 transition-all duration-300 font-medium">
-          <i class="fas fa-sign-in-alt mr-2"></i>
-          تسجيل الدخول
-        </a>
-      {% endif %}
-    </div>
-  </div>
-</section>
-{% endblock %}
-
-{% block extra_js %}
-<script>
-  // إضافة تأثيرات تفاعلية إضافية للصفحة الرئيسية
-  document.addEventListener('DOMContentLoaded', function() {
-    // تأثيرات للبطاقات عند التمرير
-    const featureCards = document.querySelectorAll('.card');
-    
-    const cardObserver = new IntersectionObserver((entries) => {
-      entries.forEach(entry => {
-        if (entry.isIntersecting) {
-          entry.target.style.opacity = '1';
-          entry.target.style.transform = 'translateY(0)';
-        }
-      });
-    }, { threshold: 0.1 });
-    
-    featureCards.forEach(card => {
-      card.style.opacity = '0';
-      card.style.transform = 'translateY(20px)';
-      card.style.transition = 'opacity 0.6s, transform 0.6s';
-      cardObserver.observe(card);
-    });
-    
-    // تأثيرات للإحصائيات
-    const statCards = document.querySelectorAll('.stat-card');
-    
-    const statObserver = new IntersectionObserver((entries) => {
-      entries.forEach(entry => {
-        if (entry.isIntersecting) {
-          entry.target.classList.add('animate-pulse');
-          setTimeout(() => {
-            entry.target.classList.remove('animate-pulse');
-          }, 1000);
-        }
-      });
-    }, { threshold: 0.5 });
-    
-    statCards.forEach(card => {
-      statObserver.observe(card);
-    });
-  });
-</script>
 {% endblock %}

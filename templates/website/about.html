@@ -1,0 +1,14 @@
+{% extends "base.html" %}
+{% block title %}من نحن — {{ SITE_NAME|default:"SamiLink" }}{% endblock %}
+
+{% block content %}
+<section class="max-w-5xl mx-auto rtl py-12 px-4" dir="rtl">
+  <div class="rounded-2xl border bg-white dark:bg-slate-800 p-8 shadow">
+    <h1 class="text-3xl font-extrabold mb-4">من نحن</h1>
+    <p class="text-slate-600 dark:text-slate-300 leading-8">
+      {{ SITE_NAME|default:"SamiLink" }} منصة سعودية 100% لإدارة الخدمات التقنية باحترافية — طلبات، عروض، اتفاقيات،
+      مراحل، فواتير، ونزاعات ضمن دورة عمل موحدة وآمنة.
+    </p>
+  </div>
+</section>
+{% endblock %}

@@ -114,6 +114,10 @@ class UserManager(BaseUserManager):
             raise ValueError("superuser يجب أن يكون is_superuser=True")
         return self._create_user(email, password, **extra_fields)
 
+    # دعم تسجيل الدخول بحساسية غير مرتبطة بحالة الأحرف
+    def get_by_natural_key(self, email: str):
+        return self.get(**{"email__iexact": (email or "").strip()})
+
 
 # ---------------------------------------------
 # نموذج المستخدم — البريد هو USERNAME_FIELD
@@ -154,6 +158,7 @@ class User(AbstractBaseUser, PermissionsMixin):
     class Meta:
         verbose_name = "مستخدم"
         verbose_name_plural = "مستخدمون"
+        ordering = ["-date_joined", "id"]
         indexes = [
             models.Index(fields=["role"]),
             models.Index(fields=["email"]),
@@ -221,3 +226,6 @@ class User(AbstractBaseUser, PermissionsMixin):
 
     def __str__(self):
         return self.name or self.email
+
+    def __repr__(self) -> str:
+        return f"<User id={getattr(self, 'id', None)} email={self.email!r} role={self.role!r}>"

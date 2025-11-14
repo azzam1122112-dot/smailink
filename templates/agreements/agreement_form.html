@@ -5,118 +5,60 @@
 
 {% block extra_css %}
 <style>
-  .fade-in {
-    animation: fadeIn 0.5s ease-in-out;
-  }
-  
-  @keyframes fadeIn {
-    from { opacity: 0; transform: translateY(10px); }
-    to { opacity: 1; transform: translateY(0); }
-  }
-  
-  .card-hover {
-    transition: all 0.3s ease;
-  }
-  
-  .card-hover:hover {
-    transform: translateY(-5px);
-    box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
-  }
-  
-  .gradient-bg {
-    background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
-  }
-  
-  .dark .gradient-bg {
-    background: linear-gradient(135deg, #1e293b 0%, #334155 100%);
-  }
-  
-  .btn-glow {
-    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
-    transition: all 0.3s ease;
-  }
-  
-  .btn-glow:hover {
-    box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
-  }
-  
-  .form-input {
-    transition: all 0.2s ease;
-  }
-  
-  .form-input:focus {
-    box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
-  }
-  
-  .payment-item {
-    transition: all 0.3s ease;
-  }
-  
-  .payment-item:hover {
-    background-color: rgba(243, 244, 246, 0.5);
-  }
-  
-  .dark .payment-item:hover {
-    background-color: rgba(55, 65, 81, 0.5);
-  }
+  .fade-in{animation:fadeIn .5s ease-in-out}@keyframes fadeIn{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:translateY(0)}}
+  .card-hover{transition:all .3s ease}.card-hover:hover{transform:translateY(-4px);box-shadow:0 12px 24px -8px rgba(0,0,0,.15)}
+  .sticky-aside{position:sticky;top:88px}
+  .form-input{transition:box-shadow .2s ease}.form-input:focus{box-shadow:0 0 0 3px rgba(37,99,235,.12)}
+  .payment-item{transition:background-color .2s ease}.payment-item:hover{background-color:rgba(148,163,184,.08)}
+  .kpi{background:linear-gradient(135deg,#f8fafc 0%,#eef2ff 100%)}.dark .kpi{background:linear-gradient(135deg,#0f172a 0%,#1e293b 100%)}
+  .soft-border{border:1px solid rgba(148,163,184,.25)}
 </style>
 {% endblock %}
 
 {% block content %}
 <section class="py-8 max-w-6xl mx-auto rtl" dir="rtl">
 
-  {# بطاقة ملخّص الاتفاقية - محسنة #}
-  <div class="rounded-2xl border gradient-bg p-6 shadow-lg mb-8 fade-in card-hover">
-    <div class="flex items-center mb-4">
-      <div class="w-12 h-12 rounded-full bg-blue-100 dark:bg-blue-900 flex items-center justify-center mr-3">
-        <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 text-blue-600 dark:text-blue-300" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+  {# بطاقة معلومات سريعة #}
+  <div class="rounded-2xl soft-border kpi p-6 shadow mb-8 fade-in card-hover">
+    <div class="flex items-center gap-3 mb-4">
+      <div class="w-12 h-12 rounded-full bg-blue-100 dark:bg-blue-900 flex items-center justify-center">
+        <svg class="w-6 h-6 text-blue-600 dark:text-blue-300" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293L19 8.586A1 1 0 0120 9V19a2 2 0 01-2 2z"/>
         </svg>
       </div>
       <div>
-        <h1 class="text-2xl font-bold text-slate-800 dark:text-white">اتفاقية الخدمة</h1>
-        <p class="text-slate-600 dark:text-slate-300">تفاصيل الاتفاقية المرتبطة بالطلب</p>
+        <h1 class="text-2xl font-bold text-slate-900 dark:text-white">اتفاقية الخدمة</h1>
+        <p class="text-slate-600 dark:text-slate-300 text-sm">
+          مرتبطة بالطلب
+          <a class="text-blue-600 dark:text-blue-400 underline" href="{% url 'marketplace:request_detail' req.id %}">#{{ req.id }}</a>
+        </p>
       </div>
     </div>
-    
+
     <div class="grid md:grid-cols-4 gap-4 text-sm">
-      <div class="bg-white/50 dark:bg-slate-700/50 p-3 rounded-lg">
-        <div class="text-slate-500 dark:text-slate-400 flex items-center">
-          <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 ml-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
-          </svg>
-          رقم الطلب
+      <div class="bg-white/70 dark:bg-slate-800/70 p-3 rounded-lg soft-border">
+        <div class="text-slate-500 dark:text-slate-400">المبلغ المتفق عليه</div>
+        <div class="font-semibold text-lg mt-1 text-green-600 dark:text-green-400">
+          {{ form.instance.total_amount|default:req.selected_offer.proposed_price|default:0|floatformat:2 }} ر.س
         </div>
+      </div>
+      <div class="bg-white/70 dark:bg-slate-800/70 p-3 rounded-lg soft-border">
+        <div class="text-slate-500 dark:text-slate-400">المدة الإجمالية</div>
+        <div class="font-semibold text-lg mt-1 text-amber-600 dark:text-amber-400">
+          {{ form.instance.duration_days|default:0 }} يوم
+        </div>
+      </div>
+      <div class="bg-white/70 dark:bg-slate-800/70 p-3 rounded-lg soft-border">
+        <div class="text-slate-500 dark:text-slate-400">الحالة</div>
         <div class="font-semibold text-lg mt-1">
-          <a class="text-blue-600 dark:text-blue-400 hover:underline" href="{% url 'marketplace:request_detail' req.id %}">#{{ req.id }}</a>
+          {{ form.instance.get_status_display|default:"—" }}
         </div>
       </div>
-      <div class="bg-white/50 dark:bg-slate-700/50 p-3 rounded-lg">
-        <div class="text-slate-500 dark:text-slate-400 flex items-center">
-          <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 ml-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1" />
-          </svg>
-          المبلغ المتفق عليه
+      <div class="bg-white/70 dark:bg-slate-800/70 p-3 rounded-lg soft-border">
+        <div class="text-slate-500 dark:text-slate-400">عدد المراحل</div>
+        <div id="live-sum" class="font-semibold text-lg mt-1">
+          {{ form.instance.milestones.count|default:0 }}
         </div>
-        <div class="font-semibold text-lg mt-1 text-green-600 dark:text-green-400">{{ form.instance.total_amount|default:0|floatformat:2 }} ر.س</div>
-      </div>
-      <div class="bg-white/50 dark:bg-slate-700/50 p-3 rounded-lg">
-        <div class="text-slate-500 dark:text-slate-400 flex items-center">
-          <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 ml-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-          </svg>
-          المدة المتفق عليها
-        </div>
-        <div class="font-semibold text-lg mt-1 text-amber-600 dark:text-amber-400">{{ form.instance.duration_days|default:0 }} يوم</div>
-      </div>
-      <div class="bg-white/50 dark:bg-slate-700/50 p-3 rounded-lg">
-        <div class="text-slate-500 dark:text-slate-400 flex items-center">
-          <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 ml-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-          </svg>
-          حالة الاتفاقية
-        </div>
-        <div class="font-semibold text-lg mt-1">{{ form.instance.get_status_display|default:"—" }}</div>
       </div>
     </div>
   </div>
@@ -124,279 +66,282 @@
   <form method="post" novalidate>
     {% csrf_token %}
 
-    <div class="grid md:grid-cols-3 gap-6">
+    {# تمرير الإجمالي كمخفي دائمًا #}
+    <input type="hidden" name="total_amount"
+           value="{{ form.instance.total_amount|default:req.selected_offer.proposed_price|default:0 }}">
 
-      {# العمود الرئيسي: حقول الاتفاقية والدفعات #}
+    <div class="grid md:grid-cols-3 gap-6">
+      {# العمود الرئيسي #}
       <div class="md:col-span-2 space-y-6">
 
-        {# حقول الاتفاقية الأساسية - محسنة #}
-        <div class="rounded-2xl border bg-white/70 dark:bg-slate-800/70 p-6 shadow-lg fade-in card-hover">
-          <div class="flex items-center mb-4">
+        {# تفاصيل الاتفاقية #}
+        <div class="rounded-2xl soft-border bg-white dark:bg-slate-800 p-6 shadow fade-in card-hover">
+          <div class="flex items-center mb-5">
             <div class="w-10 h-10 rounded-full bg-blue-100 dark:bg-blue-900 flex items-center justify-center ml-3">
-              <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-blue-600 dark:text-blue-300" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+              <svg class="w-5 h-5 text-blue-600 dark:text-blue-300" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5"/>
               </svg>
             </div>
-            <h2 class="text-xl font-bold text-slate-800 dark:text-white">تفاصيل الاتفاقية</h2>
+            <h2 class="text-xl font-bold text-slate-900 dark:text-white">تفاصيل الاتفاقية</h2>
           </div>
-          
+
           <div class="grid md:grid-cols-2 gap-4">
             <div>
-              <label class="block text-sm font-semibold mb-2 text-slate-700 dark:text-slate-300">عنوان الاتفاقية</label>
+              <label class="block text-sm font-semibold mb-2">عنوان الاتفاقية</label>
               {{ form.title }}
               {% for e in form.title.errors %}<p class="text-rose-600 text-sm mt-1">{{ e }}</p>{% endfor %}
             </div>
 
             <div>
-              <label class="block text-sm font-semibold mb-2 text-slate-700 dark:text-slate-300">المدة (أيام)</label>
+              <label class="block text-sm font-semibold mb-2">المدة (أيام)</label>
               {{ form.duration_days }}
-              {% if form.duration_days.field.disabled %}
-                <p class="text-xs text-slate-500 mt-1 flex items-center">
-                  <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 ml-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
-                  </svg>
-                  تم قفل هذا الحقل بعد إنشاء الاتفاقية.
-                </p>
+              {% if form.duration_days and form.duration_days.field and form.duration_days.field.disabled %}
+                <p class="text-xs text-slate-500 mt-1">تم قفل هذا الحقل بعد إنشاء الاتفاقية.</p>
               {% endif %}
               {% for e in form.duration_days.errors %}<p class="text-rose-600 text-sm mt-1">{{ e }}</p>{% endfor %}
             </div>
 
-            <div>
-              <label class="block text-sm font-semibold mb-2 text-slate-700 dark:text-slate-300">المبلغ الإجمالي</label>
-              {{ form.total_amount }}
-              {% if form.total_amount.field.disabled %}
-                <p class="text-xs text-slate-500 mt-1 flex items-center">
-                  <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 ml-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
-                  </svg>
-                  تم قفل هذا الحقل بعد إنشاء الاتفاقية.
-                </p>
-              {% endif %}
-              {% for e in form.total_amount.errors %}<p class="text-rose-600 text-sm mt-1">{{ e }}</p>{% endfor %}
-            </div>
-
             <div class="md:col-span-2">
-              <label class="block text-sm font-semibold mb-2 text-slate-700 dark:text-slate-300">نص الاتفاقية</label>
+              <label class="block text-sm font-semibold mb-2">نص الاتفاقية</label>
               {{ form.text }}
               {% for e in form.text.errors %}<p class="text-rose-600 text-sm mt-1">{{ e }}</p>{% endfor %}
             </div>
           </div>
         </div>
 
-        {# الدفعات (FormSet) - محسنة #}
-        <div class="rounded-2xl border bg-white/70 dark:bg-slate-800/70 p-6 shadow-lg fade-in card-hover">
+        {# المراحل (Formset) #}
+        <div class="rounded-2xl soft-border bg-white dark:bg-slate-800 p-6 shadow fade-in card-hover">
           <div class="flex items-center justify-between mb-4">
             <div class="flex items-center">
               <div class="w-10 h-10 rounded-full bg-green-100 dark:bg-green-900 flex items-center justify-center ml-3">
-                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-green-600 dark:text-green-300" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-6a2 2 0 00-2-2H9a2 2 0 00-2 2v6a2 2 0 002 2zm7-5a2 2 0 11-4 0 2 2 0 014 0z" />
+                <svg class="w-5 h-5 text-green-600 dark:text-green-300" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01"/>
                 </svg>
               </div>
-              <h3 class="text-xl font-bold text-slate-800 dark:text-white">جدول الدفعات</h3>
+              <h3 class="text-xl font-bold">مراحل تسليم المشروع</h3>
             </div>
-            <button type="button" id="add-row" class="btn btn-secondary btn-glow flex items-center">
-              <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 ml-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
-              </svg>
-              إضافة دفعة
-            </button>
+            <button type="button" id="add-row" class="btn btn-secondary btn-glow">+ إضافة مرحلة</button>
           </div>
 
           {{ formset.management_form }}
+          {% if formset.non_form_errors %}
+            <div class="p-3 rounded bg-rose-50 text-rose-700 soft-border mb-3">
+              {% for e in formset.non_form_errors %}<div>{{ e }}</div>{% endfor %}
+            </div>
+          {% endif %}
+
           <div id="rows" class="space-y-4">
             {% for f in formset.forms %}
-              <div class="rounded-xl border p-4 payment-item">
-                <div class="grid md:grid-cols-4 gap-3">
+              <div class="rounded-xl soft-border p-4 payment-item milestone-row" data-row-index="{{ forloop.counter0 }}">
+                {# مهم: تضمين حقل المعرف لعدم إنشاء صفوف جديدة عند الحفظ #}
+                {{ f.id }}
+
+                <div class="flex items-center gap-3 mb-3">
+                  <div class="w-8 h-8 rounded-full bg-slate-200 dark:bg-slate-600 flex items-center justify-center text-sm font-bold text-slate-700 dark:text-slate-200 milestone-order">{{ forloop.counter }}</div>
+                  <input type="hidden" class="milestone-order-value" name="{{ f.order.html_name }}" value="{{ f.order.value|default:forloop.counter }}">
+                  {# ضمان amount=0 حتى لو الحقل غير موجود في الفورم - سنضيفه بالـJS أيضًا كضمان #}
+                  <input type="hidden" name="{{ f.prefix }}-amount" value="0">
+                </div>
+
+                <div class="grid md:grid-cols-2 gap-3">
                   <div>
-                    <label class="text-sm font-semibold text-slate-700 dark:text-slate-300">عنوان الدفعة</label>
+                    <label class="text-sm font-semibold">عنوان المرحلة</label>
                     {{ f.title }}
                   </div>
                   <div>
-                    <label class="text-sm font-semibold text-slate-700 dark:text-slate-300">المبلغ</label>
-                    {{ f.amount }}
-                  </div>
-                  <div>
-                    <label class="text-sm font-semibold text-slate-700 dark:text-slate-300">الترتيب</label>
-                    {{ f.order }}
-                  </div>
-                  <div>
-                    <label class="text-sm font-semibold text-slate-700 dark:text-slate-300">المهلة (أيام)</label>
+                    <label class="text-sm font-semibold">المدة (أيام)</label>
                     {{ f.due_days }}
                   </div>
                 </div>
-                {% if f.DELETE %}
-                  <div class="mt-3 flex items-center">
-                    {{ f.DELETE }}
-                    <label for="{{ f.DELETE.id_for_label }}" class="text-sm text-rose-600 cursor-pointer mr-2">حذف هذه الدفعة</label>
+
+                {% if formset.can_delete %}
+                  <div class="mt-3 pt-3 border-t border-slate-200 dark:border-slate-600 flex items-center justify-between">
+                    <span class="text-xs text-slate-500"><span class="text-rose-500">⚠️</span> حذف هذه المرحلة</span>
+                    <button type="button" class="btn btn-sm btn-danger delete-row">حذف</button>
                   </div>
+                  {{ f.DELETE }}
                 {% endif %}
-                {% for e in f.non_field_errors %}
-                  <p class="text-rose-600 text-sm mt-2">{{ e }}</p>
-                {% endfor %}
+
+                {% for e in f.title.errors %}<p class="text-rose-600 text-sm mt-2">{{ e }}</p>{% endfor %}
+                {% for e in f.due_days.errors %}<p class="text-rose-600 text-sm mt-2">{{ e }}</p>{% endfor %}
+                {% for e in f.non_field_errors %}<p class="text-rose-600 text-sm mt-2">{{ e }}</p>{% endfor %}
               </div>
             {% endfor %}
           </div>
 
-          <div class="mt-4 p-3 bg-blue-50 dark:bg-blue-900/20 rounded-lg border border-blue-200 dark:border-blue-800">
-            <p class="text-sm text-blue-700 dark:text-blue-300 flex items-center">
-              <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 ml-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-              </svg>
-              ملاحظة: يجب أن يساوي مجموع مبالغ الدفعات المبلغ الإجمالي للاتفاقية عند الإرسال.
+          <div class="mt-4 p-3 rounded-lg soft-border bg-blue-50 dark:bg-blue-900/20">
+            <p class="text-sm text-blue-800 dark:text-blue-300">
+              ✨ <strong>إضافة تلقائية:</strong> حدِّد مراحل تسليم المشروع مع مدة كل مرحلة. الترتيب يُحدَّث تلقائيًا.
             </p>
           </div>
         </div>
 
       </div>
 
-      {# العمود الجانبي: معاينة البنود المثبتة + زر التثبيت - محسن #}
-      <aside class="space-y-6">
-
-        <div class="rounded-2xl border bg-white dark:bg-slate-800 p-6 shadow-lg fade-in card-hover">
-          <div class="flex items-center justify-between mb-4">
-            <div class="flex items-center">
-              <div class="w-10 h-10 rounded-full bg-purple-100 dark:bg-purple-900 flex items-center justify-center ml-3">
-                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-purple-600 dark:text-purple-300" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                </svg>
-              </div>
-              <h3 class="font-bold text-slate-800 dark:text-white">البنود المثبّتة</h3>
-            </div>
-            <span class="text-xs rounded-full bg-slate-100 dark:bg-slate-700 px-3 py-1 font-medium">
-              {{ form.instance.clause_items.count }} بند/بنود
+      {# العمود الجانبي #}
+      <aside class="space-y-6 sticky-aside">
+        <div class="rounded-2xl soft-border bg-white dark:bg-slate-800 p-6 shadow fade-in card-hover">
+          <div class="flex items-center justify-between mb-3">
+            <h3 class="font-bold">البنود المثبّتة</h3>
+            <span class="text-xs rounded-full bg-slate-100 dark:bg-slate-700 px-3 py-1">
+              {{ form.instance.clause_items.count }} بند
             </span>
           </div>
 
           {% if form.instance.clause_items.count == 0 %}
-            <div class="mb-4 p-4 rounded-xl border border-amber-300 bg-amber-50 dark:bg-amber-900/20 text-amber-800 dark:text-amber-200 flex items-center">
-              <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 ml-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-              </svg>
+            <div class="p-3 rounded bg-amber-50 dark:bg-amber-900/20 soft-border text-amber-800 dark:text-amber-200">
               لا توجد بنود مثبتة بعد.
             </div>
           {% endif %}
 
-          <ol class="list-decimal pr-6 space-y-3 max-h-72 overflow-auto custom-scrollbar">
+          <ol class="list-decimal pr-5 space-y-3 max-h-64 overflow-auto">
             {% for item in form.instance.clause_items.all %}
-              <li class="leading-7 p-3 rounded-lg bg-slate-50 dark:bg-slate-700/50 border border-slate-100 dark:border-slate-700">
+              <li class="leading-7 p-3 rounded bg-slate-50 dark:bg-slate-700/40 soft-border">
                 {% if item.clause %}
-                  <strong class="text-slate-800 dark:text-slate-200">{{ item.clause.title }}:</strong> 
-                  <span class="text-slate-600 dark:text-slate-400">{{ item.clause.body }}</span>
+                  <strong>{{ item.clause.title }}:</strong>
+                  <span class="text-slate-600 dark:text-slate-300">{{ item.clause.body }}</span>
                 {% else %}
-                  <span class="text-slate-600 dark:text-slate-400">{{ item.custom_text }}</span>
+                  <span class="text-slate-600 dark:text-slate-300">{{ item.custom_text }}</span>
                 {% endif %}
               </li>
             {% empty %}
-              <li class="text-slate-500 text-center py-4">— لا توجد بنود —</li>
+              <li class="text-center text-slate-500 py-2">—</li>
             {% endfor %}
           </ol>
 
-          <div class="mt-6">
+          <div class="mt-4">
             {% if user.is_authenticated %}
               {% if user.is_staff or user.is_superuser or user.id == form.instance.employee_id %}
-                <a class="btn btn-primary w-full btn-glow flex items-center justify-center" href="{% url 'agreements:finalize_clauses' form.instance.pk %}">
-                  <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 ml-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
-                  </svg>
-                  تثبيت/تعديل البنود
-                </a>
+                <a href="{% url 'agreements:finalize_clauses' form.instance.pk %}" class="btn btn-primary w-full btn-glow">تثبيت/تعديل البنود</a>
               {% endif %}
             {% endif %}
           </div>
         </div>
 
+        <div class="rounded-2xl soft-border bg-slate-50 dark:bg-slate-800/60 p-4 text-sm">
+          <ul class="space-y-2 text-slate-600 dark:text-slate-300">
+            <li>✨ <strong>ترتيب تلقائي:</strong> يُحدّث الترتيب عند الإضافة أو الحذف</li>
+            <li>➕ <strong>إضافة سهلة:</strong> اضغط “+ إضافة مرحلة”</li>
+            <li>🗑️ <strong>حذف فعلي:</strong> الحذف يوسِّم الصف بـ DELETE لإزالته فعليًا عند الحفظ</li>
+            <li>📝 <strong>نص آمن:</strong> تتم إزالة الوسوم لأسباب أمنية</li>
+          </ul>
+        </div>
       </aside>
     </div>
 
-    {# أزرار الإجراءات - محسنة #}
-    <div class="mt-8 flex gap-3 justify-center fade-in">
-      <button name="action" value="save" class="btn btn-primary btn-glow flex items-center px-6">
-        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 ml-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4" />
-        </svg>
-        حفظ (مسودة)
-      </button>
-      <button name="action" value="send" class="btn btn-success btn-glow flex items-center px-6">
-        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 ml-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
-        </svg>
-        حفظ وإرسال للعميل
-      </button>
-      <a href="{% url 'marketplace:request_detail' req.id %}" class="btn btn-light btn-glow flex items-center px-6">
-        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 ml-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18" />
-        </svg>
-        عودة للطلب
-      </a>
+    {# الأزرار #}
+    <div class="mt-8 flex flex-wrap gap-3 justify-center fade-in">
+      <button id="btn-save" name="action" value="save" class="btn btn-primary btn-glow px-6">حفظ (مسودة)</button>
+      <button id="btn-send" name="action" value="send" class="btn btn-success btn-glow px-6">حفظ وإرسال للعميل</button>
+      <a href="{% url 'marketplace:request_detail' req.id %}" class="btn btn-light btn-glow px-6">عودة للطلب</a>
     </div>
   </form>
 
-  {# empty_form الصحيح من Django لضمان أسماء/IDs سليمة #}
+  {# قالب صف جديد (من empty_form) #}
   <template id="empty-form">
-    <div class="rounded-xl border p-4 mt-4 payment-item">
-      <div class="grid md:grid-cols-4 gap-3">
+    <div class="rounded-xl soft-border p-4 mt-4 payment-item milestone-row" data-row-index="__new__">
+      {{ formset.empty_form.id }}
+      <div class="flex items-center gap-3 mb-3">
+        <div class="w-8 h-8 rounded-full bg-slate-200 dark:bg-slate-600 flex items-center justify-center text-sm font-bold text-slate-700 dark:text-slate-200 milestone-order">1</div>
+        <input type="hidden" class="milestone-order-value" name="{{ formset.prefix }}-__prefix__-order" value="1">
+        <input type="hidden" name="{{ formset.prefix }}-__prefix__-amount" value="0">
+      </div>
+      <div class="grid md:grid-cols-2 gap-3">
         <div>
-          <label class="text-sm font-semibold text-slate-700 dark:text-slate-300">عنوان الدفعة</label>
+          <label class="text-sm font-semibold">عنوان المرحلة</label>
           {{ formset.empty_form.title }}
         </div>
         <div>
-          <label class="text-sm font-semibold text-slate-700 dark:text-slate-300">المبلغ</label>
-          {{ formset.empty_form.amount }}
-        </div>
-        <div>
-          <label class="text-sm font-semibold text-slate-700 dark:text-slate-300">الترتيب</label>
-          {{ formset.empty_form.order }}
-        </div>
-        <div>
-          <label class="text-sm font-semibold text-slate-700 dark:text-slate-300">المهلة (أيام)</label>
+          <label class="text-sm font-semibold">المدة (أيام)</label>
           {{ formset.empty_form.due_days }}
         </div>
-        {% if formset.can_delete %}
-          <div class="hidden">{{ formset.empty_form.DELETE }}</div>
-        {% endif %}
       </div>
-      <div class="mt-3 flex items-center">
-        <input type="checkbox" name="form-__prefix__-DELETE" id="id_form-__prefix__-DELETE" class="mr-2">
-        <label for="id_form-__prefix__-DELETE" class="text-sm text-rose-600 cursor-pointer">حذف هذه الدفعة</label>
-      </div>
+      {% if formset.can_delete %}
+        <div class="mt-3 pt-3 border-t border-slate-200 dark:border-slate-600 flex items-center justify-between">
+          <span class="text-xs text-slate-500"><span class="text-rose-500">⚠️</span> حذف هذه المرحلة</span>
+          <button type="button" class="btn btn-sm btn-danger delete-row">حذف</button>
+        </div>
+        {{ formset.empty_form.DELETE }}
+      {% endif %}
     </div>
   </template>
 
   <script>
-    // إضافة صف جديد للفورمسِت باستخدام empty_form (أكثر أمانًا)
-    const addBtn = document.getElementById('add-row');
-    const rows = document.getElementById('rows');
-    const total = document.getElementById('{{ formset.prefix }}-TOTAL_FORMS');
+  (function(){
+    const prefix  = "{{ formset.prefix }}";
+    const totalEl = document.getElementById(prefix + "-TOTAL_FORMS");
+    const rows    = document.getElementById("rows");
+    const addBtn  = document.getElementById("add-row");
+    const btnSend = document.getElementById("btn-send");
 
-    addBtn?.addEventListener('click', () => {
-      const idx = parseInt(total.value, 10);
-      const tmpl = document.getElementById('empty-form').innerHTML;
-      // استبدال __prefix__ في كل خصائص name/id للempty_form
-      let html = tmpl.replaceAll('__prefix__', String(idx));
-      const wrapper = document.createElement('div');
-      wrapper.innerHTML = html;
-      rows.appendChild(wrapper);
-      total.value = String(idx + 1);
-      
-      // إضافة تأثير ظهور للعنصر الجديد
-      wrapper.querySelector('.payment-item').style.opacity = '0';
-      wrapper.querySelector('.payment-item').style.transform = 'translateY(10px)';
-      
-      setTimeout(() => {
-        wrapper.querySelector('.payment-item').style.transition = 'all 0.3s ease';
-        wrapper.querySelector('.payment-item').style.opacity = '1';
-        wrapper.querySelector('.payment-item').style.transform = 'translateY(0)';
-      }, 10);
-    });
-    
-    // تحسين تجربة المستخدم مع حقول النماذج
-    document.addEventListener('DOMContentLoaded', function() {
-      // إضافة تأثير التركيز على الحقول
-      const inputs = document.querySelectorAll('input, textarea, select');
-      inputs.forEach(input => {
-        input.classList.add('form-input');
+    function updateMilestoneOrders(){
+      const items = rows.querySelectorAll(".milestone-row:not([style*='display: none'])");
+      items.forEach(function(el, idx){
+        const orderInput = el.querySelector(".milestone-order-value");
+        const orderDisp  = el.querySelector(".milestone-order");
+        const n = idx + 1;
+        if(orderInput) orderInput.value = n;
+        if(orderDisp)  orderDisp.textContent = n;
       });
+      const live = document.getElementById("live-sum");
+      if(live) live.textContent = String(items.length);
+    }
+
+    function ensureZeroAmount(row, idx){
+      var hidden = row.querySelector("input[type='hidden'][name$='-amount']");
+      if(!hidden){
+        hidden = document.createElement("input");
+        hidden.type = "hidden";
+        hidden.name = prefix + "-" + idx + "-amount";
+        row.appendChild(hidden);
+      }
+      hidden.value = "0";
+    }
+
+    function setupDeleteButtons(){
+      rows.querySelectorAll(".delete-row").forEach(function(btn){
+        if(btn.dataset.hasListener) return;
+        btn.addEventListener("click", function(e){
+          e.preventDefault();
+          const row = this.closest(".milestone-row");
+          const del = row.querySelector("input[type='checkbox'][name*='-DELETE']");
+          if(del){ del.checked = true; row.style.display = "none"; }
+          updateMilestoneOrders();
+        });
+        btn.dataset.hasListener = "1";
+      });
+    }
+
+    addBtn && addBtn.addEventListener("click", function(e){
+      e.preventDefault();
+      const idx = parseInt(totalEl.value || "0", 10);
+      const tpl = document.getElementById("empty-form");
+      const frag = tpl.content.cloneNode(true);
+      const html = frag.querySelector(".milestone-row").outerHTML.replace(/__prefix__/g, idx);
+      const wrapper = document.createElement("div");
+      wrapper.innerHTML = html;
+      const newRow = wrapper.firstElementChild;
+      newRow.setAttribute("data-row-index", idx);
+      rows.appendChild(newRow);
+      totalEl.value = String(idx + 1);
+      ensureZeroAmount(newRow, idx);
+      setupDeleteButtons();
+      updateMilestoneOrders();
     });
+
+    document.addEventListener("DOMContentLoaded", function(){
+      document.querySelectorAll("input,textarea,select").forEach(function(el){ el.classList.add("form-input"); });
+      if(btnSend){ btnSend.disabled = false; btnSend.classList.remove("opacity-50"); }
+      rows.querySelectorAll(".milestone-row").forEach(function(row, i){ ensureZeroAmount(row, i); });
+      setupDeleteButtons();
+      updateMilestoneOrders();
+    });
+
+    document.forms[0].addEventListener("submit", function(){
+      const items = rows.querySelectorAll(".milestone-row");
+      items.forEach(function(row, i){ ensureZeroAmount(row, i); });
+    });
+  })();
   </script>
 
 </section>

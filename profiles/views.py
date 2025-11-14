@@ -1,82 +1,228 @@
-# profiles/views.py
-from urllib.parse import quote
+from __future__ import annotations
 
+import logging
+import re
+import time
+from urllib.parse import urlencode
+
+from django.conf import settings
+from django.contrib.auth.decorators import login_required
+from django.core.cache import cache
 from django.db.models import Q
-from django.http import Http404, HttpResponseBadRequest
+from django.http import Http404, HttpResponseBadRequest, HttpResponseForbidden
 from django.shortcuts import get_object_or_404, redirect
+from django.urls import reverse
+from django.utils import timezone
+from django.utils.decorators import method_decorator
 from django.views.generic import DetailView, ListView
+
+from marketplace.models import Request
 
 from .models import EmployeeProfile
 
+logger = logging.getLogger(__name__)
 
+# ===== سياسات قابلة للضبط =====
+ALLOW_PUBLIC_EMPLOYEES_LIST = getattr(settings, "ALLOW_PUBLIC_EMPLOYEES_LIST", True)
+HIDE_CONTACTS_DURING_OFFERS = getattr(settings, "HIDE_CONTACTS_DURING_OFFERS", True)
+WHATSAPP_REDIRECT_ENABLED = getattr(settings, "WHATSAPP_REDIRECT_ENABLED", True)
+WHATSAPP_RATE_LIMIT_PER_MIN = int(getattr(settings, "WHATSAPP_RATE_LIMIT_PER_MIN", 5))
+WHATSAPP_MIN_SECONDS_BETWEEN_CLICKS = int(getattr(settings, "WHATSAPP_MIN_SECONDS_BETWEEN_CLICKS", 5))
+
+
+def _is_e164(phone: str) -> bool:
+    if not phone:
+        return False
+    return bool(re.fullmatch(r"\+?\d{8,15}", phone))
+
+
+def _mask_phone(phone: str) -> str:
+    if not phone:
+        return ""
+    p = phone.replace("+", "")
+    if len(p) <= 4:
+        return "****"
+    return f"{p[:2]}****{p[-2:]}"
+
+
+@method_decorator(login_required, name="dispatch")
 class EmployeeListView(ListView):
+    """
+    قائمة التقنيين — تتطلب دخولًا (لتتبّع الجودة ومنع إساءة الاستخدام).
+    تدعم q و sort=recent|rating و ترقيم الصفحات.
+    """
     model = EmployeeProfile
     template_name = "profiles/employees_list.html"
     context_object_name = "employees"
     paginate_by = 12
 
+    def dispatch(self, request, *args, **kwargs):
+        if not ALLOW_PUBLIC_EMPLOYEES_LIST:
+            raise Http404("القائمة غير مفعّلة حالياً.")
+        return super().dispatch(request, *args, **kwargs)
+
     def get_queryset(self):
         qs = (
             EmployeeProfile.objects.select_related("user")
+            .only(
+                "id",
+                "slug",
+                "user__id",
+                "user__name",
+                "user__role",
+                "user__is_active",
+                "title",
+                "city",
+                "specialty",
+                "skills",
+                "rating",
+                "reviews_count",
+                "public_visible",
+                "updated_at",
+            )
             .filter(public_visible=True, user__is_active=True, user__role="employee")
             .order_by("-rating", "-updated_at")
         )
+
         q = (self.request.GET.get("q") or "").strip()
         if q:
+            q = q[:80]
             qs = qs.filter(
                 Q(user__name__icontains=q)
                 | Q(user__email__icontains=q)
                 | Q(specialty__icontains=q)
                 | Q(skills__icontains=q)
                 | Q(title__icontains=q)
+                | Q(city__icontains=q)
             )
+
+        sort = (self.request.GET.get("sort") or "").strip()
+        if sort == "recent":
+            qs = qs.order_by("-updated_at", "-rating")
+        elif sort == "rating":
+            qs = qs.order_by("-rating", "-updated_at")
+
         return qs
 
+    def get_context_data(self, **kwargs):
+        ctx = super().get_context_data(**kwargs)
+        ctx["q"] = (self.request.GET.get("q") or "").strip()
+        ctx["sort"] = (self.request.GET.get("sort") or "").strip()
+        return ctx
 
+
+@method_decorator(login_required, name="dispatch")
 class EmployeeDetailView(DetailView):
+    """
+    عرض بروفايل موظف:
+    - يُظهر الهاتف مقنّعًا فقط.
+    - يعرض ملخص المشاريع المكتملة عبر المنصة.
+    - رابط واتساب عبر endpoint وسيط مع RBAC/Rate-limit إن كانت السياسة تسمح.
+    """
     model = EmployeeProfile
     template_name = "profiles/employee_detail.html"
     context_object_name = "emp"
 
     def get_object(self):
         obj = super().get_object()
-        # حماية الخصوصية: إظهار الموظفين المفعّلين والظاهرين فقط
         if not obj.public_visible or obj.user.role != "employee" or not obj.user.is_active:
             raise Http404("هذا البروفايل غير متاح.")
         return obj
 
+    def get_context_data(self, **kwargs):
+        ctx = super().get_context_data(**kwargs)
+        emp: EmployeeProfile = ctx["emp"]
 
+        # رقم الجوال المقنّع
+        phone_e164 = getattr(emp.user, "phone", None)
+        ctx["masked_phone"] = _mask_phone(phone_e164) if _is_e164(phone_e164) else ""
+
+        # رابط الواتساب (عبر proxy) إذا سمحت السياسة
+        allow_contact_link = WHATSAPP_REDIRECT_ENABLED and not HIDE_CONTACTS_DURING_OFFERS
+        ctx["wa_redirect_url"] = (
+            reverse("profiles:whatsapp_redirect", args=[emp.user_id]) if allow_contact_link else None
+        )
+
+        # المشاريع المكتملة لهذا الموظف من جدول Request
+        completed_qs = (
+            Request.objects.select_related("client")
+            .filter(
+                assigned_employee=emp.user,
+                status=Request.Status.COMPLETED,
+            )
+            .order_by("-updated_at", "-created_at")
+        )
+
+        ctx["completed_requests"] = completed_qs
+        ctx["completed_requests_count"] = completed_qs.count()
+
+        return ctx
+
+
+@login_required
 def whatsapp_redirect(request, user_id: int):
     """
-    Endpoint وسيط لإخفاء رقم الموظف وتطبيق Rate-limit بسيط.
-    يحوّل إلى wa.me/<number>?text=...
+    Proxy آمن لإعادة التوجيه إلى WhatsApp:
+    - يمنع كشف الرقم في الواجهة.
+    - يطبّق سياسة الإخفاء أثناء العروض إن مفعّلة (HIDE_CONTACTS_DURING_OFFERS).
+    - يطبّق Rate-limit لكل (caller→employee) + لكل IP.
+    - يسجل الحدث لأغراض التدقيق.
     """
+    if not WHATSAPP_REDIRECT_ENABLED:
+        return HttpResponseForbidden("التواصل الخارجي عبر الواتساب غير مفعّل حالياً.")
+
     profile = get_object_or_404(
-        EmployeeProfile,
+        EmployeeProfile.objects.select_related("user").only("user__id", "user__phone", "public_visible"),
         user_id=user_id,
         public_visible=True,
         user__is_active=True,
     )
+
+    # سياسة: منع التواصل المباشر قبل الاتفاقية (يمكن منح صلاحية خاصة لمن يحتاج)
+    if HIDE_CONTACTS_DURING_OFFERS and not (
+        request.user.is_staff or request.user.has_perm("profiles.view_external_contact")
+    ):
+        return HttpResponseForbidden("سياسة المنصة تمنع التواصل الخارجي قبل وجود اتفاقية معتمدة.")
+
     phone_e164 = getattr(profile.user, "phone", None)
-    if not phone_e164:
-        return HttpResponseBadRequest("لا يتوفر رقم جوال للموظف.")
+    if not _is_e164(phone_e164):
+        return HttpResponseBadRequest("لا يتوفر رقم جوال صالح E.164 للموظف.")
 
-    # Rate limit بسيط بالجلسة (5 ثوانٍ بين الضغطات لكل موظف)
-    import time
+    caller_id = getattr(request.user, "id", None) or "anon"
+    ip = (
+        request.META.get("HTTP_X_FORWARDED_FOR", "").split(",")[0].strip()
+        or request.META.get("REMOTE_ADDR", "0.0.0.0")
+    )
 
-    key = f"wa_last_{user_id}"
-    last = request.session.get(key, 0.0)
-    now = time.time()
-    if now - last < 5:
-        # يمكن عرض رسالة أو الاكتفاء بالمتابعة؛ هنا نتابع التوجيه
-        pass
-    request.session[key] = now
+    # حد (caller→employee) بالدقيقة
+    minute_bucket = timezone.now().strftime("%Y%m%d%H%M")
+    key_pair = f"wa:calls:u{caller_id}:e{user_id}:{minute_bucket}"
+    calls = cache.get(key_pair, 0)
+    if calls >= WHATSAPP_RATE_LIMIT_PER_MIN:
+        return HttpResponseForbidden("تم تجاوز الحد المسموح مؤقتًا — حاول لاحقًا.")
+    cache.set(key_pair, calls + 1, 70)
 
-    # نص الرسالة (اختياري) بحد أقصى 200 حرف
-    raw_msg = (request.GET.get("msg") or "").strip()
-    msg = raw_msg[:200]
-    query = f"?text={quote(msg)}" if msg else ""
+    # 5 ثوانٍ بين نقرات نفس الزوج
+    key_last = f"wa:last:u{caller_id}:e{user_id}"
+    last_ts = cache.get(key_last, 0.0)
+    now_ts = time.time()
+    if now_ts - float(last_ts) < WHATSAPP_MIN_SECONDS_BETWEEN_CLICKS:
+        logger.info("WA throttle (rapid-click) user=%s to employee=%s", caller_id, user_id)
+    cache.set(key_last, now_ts, 300)
 
-    # wa.me يحتاج الرقم بلا +
+    # حد لكل IP
+    key_ip = f"wa:ip:{ip}:{minute_bucket}"
+    ip_calls = cache.get(key_ip, 0)
+    if ip_calls >= (WHATSAPP_RATE_LIMIT_PER_MIN * 2):
+        return HttpResponseForbidden("عدد الطلبات من هذا العنوان مرتفع — حاول لاحقًا.")
+    cache.set(key_ip, ip_calls + 1, 70)
+
+    # بناء الرابط — الرقم بلا +
+    msg = (request.GET.get("msg") or "").strip()[:200]
     number = phone_e164[1:] if phone_e164.startswith("+") else phone_e164
-    return redirect(f"https://wa.me/{number}{query}")
+    wa_url = f"https://wa.me/{number}"
+    if msg:
+        wa_url = f"{wa_url}?{urlencode({'text': msg})}"
+
+    logger.info("WA redirect: caller=%s employee=%s ip=%s msg_len=%s", caller_id, user_id, ip, len(msg))
+    return redirect(wa_url)

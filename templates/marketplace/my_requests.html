@@ -3,27 +3,25 @@
 {% block content %}
 <section class="py-8 max-w-7xl mx-auto rtl" dir="rtl">
 
-  <!-- العنوان وشريط الأدوات -->
+  {# ===== العنوان وشريط الأدوات ===== #}
   <div class="mb-6 flex items-center justify-between gap-3 flex-wrap">
-    <h1 class="text-2xl font-extrabold tracking-tight">طلباتي</h1>
+    <h1 class="text-2xl font-extrabold tracking-tight text-slate-900 dark:text-white">طلباتي</h1>
     <a href="{% url 'marketplace:request_create' %}"
        class="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-indigo-600 text-white hover:bg-indigo-700 shadow">
       <span>طلب جديد</span>
     </a>
   </div>
 
-  <!-- فلاتر البحث / الفرز -->
-  <form method="get" class="rounded-2xl border bg-white/70 backdrop-blur p-4 shadow-sm mb-6">
+  {# ===== فلاتر البحث / الفرز ===== #}
+  <form method="get" class="rounded-2xl border bg-white/70 dark:bg-slate-800/60 backdrop-blur p-4 shadow-sm mb-6">
     <div class="grid md:grid-cols-4 gap-3">
-      <!-- بحث -->
       <div>
-        <label class="block text-sm text-slate-600 mb-1">بحث</label>
+        <label class="block text-sm text-slate-600 dark:text-slate-300 mb-1">بحث</label>
         <input type="text" name="q" value="{{ request.GET.q }}" class="input w-full" placeholder="عنوان الطلب أو الكلمات المفتاحية">
       </div>
 
-      <!-- الحالة -->
       <div>
-        <label class="block text-sm text-slate-600 mb-1">الحالة</label>
+        <label class="block text-sm text-slate-600 dark:text-slate-300 mb-1">الحالة</label>
         <select name="status" class="input w-full">
           <option value="">الكل</option>
           <option value="new" {% if request.GET.status == 'new' %}selected{% endif %}>جديد</option>
@@ -36,9 +34,8 @@
         </select>
       </div>
 
-      <!-- الفرز -->
       <div>
-        <label class="block text-sm text-slate-600 mb-1">الترتيب</label>
+        <label class="block text-sm text-slate-600 dark:text-slate-300 mb-1">الترتيب</label>
         <select name="sort" class="input w-full">
           <option value="-created_at" {% if request.GET.sort == '-created_at' or not request.GET.sort %}selected{% endif %}>الأحدث أولاً</option>
           <option value="created_at" {% if request.GET.sort == 'created_at' %}selected{% endif %}>الأقدم أولاً</option>
@@ -46,77 +43,68 @@
         </select>
       </div>
 
-      <!-- أزرار -->
       <div class="flex items-end gap-2">
         <button class="px-4 py-2 rounded-xl bg-slate-900 text-white hover:bg-slate-800">تطبيق</button>
-        <a href="." class="px-4 py-2 rounded-xl border hover:bg-slate-50">إعادة ضبط</a>
+        <a href="." class="px-4 py-2 rounded-xl border hover:bg-slate-50 dark:hover:bg-slate-700">إعادة ضبط</a>
       </div>
     </div>
   </form>
 
-  <!-- عرض هجين: بطاقات على الجوال + جدول على سطح المكتب -->
+  {# ===== عرض هجين: بطاقات على الجوال + جدول على سطح المكتب ===== #}
   {% if requests %}
-    <!-- بطاقات (جوال) -->
+
+    {# --- بطاقات (جوال) --- #}
     <div class="grid gap-4 md:hidden">
       {% for r in requests %}
         <a href="{% url 'marketplace:request_detail' r.pk %}"
-           class="rounded-2xl border bg-white/80 backdrop-blur p-4 hover:shadow transition">
+           class="rounded-2xl border bg-white/80 dark:bg-slate-800/60 backdrop-blur p-4 hover:shadow transition">
           <div class="flex items-start justify-between gap-3">
             <div class="min-w-0">
               <div class="flex items-center gap-2 flex-wrap">
-                <div class="font-bold truncate">{{ r.title }}</div>
-                <span class="px-2 py-1 rounded-xl text-xs
-                             {% if r.status == 'new' %}bg-sky-100 text-sky-700
-                             {% elif r.status == 'offer_selected' %}bg-amber-100 text-amber-700
-                             {% elif r.status == 'agreement_pending' %}bg-indigo-100 text-indigo-700
-                             {% elif r.status == 'in_progress' %}bg-emerald-100 text-emerald-700
-                             {% elif r.status == 'completed' %}bg-emerald-200 text-emerald-800
-                             {% elif r.status == 'disputed' %}bg-rose-100 text-rose-700
-                             {% elif r.status == 'cancelled' %}bg-slate-200 text-slate-700
-                             {% else %}bg-slate-100 text-slate-700{% endif %}">
+                <div class="font-bold text-slate-900 dark:text-white truncate">{{ r.title|default:"—" }}</div>
+                <span class="px-2 py-1 rounded-xl text-xs border
+                             {% if r.status == 'new' %}bg-sky-100 text-sky-700 border-sky-200
+                             {% elif r.status == 'offer_selected' %}bg-amber-100 text-amber-700 border-amber-200
+                             {% elif r.status == 'agreement_pending' %}bg-indigo-100 text-indigo-700 border-indigo-200
+                             {% elif r.status == 'in_progress' %}bg-emerald-100 text-emerald-700 border-emerald-200
+                             {% elif r.status == 'completed' %}bg-emerald-200 text-emerald-800 border-emerald-300
+                             {% elif r.status == 'disputed' %}bg-rose-100 text-rose-700 border-rose-200
+                             {% elif r.status == 'cancelled' %}bg-slate-200 text-slate-700 border-slate-300
+                             {% else %}bg-slate-100 text-slate-700 border-slate-200{% endif %}">
                   {{ r.get_status_display|default:r.status }}
                 </span>
               </div>
 
-              <!-- سطر المدة/المبلغ -->
               <div class="mt-2 flex flex-wrap items-center gap-2 text-xs">
                 {% if r.selected_offer %}
-                  <span class="px-2 py-1 rounded-lg border bg-amber-50 text-amber-800">
-                    مدة العرض: <b>{{ r.selected_offer.proposed_duration_days }}</b> يوم
-                  </span>
-                  <span class="px-2 py-1 rounded-lg border bg-amber-50 text-amber-800">
-                    مبلغ العرض: <b>{{ r.selected_offer.proposed_price }}</b> ريال
-                  </span>
+                  <span class="px-2 py-1 rounded-lg border bg-amber-50 text-amber-800">مدة العرض: <b>{{ r.selected_offer.proposed_duration_days|default:"—" }}</b> يوم</span>
+                  <span class="px-2 py-1 rounded-lg border bg-amber-50 text-amber-800">مبلغ العرض: <b>{{ r.selected_offer.proposed_price|default:"—" }}</b> ريال</span>
                 {% else %}
-                  <span class="px-2 py-1 rounded-lg border bg-sky-50 text-sky-800">
-                    مدة العميل: <b>{{ r.estimated_duration_days }}</b> يوم
-                  </span>
-                  <span class="px-2 py-1 rounded-lg border bg-sky-50 text-sky-800">
-                    مبلغ العميل: <b>{{ r.estimated_price }}</b> ريال
-                  </span>
+                  <span class="px-2 py-1 rounded-lg border bg-sky-50 text-sky-800">مدة العميل: <b>{{ r.estimated_duration_days|default:"—" }}</b> يوم</span>
+                  <span class="px-2 py-1 rounded-lg border bg-sky-50 text-sky-800">مبلغ العميل: <b>{{ r.estimated_price|default:"—" }}</b> ريال</span>
                 {% endif %}
               </div>
 
               {% if r.details %}
-                <p class="mt-2 text-slate-600 text-sm line-clamp-2">{{ r.details }}</p>
+                <p class="mt-2 text-slate-600 dark:text-slate-300 text-sm line-clamp-2">{{ r.details }}</p>
               {% endif %}
 
-              <div class="mt-2 text-slate-500 text-xs">
+              <div class="mt-2 text-slate-500 dark:text-slate-400 text-xs">
                 تاريخ الطلب: {{ r.created_at|date:"Y-m-d H:i" }}
                 {% if r.updated_at %} • آخر تحديث: {{ r.updated_at|date:"Y-m-d H:i" }}{% endif %}
-                {% if r.assigned_to %} • الموظف: {{ r.assigned_to }}{% elif r.selected_offer %} • الموظف: {{ r.selected_offer.employee }}{% endif %}
+                {% if r.assigned_employee %} • الموظف: {{ r.assigned_employee }}{% elif r.selected_offer %} • الموظف: {{ r.selected_offer.employee }}{% endif %}
               </div>
             </div>
-            <div class="shrink-0 text-slate-500 text-xs">#{{ r.pk }}</div>
+            <div class="shrink-0 text-slate-500 dark:text-slate-400 text-xs">#{{ r.pk }}</div>
           </div>
         </a>
       {% endfor %}
     </div>
 
-    <!-- جدول (سطح المكتب) -->
-    <div class="hidden md:block rounded-2xl border bg-white/80 backdrop-blur shadow-sm overflow-hidden">
+    {# --- جدول (سطح المكتب) --- #}
+    <div class="hidden md:block rounded-2xl border bg-white/80 dark:bg-slate-800/60 backdrop-blur shadow-sm overflow-hidden">
       <table class="w-full text-sm">
-        <thead class="bg-slate-50 text-slate-600">
+        <thead class="bg-slate-50 dark:bg-slate-900/30 text-slate-600 dark:text-slate-300">
           <tr>
             <th class="p-3 text-right">#</th>
             <th class="p-3 text-right">العنوان</th>
@@ -130,57 +118,47 @@
         </thead>
         <tbody class="divide-y">
           {% for r in requests %}
-            <tr class="hover:bg-slate-50">
+            <tr class="hover:bg-slate-50 dark:hover:bg-slate-900/20">
               <td class="p-3 text-slate-500">#{{ r.pk }}</td>
 
               <td class="p-3">
-                <div class="font-semibold">{{ r.title }}</div>
+                <div class="font-semibold text-slate-900 dark:text-white">{{ r.title|default:"—" }}</div>
                 {% if r.details %}
-                  <div class="text-slate-500 text-xs line-clamp-1">{{ r.details }}</div>
+                  <div class="text-slate-500 dark:text-slate-400 text-xs line-clamp-1">{{ r.details }}</div>
                 {% endif %}
               </td>
 
               <td class="p-3">
-                <span class="px-2 py-1 rounded-xl text-xs
-                             {% if r.status == 'new' %}bg-sky-100 text-sky-700
-                             {% elif r.status == 'offer_selected' %}bg-amber-100 text-amber-700
-                             {% elif r.status == 'agreement_pending' %}bg-indigo-100 text-indigo-700
-                             {% elif r.status == 'in_progress' %}bg-emerald-100 text-emerald-700
-                             {% elif r.status == 'completed' %}bg-emerald-200 text-emerald-800
-                             {% elif r.status == 'disputed' %}bg-rose-100 text-rose-700
-                             {% elif r.status == 'cancelled' %}bg-slate-200 text-slate-700
-                             {% else %}bg-slate-100 text-slate-700{% endif %}">
+                <span class="px-2 py-1 rounded-xl text-xs border
+                             {% if r.status == 'new' %}bg-sky-100 text-sky-700 border-sky-200
+                             {% elif r.status == 'offer_selected' %}bg-amber-100 text-amber-700 border-amber-200
+                             {% elif r.status == 'agreement_pending' %}bg-indigo-100 text-indigo-700 border-indigo-200
+                             {% elif r.status == 'in_progress' %}bg-emerald-100 text-emerald-700 border-emerald-200
+                             {% elif r.status == 'completed' %}bg-emerald-200 text-emerald-800 border-emerald-300
+                             {% elif r.status == 'disputed' %}bg-rose-100 text-rose-700 border-rose-200
+                             {% elif r.status == 'cancelled' %}bg-slate-200 text-slate-700 border-slate-300
+                             {% else %}bg-slate-100 text-slate-700 border-slate-200{% endif %}">
                   {{ r.get_status_display|default:r.status }}
                 </span>
               </td>
 
-              <!-- عمود المدة/المبلغ -->
               <td class="p-3">
                 {% if r.selected_offer %}
                   <div class="flex flex-col gap-1">
-                    <span class="px-2 py-1 rounded-lg border bg-amber-50 text-amber-800 inline-block">
-                      مدة العرض: <b>{{ r.selected_offer.proposed_duration_days }}</b> يوم
-                    </span>
-                    <span class="px-2 py-1 rounded-lg border bg-amber-50 text-amber-800 inline-block">
-                      مبلغ العرض: <b>{{ r.selected_offer.proposed_price }}</b> ريال
-                    </span>
+                    <span class="px-2 py-1 rounded-lg border bg-amber-50 text-amber-800 inline-block">مدة العرض: <b>{{ r.selected_offer.proposed_duration_days|default:"—" }}</b> يوم</span>
+                    <span class="px-2 py-1 rounded-lg border bg-amber-50 text-amber-800 inline-block">مبلغ العرض: <b>{{ r.selected_offer.proposed_price|default:"—" }}</b> ريال</span>
                   </div>
                 {% else %}
                   <div class="flex flex-col gap-1">
-                    <span class="px-2 py-1 rounded-lg border bg-sky-50 text-sky-800 inline-block">
-                      مدة العميل: <b>{{ r.estimated_duration_days }}</b> يوم
-                    </span>
-                    <span class="px-2 py-1 rounded-lg border bg-sky-50 text-sky-800 inline-block">
-                      مبلغ العميل: <b>{{ r.estimated_price }}</b> ريال
-                    </span>
+                    <span class="px-2 py-1 rounded-lg border bg-sky-50 text-sky-800 inline-block">مدة العميل: <b>{{ r.estimated_duration_days|default:"—" }}</b> يوم</span>
+                    <span class="px-2 py-1 rounded-lg border bg-sky-50 text-sky-800 inline-block">مبلغ العميل: <b>{{ r.estimated_price|default:"—" }}</b> ريال</span>
                   </div>
                 {% endif %}
               </td>
 
-              <!-- الموظف -->
-              <td class="p-3 text-slate-700">
-                {% if r.assigned_to %}
-                  {{ r.assigned_to }}
+              <td class="p-3 text-slate-700 dark:text-slate-200">
+                {% if r.assigned_employee %}
+                  {{ r.assigned_employee }}
                 {% elif r.selected_offer %}
                   {{ r.selected_offer.employee }}
                 {% else %}
@@ -188,21 +166,16 @@
                 {% endif %}
               </td>
 
-              <td class="p-3 text-slate-600">{{ r.created_at|date:"Y-m-d H:i" }}</td>
-              <td class="p-3 text-slate-600">
-                {% if r.updated_at %}{{ r.updated_at|date:"Y-m-d H:i" }}{% else %}—{% endif %}
-              </td>
+              <td class="p-3 text-slate-600 dark:text-slate-300">{{ r.created_at|date:"Y-m-d H:i" }}</td>
+              <td class="p-3 text-slate-600 dark:text-slate-300">{% if r.updated_at %}{{ r.updated_at|date:"Y-m-d H:i" }}{% else %}—{% endif %}</td>
 
               <td class="p-3 text-left">
                 <a href="{% url 'marketplace:request_detail' r.pk %}"
-                   class="px-3 py-1.5 rounded-lg border hover:bg-slate-50">عرض</a>
+                   class="px-3 py-1.5 rounded-lg border hover:bg-slate-50 dark:hover:bg-slate-800">عرض</a>
 
-                <!-- زر الاتفاقية يظهر عند offer_selected/agreement_pending -->
                 {% if r.status == 'offer_selected' or r.status == 'agreement_pending' %}
-                  <a href="{% url 'agreements:open_by_request' r.id %}"
-                     class="ml-2 px-3 py-1.5 rounded-lg bg-indigo-600 text-white hover:bg-indigo-700">
-                    الاتفاقية
-                  </a>
+                  <a href="{% url 'agreements:open_by_request' r.pk %}"
+                     class="ml-2 px-3 py-1.5 rounded-lg bg-indigo-600 text-white hover:bg-indigo-700">الاتفاقية</a>
                 {% endif %}
               </td>
             </tr>
@@ -211,11 +184,11 @@
       </table>
     </div>
 
-    <!-- ترقيم الصفحات -->
+    {# ===== ترقيم الصفحات ===== #}
     {% if is_paginated %}
       <div class="mt-6 flex items-center justify-center gap-2">
         {% if page_obj.has_previous %}
-          <a class="px-3 py-1.5 rounded-lg border hover:bg-slate-50"
+          <a class="px-3 py-1.5 rounded-lg border hover:bg-slate-50 dark:hover:bg-slate-800"
              href="?page={{ page_obj.previous_page_number }}{% if request.GET.q %}&q={{ request.GET.q }}{% endif %}{% if request.GET.status %}&status={{ request.GET.status }}{% endif %}{% if request.GET.sort %}&sort={{ request.GET.sort }}{% endif %}">
             السابق
           </a>
@@ -223,12 +196,12 @@
           <span class="px-3 py-1.5 rounded-lg border text-slate-400">السابق</span>
         {% endif %}
 
-        <span class="px-3 py-1.5 rounded-lg border bg-white">
+        <span class="px-3 py-1.5 rounded-lg border bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-200">
           الصفحة {{ page_obj.number }} من {{ page_obj.paginator.num_pages }}
         </span>
 
         {% if page_obj.has_next %}
-          <a class="px-3 py-1.5 rounded-lg border hover:bg-slate-50"
+          <a class="px-3 py-1.5 rounded-lg border hover:bg-slate-50 dark:hover:bg-slate-800"
              href="?page={{ page_obj.next_page_number }}{% if request.GET.q %}&q={{ request.GET.q }}{% endif %}{% if request.GET.status %}&status={{ request.GET.status }}{% endif %}{% if request.GET.sort %}&sort={{ request.GET.sort }}{% endif %}">
             التالي
           </a>
@@ -239,20 +212,18 @@
     {% endif %}
 
   {% else %}
-    <!-- حالة عدم وجود طلبات -->
-    <div class="rounded-2xl border bg-white/80 backdrop-blur p-10 text-center">
-      <div class="text-3xl mb-3">📝</div>
-      <h3 class="text-lg font-bold mb-2">لا توجد طلبات بعد</h3>
-      <p class="text-slate-600 mb-4">ابدأ بطلب جديد وحدد التفاصيل التي ترغب بها.</p>
+    {# ===== حالة عدم وجود طلبات ===== #}
+    <div class="rounded-2xl border bg-white/80 dark:bg-slate-800/60 backdrop-blur p-10 text-center">
+      <div class="text-3xl mb-3" aria-hidden="true">📝</div>
+      <h3 class="text-lg font-bold mb-2 text-slate-900 dark:text-white">لا توجد طلبات بعد</h3>
+      <p class="text-slate-600 dark:text-slate-400 mb-4">ابدأ بطلب جديد وحدد التفاصيل التي ترغب بها.</p>
       <a href="{% url 'marketplace:request_create' %}"
-         class="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-indigo-600 text-white hover:bg-indigo-700">
-        إنشاء طلب جديد
-      </a>
+         class="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-indigo-600 text-white hover:bg-indigo-700">إنشاء طلب جديد</a>
     </div>
   {% endif %}
 
-  <!-- تلميحات الحالة (اختياري) -->
-  <div class="mt-8 text-xs text-slate-500">
+  {# ===== تلميحات الحالة (اختياري) ===== #}
+  <div class="mt-8 text-xs text-slate-500 dark:text-slate-400">
     <span class="px-2 py-1 rounded bg-sky-100 text-sky-700">جديد</span>
     <span class="px-2 py-1 rounded bg-amber-100 text-amber-700">تم اختيار عرض</span>
     <span class="px-2 py-1 rounded bg-indigo-100 text-indigo-700">بانتظار اتفاقية</span>

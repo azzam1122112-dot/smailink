@@ -1,0 +1,32 @@
+{% extends "base.html" %}
+{% block title %}تواصل معنا — {{ SITE_NAME|default:"SamiLink" }}{% endblock %}
+
+{% block content %}
+<section class="max-w-3xl mx-auto rtl py-12 px-4" dir="rtl">
+  <div class="rounded-2xl border bg-white dark:bg-slate-800 p-8 shadow space-y-6">
+    <h1 class="text-3xl font-extrabold">تواصل معنا</h1>
+    <p class="text-slate-600 dark:text-slate-300">يسعدنا تواصلك. اكتب لنا وسنعود إليك قريبًا.</p>
+
+    <form method="post" action="#" onsubmit="alert('تم إرسال الرسالة (نموج تجريبي).'); return false;">
+      {% csrf_token %}
+      <div class="grid md:grid-cols-2 gap-4">
+        <div>
+          <label class="block text-sm mb-1">الاسم</label>
+          <input type="text" class="w-full rounded-xl border px-3 py-2" required>
+        </div>
+        <div>
+          <label class="block text-sm mb-1">البريد الإلكتروني</label>
+          <input type="email" class="w-full rounded-xl border px-3 py-2" required>
+        </div>
+        <div class="md:col-span-2">
+          <label class="block text-sm mb-1">الرسالة</label>
+          <textarea rows="5" class="w-full rounded-xl border px-3 py-2" required></textarea>
+        </div>
+      </div>
+      <div class="mt-4">
+        <button class="btn btn-primary">إرسال</button>
+      </div>
+    </form>
+  </div>
+</section>
+{% endblock %}
