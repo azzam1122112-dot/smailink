@@ -1,224 +1,601 @@
-{# disputes/templates/disputes/dispute_list.html (نزاعات الطلب) #}
+{# disputes/templates/disputes/dispute_list.html #}
 {% extends "base.html" %}
 {% block title %}نزاعات الطلب #{{ req.pk }}{% endblock %}
 
-{% block extra_css %}
+{% block extra_head %}
 <style>
-  .fade-in { animation: fadeIn .5s ease }
-  @keyframes fadeIn { from{opacity:0;transform:translateY(10px)} to{opacity:1;transform:translateY(0)} }
+  /* حاوية الصفحة */
+  .page-disputes {
+    padding: 3rem 0 4rem;
+  }
 
-  .card { transition: box-shadow .2s ease, transform .2s ease }
-  .card:hover { transform: translateY(-2px); box-shadow: 0 12px 24px -12px rgba(0,0,0,.15) }
+  .page-disputes .page-inner {
+    max-width: 960px;
+    margin: 0 auto;
+  }
 
-  .chip { padding:.25rem .6rem; border-radius: .75rem; font-size: .72rem; border:1px solid rgba(148,163,184,.35) }
-  .chip-open { background:#fef3c7; color:#92400e }
-  .chip-review { background:#e0f2fe; color:#075985 }
-  .chip-resolved { background:#dcfce7; color:#065f46 }
-  .chip-canceled { background:#f8fafc; color:#475569 }
+  /* أنيميشن لطيف للدخول */
+  .page-disputes .fade-in {
+    animation: fadeIn .45s ease-out;
+  }
 
-  .meta { font-size:.75rem; color:#64748b }
-  .truncate-2 { display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden }
-  .rtl .truncate-2 { text-overflow: ellipsis }
+  @keyframes fadeIn {
+    from {
+      opacity: 0;
+      transform: translateY(10px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
 
-  .pill { border:1px solid rgba(148,163,184,.35); border-radius:9999px; padding:.35rem .8rem; font-size:.78rem }
-  .pill-active { background:#111827; color:#fff }
-  .dark .pill-active { background:#1f2937 }
+  /* رأس الصفحة */
+  .page-header {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 1rem;
+    margin-bottom: 1.5rem;
+  }
 
+  .page-title {
+    font-size: 1.4rem;
+    font-weight: 800;
+    color: var(--dark-900);
+  }
+
+  .page-subtitle {
+    font-size: 0.9rem;
+    color: var(--dark-500);
+    margin-top: 0.25rem;
+  }
+
+  /* فلاتر الحالات */
+  .dispute-filters {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    margin-bottom: 1.75rem;
+  }
+
+  .filter-pill {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0.4rem 0.9rem;
+    border-radius: 999px;
+    font-size: 0.8rem;
+    border: 1px solid var(--dark-200);
+    background: var(--white);
+    color: var(--dark-600);
+    text-decoration: none;
+    cursor: pointer;
+    transition: var(--transition-fast);
+  }
+
+  .filter-pill:hover {
+    background: var(--dark-50);
+  }
+
+  .filter-pill.is-active {
+    background: var(--dark-900);
+    color: #fff;
+    border-color: var(--dark-900);
+  }
+
+  /* بطاقة النزاع */
+  .dispute-card {
+    background: var(--white);
+    border-radius: 1.3rem;
+    border: 1px solid var(--dark-100);
+    box-shadow: var(--shadow-md);
+    padding: 1.25rem 1.4rem;
+    margin-bottom: 1rem;
+    transition: var(--transition-fast);
+  }
+
+  .dispute-card:hover {
+    transform: translateY(-2px);
+    box-shadow: var(--shadow-lg);
+  }
+
+  .dispute-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 0.75rem;
+  }
+
+  .dispute-title-row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.4rem;
+  }
+
+  .dispute-title {
+    font-size: 1rem;
+    font-weight: 700;
+    color: var(--dark-900);
+    max-width: 100%;
+  }
+
+  .dispute-meta {
+    margin-top: 0.25rem;
+    font-size: 0.78rem;
+    color: var(--dark-500);
+  }
+
+  /* شارات الحالة */
+  .status-chip {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0.25rem 0.7rem;
+    border-radius: 999px;
+    font-size: 0.7rem;
+    font-weight: 600;
+    border: 1px solid rgba(148, 163, 184, 0.4);
+    white-space: nowrap;
+  }
+
+  .status-chip-open {
+    background: #fef3c7;
+    color: #92400e;
+    border-color: #facc15;
+  }
+
+  .status-chip-review {
+    background: #e0f2fe;
+    color: #075985;
+    border-color: #38bdf8;
+  }
+
+  .status-chip-resolved {
+    background: #dcfce7;
+    color: #166534;
+    border-color: #22c55e;
+  }
+
+  .status-chip-canceled {
+    background: #f8fafc;
+    color: #475569;
+    border-color: #cbd5f5;
+  }
+
+  .status-chip-frozen {
+    background: #fef2f2;
+    color: #b91c1c;
+    border-color: #fecaca;
+  }
+
+  .status-chip-milestone {
+    background: #eef2ff;
+    color: #4338ca;
+    border-color: #a5b4fc;
+  }
+
+  /* أزرار الأدوات العلوية لكل نزاع */
+  .dispute-tools {
+    display: flex;
+    align-items: center;
+    gap: 0.35rem;
+  }
+
+  .btn-icon-sm {
+    padding: 0.25rem 0.55rem;
+    font-size: 0.78rem;
+    border-radius: 999px;
+    border: 1px solid transparent;
+    background: transparent;
+    color: var(--dark-500);
+    cursor: pointer;
+    transition: var(--transition-fast);
+  }
+
+  .btn-icon-sm:hover {
+    background: var(--dark-50);
+    color: var(--dark-700);
+  }
+
+  /* النصوص المختصرة والقابلة للتوسيع */
+  .dispute-body {
+    margin-top: 0.8rem;
+    font-size: 0.9rem;
+    color: var(--dark-700);
+  }
+
+  .dispute-section-label {
+    font-weight: 600;
+    font-size: 0.85rem;
+    color: var(--dark-600);
+    margin-bottom: 0.15rem;
+  }
+
+  .dispute-text-block {
+    font-size: 0.87rem;
+    color: var(--dark-700);
+    line-height: 1.7;
+    white-space: pre-line;
+  }
+
+  .dispute-text-collapsed {
+    max-height: 3.2rem;
+    overflow: hidden;
+  }
+
+  .dispute-more-btn {
+    margin-top: 0.3rem;
+    font-size: 0.8rem;
+    color: var(--primary-700);
+    background: none;
+    border: none;
+    padding: 0;
+    cursor: pointer;
+    text-decoration: underline;
+  }
+
+  /* شريط الأزرار (تغيير الحالة) */
+  .dispute-actions {
+    margin-top: 1rem;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.4rem;
+  }
+
+  /* حالة فارغة */
+  .disputes-empty {
+    background: var(--white);
+    border-radius: 1.5rem;
+    border: 1px solid var(--dark-100);
+    box-shadow: var(--shadow-md);
+    padding: 2rem 1.8rem;
+    text-align: center;
+  }
+
+  .disputes-empty p {
+    font-size: 0.95rem;
+    color: var(--dark-500);
+  }
+
+  .disputes-empty .empty-actions {
+    margin-top: 1rem;
+  }
+
+  /* شريط الأدوات السفلي */
+  .page-footer-actions {
+    margin-top: 2rem;
+    display: flex;
+    justify-content: space-between;
+    gap: 0.75rem;
+  }
+
+  @media (max-width: 640px) {
+    .page-footer-actions {
+      flex-direction: column-reverse;
+    }
+
+    .page-header {
+      align-items: flex-start;
+    }
+
+    .page-title {
+      font-size: 1.25rem;
+    }
+  }
+
+  /* عند الطباعة */
   @media print {
-    .print-hidden { display:none !important }
-    .card { box-shadow:none !important; border:1px solid #e5e7eb }
+    .print-hidden {
+      display: none !important;
+    }
+    .dispute-card,
+    .disputes-empty {
+      box-shadow: none !important;
+      border-color: #e5e7eb;
+    }
+    body {
+      background: #fff;
+    }
   }
 </style>
 {% endblock %}
 
 {% block content %}
-<section class="max-w-4xl mx-auto rtl py-8 fade-in" dir="rtl">
+<section class="page-disputes" dir="rtl">
+  <div class="container page-inner fade-in">
 
-  {# رأس الصفحة #}
-  <div class="flex items-center justify-between mb-6 print-hidden">
-    <div>
-      <h1 class="text-2xl font-extrabold text-slate-900 dark:text-white">نزاعات الطلب #{{ req.pk }}</h1>
-      <p class="meta mt-1">هنا ستجد كل النزاعات المفتوحة أو السابقة المتعلقة بهذا الطلب.</p>
+    {# رأس الصفحة #}
+    <div class="page-header print-hidden">
+      <div>
+        <h1 class="page-title">
+          نزاعات الطلب رقم {{ req.pk }}
+        </h1>
+        <p class="page-subtitle">
+          جميع النزاعات المفتوحة أو السابقة المرتبطة بهذا الطلب تظهر هنا.
+        </p>
+      </div>
+      <div>
+        <a href="{% url 'disputes:open_by_request' req.pk %}" class="btn btn-danger">
+          فتح نزاع جديد
+        </a>
+      </div>
     </div>
-    <a class="btn btn-danger" href="{% url 'disputes:open_by_request' req.pk %}">فتح نزاع</a>
-  </div>
 
-  {# فلاتر بسيطة بالـ querystring: ?status=open/in_review/resolved/canceled #}
-  <div class="flex flex-wrap gap-2 mb-6 print-hidden">
-    {% with qs=request.GET.copy %}
+    {# الفلاتر حسب الحالة عبر ?status= #}
+    <div class="dispute-filters print-hidden">
       {% url 'disputes:list' req.pk as list_url %}
-      <a href="{{ list_url }}" class="pill {% if not request.GET.status %}pill-active{% endif %}">الكل</a>
-      {% with s='open' %}
-        {% if qs.status %}{% endif %}<a href="{{ list_url }}?status={{ s }}" class="pill {% if request.GET.status == s %}pill-active{% endif %}">مفتوح</a>
-      {% endwith %}
-      {% with s='in_review' %}
-        <a href="{{ list_url }}?status={{ s }}" class="pill {% if request.GET.status == s %}pill-active{% endif %}">قيد المراجعة</a>
-      {% endwith %}
-      {% with s='resolved' %}
-        <a href="{{ list_url }}?status={{ s }}" class="pill {% if request.GET.status == s %}pill-active{% endif %}">محسوم</a>
-      {% endwith %}
-      {% with s='canceled' %}
-        <a href="{{ list_url }}?status={{ s }}" class="pill {% if request.GET.status == s %}pill-active{% endif %}">ملغي</a>
-      {% endwith %}
-    {% endwith %}
-  </div>
+      <a href="{{ list_url }}"
+         class="filter-pill {% if not request.GET.status %}is-active{% endif %}">
+        الكل
+      </a>
 
-  {# قائمة النزاعات #}
-  <div class="space-y-4">
+      {% with s="open" %}
+        <a href="{{ list_url }}?status={{ s }}"
+           class="filter-pill {% if request.GET.status == s %}is-active{% endif %}">
+          مفتوح
+        </a>
+      {% endwith %}
+
+      {% with s="in_review" %}
+        <a href="{{ list_url }}?status={{ s }}"
+           class="filter-pill {% if request.GET.status == s %}is-active{% endif %}">
+          قيد المراجعة
+        </a>
+      {% endwith %}
+
+      {% with s="resolved" %}
+        <a href="{{ list_url }}?status={{ s }}"
+           class="filter-pill {% if request.GET.status == s %}is-active{% endif %}">
+          محسوم
+        </a>
+      {% endwith %}
+
+      {% with s="canceled" %}
+        <a href="{{ list_url }}?status={{ s }}"
+           class="filter-pill {% if request.GET.status == s %}is-active{% endif %}">
+          ملغي
+        </a>
+      {% endwith %}
+    </div>
+
+    {# قائمة النزاعات #}
     {% for d in disputes %}
-      <article id="dispute-{{ d.pk }}" class="rounded-2xl border bg-white dark:bg-slate-800 p-5 card">
+      <article id="dispute-{{ d.pk }}" class="dispute-card">
 
-        {# رأس البطاقة: العنوان + الحالة #}
-        <div class="flex items-start justify-between gap-3">
-          <div class="min-w-0">
-            <div class="flex items-center gap-2 flex-wrap">
-              <h2 class="font-bold text-slate-900 dark:text-white truncate" title="{{ d.title }}">{{ d.title|default:"— بدون عنوان —" }}</h2>
-              {% if d.status == 'open' %}
-                <span class="chip chip-open">مفتوح</span>
-              {% elif d.status == 'in_review' %}
-                <span class="chip chip-review">قيد المراجعة</span>
-              {% elif d.status == 'resolved' %}
-                <span class="chip chip-resolved">محسوم</span>
-              {% elif d.status == 'canceled' %}
-                <span class="chip chip-canceled">ملغي</span>
+        <div class="dispute-header">
+          <div class="dispute-header-main">
+            <div class="dispute-title-row">
+              <h2 class="dispute-title" title="{{ d.title }}">
+                {{ d.title|default:"— بدون عنوان —" }}
+              </h2>
+
+              {# حالة النزاع الرئيسية #}
+              {% if d.status == "open" %}
+                <span class="status-chip status-chip-open">مفتوح</span>
+              {% elif d.status == "in_review" %}
+                <span class="status-chip status-chip-review">قيد المراجعة</span>
+              {% elif d.status == "resolved" %}
+                <span class="status-chip status-chip-resolved">محسوم</span>
+              {% elif d.status == "canceled" %}
+                <span class="status-chip status-chip-canceled">ملغي</span>
               {% else %}
-                <span class="chip">{{ d.get_status_display|default:d.status }}</span>
+                <span class="status-chip">{{ d.get_status_display|default:d.status }}</span>
               {% endif %}
+
               {% if d.is_frozen %}
-                <span class="chip bg-rose-100 text-rose-700">مجمّد ماليًا</span>
+                <span class="status-chip status-chip-frozen">مجمّد ماليًا</span>
               {% endif %}
+
               {% if d.milestone %}
-                <span class="chip bg-indigo-50 text-indigo-700">مرحلة #{{ d.milestone.order|default:1 }}</span>
+                <span class="status-chip status-chip-milestone">
+                  مرتبطة بالمرحلة رقم {{ d.milestone.order|default:"1" }}
+                </span>
               {% endif %}
             </div>
 
-            <div class="meta mt-1">
-              فتح بواسطة: {{ d.opened_by|default:"—" }}
-              — الدور: {{ d.opener_role|default:"—" }}
-              — {{ d.opened_at|default:d.created_at|date:"Y-m-d H:i" }}
-              {% if d.closed_at %} — إغلاق: {{ d.closed_at|date:"Y-m-d H:i" }}{% endif %}
+            <div class="dispute-meta">
+              فتح بواسطة:
+              {{ d.opened_by|default:"—" }}
+              — الدور:
+              {{ d.opener_role|default:"—" }}
+              —
+              {% if d.opened_at %}
+                {{ d.opened_at|date:"Y-m-d H:i" }}
+              {% else %}
+                {{ d.created_at|date:"Y-m-d H:i" }}
+              {% endif %}
+              {% if d.closed_at %}
+                — إغلاق:
+                {{ d.closed_at|date:"Y-m-d H:i" }}
+              {% endif %}
             </div>
           </div>
 
-          {# إجراءات سريعة للطباعة ونسخ الرقم #}
-          <div class="print-hidden shrink-0 flex items-center gap-1">
-            <button type="button" class="btn btn-ghost btn-sm" data-copy="{{ d.pk }}" aria-label="نسخ رقم النزاع">نسخ #</button>
-            <button type="button" class="btn btn-ghost btn-sm" onclick="window.print()">طباعة</button>
+          <div class="dispute-tools print-hidden">
+            <button type="button"
+                    class="btn-icon-sm"
+                    data-copy="{{ d.pk }}"
+                    aria-label="نسخ رقم النزاع">
+              نسخ الرقم
+            </button>
+            <button type="button"
+                    class="btn-icon-sm"
+                    onclick="window.print()">
+              طباعة
+            </button>
           </div>
         </div>
 
-        {# المحتوى المختصر مع إمكانية التوسيع #}
-        <div class="mt-4 space-y-3">
+        {# المحتوى #}
+        <div class="dispute-body">
           {% if d.reason %}
-            <div class="text-sm">
-              <b class="text-slate-700 dark:text-slate-300">السبب:</b>
-              <span class="text-slate-800 dark:text-slate-200 block truncate-2" data-expand-target="reason-{{ d.pk }}">{{ d.reason }}</span>
+            <div class="dispute-section">
+              <div class="dispute-section-label">السبب:</div>
+              <div class="dispute-text-block dispute-text-collapsed"
+                   data-expand-target="reason-{{ d.pk }}">
+                {{ d.reason }}
+              </div>
+              <button type="button"
+                      class="dispute-more-btn print-hidden"
+                      data-expand-btn
+                      data-for="reason-{{ d.pk }}">
+                عرض المزيد
+              </button>
             </div>
           {% endif %}
+
           {% if d.details %}
-            <div class="text-sm">
-              <b class="text-slate-700 dark:text-slate-300">التفاصيل:</b>
-              <div class="text-slate-800 dark:text-slate-200 truncate-2 whitespace-pre-line" data-expand-target="details-{{ d.pk }}">{{ d.details }}</div>
+            <div class="dispute-section" style="margin-top: 0.5rem;">
+              <div class="dispute-section-label">التفاصيل:</div>
+              <div class="dispute-text-block dispute-text-collapsed"
+                   data-expand-target="details-{{ d.pk }}">
+                {{ d.details }}
+              </div>
+              <button type="button"
+                      class="dispute-more-btn print-hidden"
+                      data-expand-btn
+                      data-for="details-{{ d.pk }}">
+                عرض المزيد
+              </button>
             </div>
           {% endif %}
         </div>
 
-        {# روابط عرض المزيد في حال النص طويل #}
-        <div class="mt-2 print-hidden">
-          {% if d.reason or d.details %}
-            <button class="text-xs text-indigo-700 dark:text-indigo-300 hover:underline" data-expand-btn data-for="dispute-{{ d.pk }}">عرض المزيد</button>
-          {% endif %}
-        </div>
+        {# أزرار تغيير الحالة (الصلاحيات مضبوطة من الـ view) #}
+        {% if request.user.is_staff or request.user.is_superuser or request.user.role == "admin" or request.user.role == "finance" %}
+          <div class="dispute-actions print-hidden">
+            <form method="post" action="{% url 'disputes:update_status' d.pk %}">
+              {% csrf_token %}
+              <input type="hidden" name="next" value="{{ request.get_full_path }}">
+              <button type="submit" name="action" value="review" class="btn btn-secondary btn-sm">
+                بدء مراجعة
+              </button>
+            </form>
 
-        {# أزرار الإدارة (محميّة فعليًا في الـ view) #}
-        {% if request.user.is_staff or request.user.is_superuser or request.user.role == 'admin' or request.user.role == 'finance' %}
-          <div class="mt-4 flex flex-wrap gap-2 print-hidden">
             <form method="post" action="{% url 'disputes:update_status' d.pk %}">
               {% csrf_token %}
               <input type="hidden" name="next" value="{{ request.get_full_path }}">
-              <button name="action" value="review" class="btn btn-secondary btn-sm">بدء مراجعة</button>
+              <button type="submit" name="action" value="resolve" class="btn btn-success btn-sm">
+                حلّ النزاع
+              </button>
             </form>
+
             <form method="post" action="{% url 'disputes:update_status' d.pk %}">
               {% csrf_token %}
               <input type="hidden" name="next" value="{{ request.get_full_path }}">
-              <button name="action" value="resolve" class="btn btn-success btn-sm">حلّ النزاع</button>
+              <button type="submit" name="action" value="cancel" class="btn btn-outline btn-sm">
+                إلغاء
+              </button>
             </form>
+
             <form method="post" action="{% url 'disputes:update_status' d.pk %}">
               {% csrf_token %}
               <input type="hidden" name="next" value="{{ request.get_full_path }}">
-              <button name="action" value="cancel" class="btn btn-outline btn-sm">إلغاء</button>
-            </form>
-            <form method="post" action="{% url 'disputes:update_status' d.pk %}">
-              {% csrf_token %}
-              <input type="hidden" name="next" value="{{ request.get_full_path }}">
-              <button name="action" value="reopen" class="btn btn-danger btn-sm">إعادة فتح</button>
+              <button type="submit" name="action" value="reopen" class="btn btn-danger btn-sm">
+                إعادة فتح
+              </button>
             </form>
           </div>
         {% endif %}
       </article>
     {% empty %}
-      <div class="rounded-2xl border bg-white dark:bg-slate-800 p-8 text-center">
-        <p class="text-slate-500">لا توجد نزاعات لهذا الطلب.</p>
-        <div class="mt-4 print-hidden">
-          <a class="btn btn-danger" href="{% url 'disputes:open_by_request' req.pk %}">فتح أول نزاع</a>
+      <div class="disputes-empty">
+        <p>لا توجد نزاعات مسجّلة لهذا الطلب حتى الآن.</p>
+        <div class="empty-actions print-hidden">
+          <a href="{% url 'disputes:open_by_request' req.pk %}" class="btn btn-danger btn-sm">
+            فتح أول نزاع
+          </a>
         </div>
       </div>
     {% endfor %}
-  </div>
 
-  {# شريط أدوات سفلي للطباعة والرجوع #}
-  <div class="print-hidden flex items-center justify-between mt-8">
-    <a href="{{ req.get_absolute_url }}" class="btn btn-light">رجوع للطلب</a>
-    <button onclick="window.print()" class="btn btn-success">طباعة الصفحة</button>
+    {# شريط الأدوات السفلي #}
+    <div class="page-footer-actions print-hidden">
+      <a href="{{ req.get_absolute_url }}" class="btn btn-light">
+        الرجوع إلى تفاصيل الطلب
+      </a>
+      <button type="button" onclick="window.print()" class="btn btn-success">
+        طباعة الصفحة
+      </button>
+    </div>
   </div>
 </section>
 
 <script>
-  // نسخ إلى الحافظة
-  document.querySelectorAll('[data-copy]').forEach(function(btn){
-    btn.addEventListener('click', function(){
-      var val = btn.getAttribute('data-copy') || ''
-      if(!val) return
-      if(navigator.clipboard && navigator.clipboard.writeText){
-        navigator.clipboard.writeText(String(val)).then(function(){ toast('تم النسخ ✓') })
-      }else{
-        try{
-          var ta = document.createElement('textarea')
-          ta.value = String(val)
-          document.body.appendChild(ta)
-          ta.select()
-          document.execCommand('copy')
-          ta.remove()
-          toast('تم النسخ ✓')
-        }catch(e){}
+  (function () {
+    // دالة توست بسيطة تستخدم نظام التوست الموجود في base.html
+    function showToast(message) {
+      var container = document.getElementById("toast-container");
+      if (!container) {
+        alert(message);
+        return;
       }
-    })
-  })
+      var el = document.createElement("div");
+      el.className = "toast success";
+      var msg = document.createElement("div");
+      msg.className = "toast-message";
+      msg.textContent = message;
+      el.appendChild(msg);
+      container.appendChild(el);
+      setTimeout(function () {
+        el.remove();
+      }, 1800);
+    }
 
-  // توسعة/طي النصوص الطويلة
-  document.querySelectorAll('[data-expand-btn]').forEach(function(btn){
-    btn.addEventListener('click', function(){
-      var rootId = btn.getAttribute('data-for')
-      var root = document.getElementById(rootId)
-      if(!root) return
-      root.querySelectorAll('[data-expand-target]').forEach(function(el){
-        if(el.classList.contains('truncate-2')){
-          el.classList.remove('truncate-2'); btn.textContent = 'طيّ المحتوى'
-        }else{
-          el.classList.add('truncate-2'); btn.textContent = 'عرض المزيد'
+    // نسخ رقم النزاع
+    var copyButtons = document.querySelectorAll("[data-copy]");
+    copyButtons.forEach(function (btn) {
+      btn.addEventListener("click", function () {
+        var value = btn.getAttribute("data-copy");
+        if (!value) {
+          return;
         }
-      })
-    })
-  })
+        var text = String(value);
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+          navigator.clipboard.writeText(text).then(function () {
+            showToast("تم نسخ رقم النزاع إلى الحافظة");
+          });
+        } else {
+          try {
+            var ta = document.createElement("textarea");
+            ta.value = text;
+            document.body.appendChild(ta);
+            ta.select();
+            document.execCommand("copy");
+            ta.remove();
+            showToast("تم نسخ رقم النزاع إلى الحافظة");
+          } catch (e) {
+            alert(text);
+          }
+        }
+      });
+    });
 
-  function toast(msg){
-    var t = document.createElement('div')
-    t.textContent = msg || ''
-    t.role = 'status'
-    t.setAttribute('aria-live','polite')
-    t.className = 'fixed bottom-4 left-1/2 -translate-x-1/2 bg-slate-900 text-white text-sm px-3 py-1.5 rounded-xl shadow z-[60]'
-    document.body.appendChild(t)
-    setTimeout(function(){ t.remove() }, 1400)
-  }
+    // توسيع/طي النصوص
+    var expandButtons = document.querySelectorAll("[data-expand-btn]");
+    expandButtons.forEach(function (btn) {
+      btn.addEventListener("click", function () {
+        var targetKey = btn.getAttribute("data-for");
+        if (!targetKey) {
+          return;
+        }
+        var selector = '[data-expand-target="' + targetKey + '"]';
+        var target = document.querySelector(selector);
+        if (!target) {
+          return;
+        }
+        if (target.classList.contains("dispute-text-collapsed")) {
+          target.classList.remove("dispute-text-collapsed");
+          btn.textContent = "طيّ المحتوى";
+        } else {
+          target.classList.add("dispute-text-collapsed");
+          btn.textContent = "عرض المزيد";
+        }
+      });
+    });
+  })();
 </script>
 {% endblock %}

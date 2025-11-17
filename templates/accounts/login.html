@@ -1,51 +1,618 @@
 {# templates/accounts/login.html #}
 {% extends "base.html" %}
 {% load static %}
-{% block title %}تسجيل الدخول{% endblock %}
+
+{% block title %}تسجيل الدخول - سامي لينك{% endblock %}
+
+{% block extra_head %}
+<style>
+/* تنسيقات خاصة بصفحة التسجيل */
+.auth-section {
+  min-height: 100vh;
+  background: linear-gradient(135deg, var(--primary-50) 0%, var(--surface-alt) 100%);
+  padding: 2rem 0;
+  display: flex;
+  align-items: center;
+}
+
+.auth-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 4rem;
+  align-items: center;
+  max-width: 1000px;
+  margin: 0 auto;
+}
+
+.auth-visual {
+  text-align: center;
+}
+
+.auth-card {
+  background: var(--white);
+  border-radius: var(--radius-xl);
+  padding: 3rem 2rem;
+  box-shadow: var(--shadow-xl);
+  border: 1px solid var(--dark-200);
+}
+
+.auth-icon {
+  width: 80px;
+  height: 80px;
+  background: linear-gradient(135deg, var(--primary-500), var(--primary-600));
+  border-radius: var(--radius-full);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0 auto 2rem;
+  color: white;
+}
+
+.auth-icon svg {
+  width: 40px;
+  height: 40px;
+}
+
+.auth-title {
+  font-size: 1.75rem;
+  font-weight: 700;
+  color: var(--dark-900);
+  margin-bottom: 1rem;
+}
+
+.auth-description {
+  color: var(--dark-600);
+  line-height: 1.6;
+  margin-bottom: 2rem;
+}
+
+.auth-features {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.auth-feature {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  color: var(--dark-700);
+}
+
+.feature-icon {
+  width: 24px;
+  height: 24px;
+  background: var(--primary-100);
+  color: var(--primary-600);
+  border-radius: var(--radius-full);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.875rem;
+  font-weight: 600;
+}
+
+.auth-form {
+  background: var(--white);
+  border-radius: var(--radius-xl);
+  padding: 2.5rem;
+  box-shadow: var(--shadow-xl);
+  border: 1px solid var(--dark-200);
+}
+
+.form-header {
+  text-align: center;
+  margin-bottom: 2rem;
+}
+
+.brand-logo-small {
+  width: 60px;
+  height: 60px;
+  background: linear-gradient(135deg, var(--primary-500), var(--primary-600));
+  border-radius: var(--radius-lg);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0 auto 1rem;
+}
+
+.brand-logo-small img {
+  width: 60%;
+  height: 60%;
+  filter: brightness(0) invert(1);
+}
+
+.form-title {
+  font-size: 1.75rem;
+  font-weight: 700;
+  color: var(--dark-900);
+  margin-bottom: 0.5rem;
+}
+
+.form-subtitle {
+  color: var(--dark-500);
+  font-size: 0.95rem;
+}
+
+.login-form {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+}
+
+.form-group {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.form-label {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  font-weight: 600;
+  color: var(--dark-700);
+  font-size: 0.9rem;
+}
+
+.required {
+  color: #ef4444;
+}
+
+.input-wrapper {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.form-input {
+  width: 100%;
+  padding: 0.875rem 1rem 0.875rem 3rem;
+  border: 2px solid var(--dark-200);
+  border-radius: var(--radius-lg);
+  background: var(--white);
+  color: var(--dark-900);
+  font-size: 0.95rem;
+  transition: var(--transition);
+}
+
+.form-input:focus {
+  outline: none;
+  border-color: var(--primary-500);
+  box-shadow: 0 0 0 3px rgba(34, 197, 94, 0.1);
+}
+
+.form-input.error {
+  border-color: #ef4444;
+}
+
+.input-icon {
+  position: absolute;
+  right: 1rem;
+  color: var(--dark-400);
+  font-size: 1.1rem;
+}
+
+.password-toggle {
+  position: absolute;
+  left: 1rem;
+  background: none;
+  border: none;
+  color: var(--dark-400);
+  cursor: pointer;
+  padding: 0.25rem;
+  border-radius: var(--radius);
+  transition: var(--transition);
+}
+
+.password-toggle:hover {
+  color: var(--dark-600);
+  background: var(--dark-100);
+}
+
+.error-text {
+  color: #ef4444;
+  font-size: 0.875rem;
+  margin-top: 0.25rem;
+}
+
+.form-options {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin: 1rem 0;
+}
+
+.checkbox-label {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  cursor: pointer;
+  color: var(--dark-600);
+  font-size: 0.9rem;
+}
+
+.checkbox-input {
+  display: none;
+}
+
+.checkbox-custom {
+  width: 18px;
+  height: 18px;
+  border: 2px solid var(--dark-300);
+  border-radius: var(--radius-sm);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: var(--transition);
+}
+
+.checkbox-input:checked + .checkbox-custom {
+  background: var(--primary-500);
+  border-color: var(--primary-500);
+}
+
+.checkbox-input:checked + .checkbox-custom::after {
+  content: '✓';
+  color: white;
+  font-size: 0.75rem;
+  font-weight: bold;
+}
+
+.forgot-link {
+  color: var(--primary-600);
+  text-decoration: none;
+  font-size: 0.9rem;
+  transition: var(--transition);
+}
+
+.forgot-link:hover {
+  color: var(--primary-700);
+  text-decoration: underline;
+}
+
+.btn-login {
+  padding: 1rem 2rem;
+  font-size: 1rem;
+  margin-top: 1rem;
+}
+
+.btn-full {
+  width: 100%;
+}
+
+.auth-divider {
+  display: flex;
+  align-items: center;
+  margin: 2rem 0;
+  color: var(--dark-400);
+}
+
+.auth-divider::before,
+.auth-divider::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: var(--dark-200);
+}
+
+.auth-divider span {
+  padding: 0 1rem;
+  font-size: 0.9rem;
+}
+
+.auth-links {
+  text-align: center;
+}
+
+.auth-link-text {
+  color: var(--dark-600);
+  margin: 0;
+}
+
+.auth-link {
+  color: var(--primary-600);
+  text-decoration: none;
+  font-weight: 600;
+  transition: var(--transition);
+}
+
+.auth-link:hover {
+  color: var(--primary-700);
+  text-decoration: underline;
+}
+
+.messages-container {
+  margin-bottom: 1.5rem;
+}
+
+.message {
+  padding: 0.875rem 1rem;
+  border-radius: var(--radius-lg);
+  margin-bottom: 0.5rem;
+  font-size: 0.9rem;
+}
+
+.message.success {
+  background: var(--primary-50);
+  color: var(--primary-700);
+  border: 1px solid var(--primary-200);
+}
+
+.message.error {
+  background: #fef2f2;
+  color: #dc2626;
+  border: 1px solid #fecaca;
+}
+
+.message.info {
+  background: var(--secondary-50);
+  color: var(--secondary-700);
+  border: 1px solid var(--secondary-200);
+}
+
+/* التكيف مع الشاشات الصغيرة */
+@media (max-width: 768px) {
+  .auth-grid {
+    grid-template-columns: 1fr;
+    gap: 2rem;
+  }
+
+  .auth-visual {
+    display: none;
+  }
+
+  .auth-form {
+    padding: 2rem 1.5rem;
+  }
+
+  .form-options {
+    flex-direction: column;
+    gap: 1rem;
+    align-items: flex-start;
+  }
+}
+
+@media (max-width: 480px) {
+  .auth-section {
+    padding: 1rem;
+  }
+
+  .auth-form {
+    padding: 1.5rem 1rem;
+  }
+
+  .form-title {
+    font-size: 1.5rem;
+  }
+}
+</style>
+{% endblock %}
+
 {% block content %}
-<div class="min-h-[70vh] grid place-items-center bg-gradient-to-br from-indigo-50 to-sky-50 dark:from-slate-900 dark:to-slate-950">
-  <div class="w-full max-w-md bg-white/80 dark:bg-slate-900/70 backdrop-blur-xl rounded-2xl shadow-2xl p-8 border border-slate-100 dark:border-slate-800">
-    <h1 class="text-2xl font-bold text-slate-900 dark:text-white mb-2 text-center">تسجيل الدخول</h1>
-    <p class="text-slate-500 dark:text-slate-400 text-center mb-6">ادخل بريدك الإلكتروني وكلمة المرور</p>
-
-    {# رسائل Django #}
-    {% include "accounts/_messages.html" %}
-
-    <form method="post" novalidate class="space-y-4" action="" autocomplete="on">
-      {% csrf_token %}
-
-      <div>
-        <label for="id_email" class="block mb-1 text-slate-700 dark:text-slate-200">البريد الإلكتروني</label>
-        <input id="id_email" name="email" type="email" required inputmode="email" autocomplete="email"
-               class="w-full rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 p-3 focus:outline-none focus:ring-2 focus:ring-indigo-500"
-               placeholder="example@mail.com">
+<div class="auth-section">
+  <div class="container">
+    <div class="auth-grid">
+      <!-- الجانب البصري -->
+      <div class="auth-visual scroll-reveal">
+        <div class="auth-card">
+          <div class="auth-icon">
+            <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <path d="M12 12C14.2091 12 16 10.2091 16 8C16 5.79086 14.2091 4 12 4C9.79086 4 8 5.79086 8 8C8 10.2091 9.79086 12 12 12Z" stroke="currentColor" stroke-width="2"/>
+              <path d="M20 21C20 19.6044 20 18.9067 19.8278 18.3389C19.44 17.0605 18.4395 16.06 17.1611 15.6722C16.5933 15.5 15.8956 15.5 14.5 15.5H9.5C8.10444 15.5 7.40665 15.5 6.83886 15.6722C5.56045 16.06 4.56004 17.0605 4.17224 18.3389C4 18.9067 4 19.6044 4 21" stroke="currentColor" stroke-width="2"/>
+            </svg>
+          </div>
+          <h2 class="auth-title">مرحباً بعودتك!</h2>
+          <p class="auth-description">
+            سجل الدخول إلى حسابك في منصة سامي لينك للاستفادة من خدماتنا المتكاملة
+          </p>
+          <div class="auth-features">
+            <div class="auth-feature">
+              <span class="feature-icon">✓</span>
+              <span>إدارة الطلبات والمشاريع</span>
+            </div>
+            <div class="auth-feature">
+              <span class="feature-icon">✓</span>
+              <span>التواصل مع التقنيين الموثوقين</span>
+            </div>
+            <div class="auth-feature">
+              <span class="feature-icon">✓</span>
+              <span>متابعة الفواتير والمدفوعات</span>
+            </div>
+          </div>
+        </div>
       </div>
 
-      <div>
-        <label for="id_password" class="block mb-1 text-slate-700 dark:text-slate-200">كلمة المرور</label>
-        <input id="id_password" name="password" type="password" required autocomplete="current-password"
-               class="w-full rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 p-3 focus:outline-none focus:ring-2 focus:ring-indigo-500">
+      <!-- نموذج تسجيل الدخول -->
+      <div class="auth-form scroll-reveal">
+        <div class="form-header">
+          <div class="brand-logo-small">
+            <img src="{% static 'img/logo.png' %}" alt="سامي لينك">
+          </div>
+          <h1 class="form-title">تسجيل الدخول</h1>
+          <p class="form-subtitle">ادخل إلى حسابك للمتابعة</p>
+        </div>
+
+        <!-- رسائل Django -->
+        {% if messages %}
+        <div class="messages-container">
+          {% for message in messages %}
+          <div class="message {% if message.tags %}{{ message.tags }}{% endif %}">
+            {{ message }}
+          </div>
+          {% endfor %}
+        </div>
+        {% endif %}
+
+        {% if form.non_field_errors %}
+        <div class="message error">
+          {% for error in form.non_field_errors %}
+            {{ error }}
+          {% endfor %}
+        </div>
+        {% endif %}
+
+        <form method="post" novalidate class="login-form" autocomplete="on">
+          {% csrf_token %}
+
+          <div class="form-group">
+            <label for="id_email" class="form-label">
+              <span class="label-text">البريد الإلكتروني</span>
+              <span class="required">*</span>
+            </label>
+            <div class="input-wrapper">
+              <input
+                id="id_email"
+                name="email"
+                type="email"
+                required
+                inputmode="email"
+                autocomplete="email"
+                class="form-input{% if form.email.errors %} error{% endif %}"
+                placeholder="example@samilink.sa"
+                value="{{ form.email.value|default_if_none:'' }}"
+              >
+              <span class="input-icon">📧</span>
+            </div>
+            {% if form.email.errors %}
+            <div class="error-text">
+              {% for error in form.email.errors %}
+                {{ error }}
+              {% endfor %}
+            </div>
+            {% endif %}
+          </div>
+
+          <div class="form-group">
+            <label for="id_password" class="form-label">
+              <span class="label-text">كلمة المرور</span>
+              <span class="required">*</span>
+            </label>
+            <div class="input-wrapper">
+              <input
+                id="id_password"
+                name="password"
+                type="password"
+                required
+                autocomplete="current-password"
+                class="form-input{% if form.password.errors %} error{% endif %}"
+                placeholder="أدخل كلمة المرور"
+              >
+              <span class="input-icon">🔒</span>
+              <button type="button" class="password-toggle" aria-label="إظهار/إخفاء كلمة المرور">
+                <span class="toggle-icon">👁️</span>
+              </button>
+            </div>
+            {% if form.password.errors %}
+            <div class="error-text">
+              {% for error in form.password.errors %}
+                {{ error }}
+              {% endfor %}
+            </div>
+            {% endif %}
+          </div>
+
+          <div class="form-options">
+            <label class="checkbox-label">
+              <input type="checkbox" name="remember" class="checkbox-input">
+              <span class="checkbox-custom"></span>
+              <span class="checkbox-text">تذكرني على هذا الجهاز</span>
+            </label>
+            <a class="forgot-link" href="{% url 'accounts:password_reset' %}">
+              نسيت كلمة المرور؟
+            </a>
+          </div>
+
+          <button type="submit" class="btn btn-primary btn-full btn-login">
+            <span class="btn-text">تسجيل الدخول</span>
+            <span class="btn-loader" style="display: none;">⏳</span>
+          </button>
+        </form>
+
+        <div class="auth-divider">
+          <span>أو</span>
+        </div>
+
+        <div class="auth-links">
+          <p class="auth-link-text">
+            ليس لديك حساب؟
+            <a class="auth-link" href="{% url 'accounts:register' %}">إنشاء حساب جديد</a>
+          </p>
+        </div>
       </div>
-
-      <div class="flex items-center justify-between">
-        <label class="inline-flex items-center gap-2 text-sm text-slate-600 dark:text-slate-300">
-          <input type="checkbox" name="remember" class="rounded border-slate-300 dark:border-slate-600">
-          تذكرني
-        </label>
-        <a class="text-sm text-indigo-600 dark:text-indigo-400 hover:underline" href="{% url 'accounts:password_reset' %}">
-          نسيت كلمة المرور؟
-        </a>
-      </div>
-
-      <button class="w-full bg-indigo-600 hover:bg-indigo-700 text-white py-3 rounded-xl font-semibold transition focus:ring-2 focus:ring-offset-1 focus:ring-indigo-500">
-        دخول
-      </button>
-    </form>
-
-    <div class="text-center text-slate-600 dark:text-slate-300 mt-6">
-      ليس لديك حساب؟
-      <a class="text-indigo-600 dark:text-indigo-400 hover:underline" href="{% url 'accounts:register' %}">إنشاء حساب</a>
     </div>
   </div>
 </div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+  // إظهار/إخفاء كلمة المرور
+  var passwordToggle = document.querySelector('.password-toggle');
+  var passwordInput = document.getElementById('id_password');
+
+  if (passwordToggle && passwordInput) {
+    passwordToggle.addEventListener('click', function() {
+      var type = passwordInput.getAttribute('type') === 'password' ? 'text' : 'password';
+      passwordInput.setAttribute('type', type);
+
+      // تغيير الأيقونة
+      var toggleIcon = this.querySelector('.toggle-icon');
+      toggleIcon.textContent = type === 'password' ? '👁️' : '👁️‍🗨️';
+    });
+  }
+
+  // تأثيرات النموذج
+  var formInputs = document.querySelectorAll('.form-input');
+  formInputs.forEach(function(input) {
+    input.addEventListener('focus', function() {
+      this.parentElement.classList.add('focused');
+    });
+
+    input.addEventListener('blur', function() {
+      if (!this.value) {
+        this.parentElement.classList.remove('focused');
+      }
+    });
+
+    input.addEventListener('input', function() {
+      if (this.checkValidity()) {
+        this.classList.remove('error');
+      }
+    });
+  });
+
+  // تأثير تحميل الزر
+  var loginForm = document.querySelector('.login-form');
+  var loginButton = document.querySelector('.btn-login');
+
+  if (loginForm && loginButton) {
+    loginForm.addEventListener('submit', function() {
+      var btnText = loginButton.querySelector('.btn-text');
+      var btnLoader = loginButton.querySelector('.btn-loader');
+
+      if (btnText && btnLoader) {
+        btnText.style.display = 'none';
+        btnLoader.style.display = 'inline-block';
+        loginButton.disabled = true;
+      }
+    });
+  }
+
+  // إضافة تأثيرات scroll-reveal
+  var revealElements = document.querySelectorAll('.scroll-reveal');
+  var observer = new IntersectionObserver(function(entries) {
+    entries.forEach(function(entry) {
+      if (entry.isIntersecting) {
+        entry.target.classList.add('revealed');
+      }
+    });
+  }, { threshold: 0.1 });
+
+  revealElements.forEach(function(element) {
+    observer.observe(element);
+  });
+});
+</script>
 {% endblock %}

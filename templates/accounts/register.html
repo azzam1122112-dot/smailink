@@ -1,55 +1,818 @@
 {% extends "base.html" %}
-{% block title %}إنشاء حساب{% endblock %}
+{% load static %}
+
+{% block title %}إنشاء حساب - سامي لينك{% endblock %}
+
+{% block extra_head %}
+<style>
+/* تنسيقات عامة لواجهة الـ Auth (متوافقة مع login) */
+.auth-section {
+  min-height: 100vh;
+  background: linear-gradient(135deg, var(--primary-50) 0%, var(--surface-alt) 100%);
+  padding: 2rem 0;
+  display: flex;
+  align-items: center;
+}
+
+.auth-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 4rem;
+  align-items: center;
+  max-width: 1000px;
+  margin: 0 auto;
+}
+
+.auth-visual {
+  text-align: center;
+}
+
+.auth-card {
+  background: var(--white);
+  border-radius: var(--radius-xl);
+  padding: 3rem 2rem;
+  box-shadow: var(--shadow-xl);
+  border: 1px solid var(--dark-200);
+}
+
+.auth-icon {
+  width: 80px;
+  height: 80px;
+  background: linear-gradient(135deg, var(--primary-500), var(--primary-600));
+  border-radius: var(--radius-full);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0 auto 2rem;
+  color: white;
+}
+
+.auth-icon svg {
+  width: 40px;
+  height: 40px;
+}
+
+.auth-title {
+  font-size: 1.75rem;
+  font-weight: 700;
+  color: var(--dark-900);
+  margin-bottom: 1rem;
+}
+
+.auth-description {
+  color: var(--dark-600);
+  line-height: 1.6;
+  margin-bottom: 2rem;
+}
+
+.auth-features {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.auth-feature {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  color: var(--dark-700);
+}
+
+.feature-icon {
+  width: 24px;
+  height: 24px;
+  background: var(--primary-100);
+  color: var(--primary-600);
+  border-radius: var(--radius-full);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.875rem;
+  font-weight: 600;
+}
+
+.auth-form {
+  background: var(--white);
+  border-radius: var(--radius-xl);
+  padding: 2.5rem;
+  box-shadow: var(--shadow-xl);
+  border: 1px solid var(--dark-200);
+}
+
+.form-header {
+  text-align: center;
+  margin-bottom: 2rem;
+}
+
+.brand-logo-small {
+  width: 60px;
+  height: 60px;
+  background: linear-gradient(135deg, var(--primary-500), var(--primary-600));
+  border-radius: var(--radius-lg);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0 auto 1rem;
+}
+
+.brand-logo-small img {
+  width: 60%;
+  height: 60%;
+  filter: brightness(0) invert(1);
+}
+
+.form-title {
+  font-size: 1.75rem;
+  font-weight: 700;
+  color: var(--dark-900);
+  margin-bottom: 0.5rem;
+}
+
+.form-subtitle {
+  color: var(--dark-500);
+  font-size: 0.95rem;
+}
+
+.form-label {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  font-weight: 600;
+  color: var(--dark-700);
+  font-size: 0.9rem;
+}
+
+.required {
+  color: #ef4444;
+}
+
+.input-wrapper {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.form-input {
+  width: 100%;
+  padding: 0.875rem 1rem 0.875rem 3rem;
+  border: 2px solid var(--dark-200);
+  border-radius: var(--radius-lg);
+  background: var(--white);
+  color: var(--dark-900);
+  font-size: 0.95rem;
+  transition: var(--transition);
+}
+
+.form-input:focus {
+  outline: none;
+  border-color: var(--primary-500);
+  box-shadow: 0 0 0 3px rgba(34, 197, 94, 0.1);
+}
+
+.form-input.error {
+  border-color: #ef4444;
+}
+
+.input-icon {
+  position: absolute;
+  right: 1rem;
+  color: var(--dark-400);
+  font-size: 1.1rem;
+}
+
+.password-toggle {
+  position: absolute;
+  left: 1rem;
+  background: none;
+  border: none;
+  color: var(--dark-400);
+  cursor: pointer;
+  padding: 0.25rem;
+  border-radius: var(--radius);
+  transition: var(--transition);
+}
+
+.password-toggle:hover {
+  color: var(--dark-600);
+  background: var(--dark-100);
+}
+
+.error-text {
+  color: #ef4444;
+  font-size: 0.875rem;
+  margin-top: 0.25rem;
+}
+
+.messages-container {
+  margin-bottom: 1.5rem;
+}
+
+.message {
+  padding: 0.875rem 1rem;
+  border-radius: var(--radius-lg);
+  margin-bottom: 0.5rem;
+  font-size: 0.9rem;
+}
+
+.message.success {
+  background: var(--primary-50);
+  color: var(--primary-700);
+  border: 1px solid var(--primary-200);
+}
+
+.message.error {
+  background: #fef2f2;
+  color: #dc2626;
+  border: 1px solid #fecaca;
+}
+
+.message.info {
+  background: var(--secondary-50);
+  color: var(--secondary-700);
+  border: 1px solid var(--secondary-200);
+}
+
+/* تنسيقات خاصة بصفحة التسجيل */
+.register-form {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+}
+
+.form-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1.5rem;
+}
+
+.form-group {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.form-group.full-width {
+  grid-column: 1 / -1;
+}
+
+.optional {
+  color: var(--dark-400);
+  font-size: 0.8rem;
+  font-weight: normal;
+}
+
+/* مؤشر قوة كلمة المرور */
+.password-strength {
+  margin-top: 0.5rem;
+}
+
+.strength-bar {
+  width: 100%;
+  height: 4px;
+  background: var(--dark-200);
+  border-radius: var(--radius-full);
+  overflow: hidden;
+  margin-bottom: 0.25rem;
+}
+
+.strength-fill {
+  height: 100%;
+  width: 0%;
+  border-radius: var(--radius-full);
+  transition: all 0.3s ease;
+}
+
+.strength-fill[data-strength="0"] { width: 20%; background: #ef4444; }
+.strength-fill[data-strength="1"] { width: 40%; background: #f59e0b; }
+.strength-fill[data-strength="2"] { width: 60%; background: #eab308; }
+.strength-fill[data-strength="3"] { width: 80%; background: #84cc16; }
+.strength-fill[data-strength="4"] { width: 100%; background: #22c55e; }
+
+.strength-text {
+  font-size: 0.75rem;
+  color: var(--dark-500);
+}
+
+/* مطابقة كلمة المرور */
+.password-match {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-top: 0.5rem;
+  font-size: 0.75rem;
+}
+
+.match-icon {
+  color: var(--dark-400);
+}
+
+.match-text {
+  color: var(--dark-500);
+}
+
+.password-match.valid .match-icon {
+  color: var(--primary-500);
+}
+
+.password-match.valid .match-text {
+  color: var(--primary-600);
+  font-weight: 600;
+}
+
+.password-match.invalid .match-icon {
+  color: #ef4444;
+}
+
+.password-match.invalid .match-text {
+  color: #dc2626;
+  font-weight: 600;
+}
+
+/* شروط الخدمة */
+.terms-section {
+  padding: 1rem;
+  background: var(--primary-50);
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--primary-200);
+}
+
+.terms-link {
+  color: var(--primary-600);
+  text-decoration: none;
+  font-weight: 600;
+}
+
+.terms-link:hover {
+  text-decoration: underline;
+}
+
+/* قائمة الأخطاء */
+.error-list {
+  margin: 0.5rem 0 0 1rem;
+  padding: 0;
+}
+
+.error-list li {
+  margin-bottom: 0.25rem;
+  color: #dc2626;
+}
+
+/* التكيّف مع الشاشات الصغيرة */
+@media (max-width: 768px) {
+  .auth-grid {
+    grid-template-columns: 1fr;
+    gap: 2rem;
+  }
+
+  .auth-visual {
+    display: none;
+  }
+
+  .auth-form {
+    padding: 2rem 1.5rem;
+  }
+
+  .form-grid {
+    grid-template-columns: 1fr;
+    gap: 1rem;
+  }
+
+  .form-group.full-width {
+    grid-column: 1;
+  }
+}
+
+@media (max-width: 480px) {
+  .auth-section {
+    padding: 1rem;
+  }
+
+  .auth-form {
+    padding: 1.5rem 1rem;
+  }
+
+  .form-title {
+    font-size: 1.5rem;
+  }
+
+  .terms-section {
+    padding: 0.75rem;
+  }
+
+  .checkbox-text {
+    font-size: 0.85rem;
+  }
+}
+</style>
+{% endblock %}
+
 {% block content %}
-<div class="min-h-[70vh] grid place-items-center bg-gradient-to-tr from-fuchsia-50 to-rose-50">
-  <div class="w-full max-w-2xl bg-white/80 backdrop-blur-xl rounded-2xl shadow-2xl p-8 border border-rose-100">
-    <h1 class="text-2xl font-bold text-slate-900 mb-2 text-center">إنشاء حساب جديد</h1>
-    <p class="text-slate-500 text-center mb-6">سجّل بياناتك للبدء</p>
-
-    {% include "accounts/_messages.html" %}
-
-    <form method="post" novalidate class="grid md:grid-cols-2 gap-4">
-      {% csrf_token %}
-      <div class="md:col-span-1">
-        <label class="block mb-1 text-slate-700">البريد الإلكتروني</label>
-        {{ form.email }}
-      </div>
-      <div class="md:col-span-1">
-        <label class="block mb-1 text-slate-700">الجوال (اختياري)</label>
-        {{ form.phone }}
-      </div>
-      <div class="md:col-span-2">
-        <label class="block mb-1 text-slate-700">الاسم</label>
-        {{ form.name }}
-      </div>
-      <div class="md:col-span-1">
-        <label class="block mb-1 text-slate-700">كلمة المرور</label>
-        {{ form.password1 }}
-      </div>
-      <div class="md:col-span-1">
-        <label class="block mb-1 text-slate-700">تأكيد كلمة المرور</label>
-        {{ form.password2 }}
-      </div>
-
-      {% if form.errors %}
-      <div class="md:col-span-2">
-        <div class="p-3 rounded-lg bg-red-50 text-red-700 border border-red-200">
-          يرجى تصحيح الأخطاء أدناه.
-          {{ form.non_field_errors }}
+<div class="auth-section">
+  <div class="container">
+    <div class="auth-grid">
+      <!-- الجانب البصري -->
+      <div class="auth-visual scroll-reveal">
+        <div class="auth-card">
+          <div class="auth-icon">
+            <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <path d="M16 7C16 9.20914 14.2091 11 12 11C9.79086 11 8 9.20914 8 7C8 4.79086 9.79086 3 12 3C14.2091 3 16 4.79086 16 7Z" stroke="currentColor" stroke-width="2"/>
+              <path d="M12 14C8.13401 14 5 17.134 5 21H19C19 17.134 15.866 14 12 14Z" stroke="currentColor" stroke-width="2"/>
+              <path d="M19 7C19 9.20914 17.2091 11 15 11" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+              <path d="M5 7C5 9.20914 6.79086 11 9 11" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+            </svg>
+          </div>
+          <h2 class="auth-title">انضم إلى منصة سامي لينك</h2>
+          <p class="auth-description">
+            سجل الآن وابدأ رحلتك في إدارة مشاريعك التقنية بكل احترافية وسهولة
+          </p>
+          <div class="auth-features">
+            <div class="auth-feature">
+              <span class="feature-icon">✓</span>
+              <span>إدارة مشاريع متكاملة</span>
+            </div>
+            <div class="auth-feature">
+              <span class="feature-icon">✓</span>
+              <span>تواصل مع أفضل التقنيين</span>
+            </div>
+            <div class="auth-feature">
+              <span class="feature-icon">✓</span>
+              <span>فواتير ومدفوعات آمنة</span>
+            </div>
+            <div class="auth-feature">
+              <span class="feature-icon">✓</span>
+              <span>متابعة حية للمشاريع</span>
+            </div>
+          </div>
         </div>
       </div>
-      {% endif %}
 
-      <div class="md:col-span-2">
-        <button class="w-full bg-rose-600 hover:bg-rose-700 text-white py-3 rounded-xl font-semibold transition">
-          إنشاء الحساب
-        </button>
+      <!-- نموذج التسجيل -->
+      <div class="auth-form scroll-reveal">
+        <div class="form-header">
+          <div class="brand-logo-small">
+            <img src="{% static 'img/logo.png' %}" alt="سامي لينك">
+          </div>
+          <h1 class="form-title">إنشاء حساب جديد</h1>
+          <p class="form-subtitle">املأ البيانات لبدء رحلتك معنا</p>
+        </div>
+
+        <!-- رسائل النظام -->
+        {% if messages %}
+        <div class="messages-container">
+          {% for message in messages %}
+          <div class="message {% if message.tags %}{{ message.tags }}{% endif %}">
+            {{ message }}
+          </div>
+          {% endfor %}
+        </div>
+        {% endif %}
+
+        <form method="post" novalidate class="register-form" autocomplete="on">
+          {% csrf_token %}
+
+          <div class="form-grid">
+            <!-- البريد الإلكتروني -->
+            <div class="form-group">
+              <label for="id_email" class="form-label">
+                <span class="label-text">البريد الإلكتروني</span>
+                <span class="required">*</span>
+              </label>
+              <div class="input-wrapper">
+                <input
+                  id="id_email"
+                  name="email"
+                  type="email"
+                  required
+                  inputmode="email"
+                  autocomplete="email"
+                  class="form-input{% if form.email.errors %} error{% endif %}"
+                  placeholder="example@samilink.sa"
+                  value="{{ form.email.value|default_if_none:'' }}"
+                >
+                <span class="input-icon">📧</span>
+              </div>
+              {% if form.email.errors %}
+              <div class="error-text">
+                {% for error in form.email.errors %}
+                  {{ error }}
+                {% endfor %}
+              </div>
+              {% endif %}
+            </div>
+
+            <!-- رقم الجوال -->
+            <div class="form-group">
+              <label for="id_phone" class="form-label">
+                <span class="label-text">رقم الجوال</span>
+                <span class="optional">اختياري</span>
+              </label>
+              <div class="input-wrapper">
+                <input
+                  id="id_phone"
+                  name="phone"
+                  type="tel"
+                  inputmode="tel"
+                  autocomplete="tel"
+                  class="form-input{% if form.phone.errors %} error{% endif %}"
+                  placeholder="05XXXXXXXX"
+                  value="{{ form.phone.value|default_if_none:'' }}"
+                >
+                <span class="input-icon">📱</span>
+              </div>
+              {% if form.phone.errors %}
+              <div class="error-text">
+                {% for error in form.phone.errors %}
+                  {{ error }}
+                {% endfor %}
+              </div>
+              {% endif %}
+            </div>
+
+            <!-- الاسم الكامل -->
+            <div class="form-group full-width">
+              <label for="id_name" class="form-label">
+                <span class="label-text">الاسم الكامل</span>
+                <span class="required">*</span>
+              </label>
+              <div class="input-wrapper">
+                <input
+                  id="id_name"
+                  name="name"
+                  type="text"
+                  required
+                  autocomplete="name"
+                  class="form-input{% if form.name.errors %} error{% endif %}"
+                  placeholder="أدخل اسمك الكامل"
+                  value="{{ form.name.value|default_if_none:'' }}"
+                >
+                <span class="input-icon">👤</span>
+              </div>
+              {% if form.name.errors %}
+              <div class="error-text">
+                {% for error in form.name.errors %}
+                  {{ error }}
+                {% endfor %}
+              </div>
+              {% endif %}
+            </div>
+
+            <!-- كلمة المرور -->
+            <div class="form-group">
+              <label for="id_password1" class="form-label">
+                <span class="label-text">كلمة المرور</span>
+                <span class="required">*</span>
+              </label>
+              <div class="input-wrapper">
+                <input
+                  id="id_password1"
+                  name="password1"
+                  type="password"
+                  required
+                  autocomplete="new-password"
+                  class="form-input{% if form.password1.errors %} error{% endif %}"
+                  placeholder="كلمة المرور الجديدة"
+                >
+                <span class="input-icon">🔒</span>
+                <button type="button" class="password-toggle" data-target="id_password1">
+                  <span class="toggle-icon">👁️</span>
+                </button>
+              </div>
+              {% if form.password1.errors %}
+              <div class="error-text">
+                {% for error in form.password1.errors %}
+                  {{ error }}
+                {% endfor %}
+              </div>
+              {% endif %}
+              <div class="password-strength">
+                <div class="strength-bar">
+                  <div class="strength-fill" data-strength="0"></div>
+                </div>
+                <span class="strength-text">قوة كلمة المرور</span>
+              </div>
+            </div>
+
+            <!-- تأكيد كلمة المرور -->
+            <div class="form-group">
+              <label for="id_password2" class="form-label">
+                <span class="label-text">تأكيد كلمة المرور</span>
+                <span class="required">*</span>
+              </label>
+              <div class="input-wrapper">
+                <input
+                  id="id_password2"
+                  name="password2"
+                  type="password"
+                  required
+                  autocomplete="new-password"
+                  class="form-input{% if form.password2.errors %} error{% endif %}"
+                  placeholder="أعد إدخال كلمة المرور"
+                >
+                <span class="input-icon">🔒</span>
+                <button type="button" class="password-toggle" data-target="id_password2">
+                  <span class="toggle-icon">👁️</span>
+                </button>
+              </div>
+              {% if form.password2.errors %}
+              <div class="error-text">
+                {% for error in form.password2.errors %}
+                  {{ error }}
+                {% endfor %}
+              </div>
+              {% endif %}
+              <div class="password-match">
+                <span class="match-icon">↯</span>
+                <span class="match-text">يجب أن تتطابق كلمتا المرور</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- رسائل الخطأ العامة -->
+          {% if form.non_field_errors %}
+          <div class="message error">
+            <strong>يرجى تصحيح الأخطاء التالية:</strong>
+            <ul class="error-list">
+              {% for error in form.non_field_errors %}
+                <li>{{ error }}</li>
+              {% endfor %}
+            </ul>
+          </div>
+          {% endif %}
+
+          <!-- شروط الخدمة -->
+         
+          <button type="submit" class="btn btn-primary btn-full btn-register">
+            <span class="btn-text">إنشاء الحساب</span>
+            <span class="btn-loader" style="display: none;">⏳</span>
+          </button>
+        </form>
+
+        <div class="auth-divider">
+          <span>أو</span>
+        </div>
+
+        <div class="auth-links">
+          <p class="auth-link-text">
+            لديك حساب بالفعل؟
+            <a class="auth-link" href="{% url 'accounts:login' %}">سجل الدخول الآن</a>
+          </p>
+        </div>
       </div>
-    </form>
-
-    <div class="text-center text-slate-600 mt-6">
-      لديك حساب؟ <a class="text-rose-600 hover:underline" href="{% url 'accounts:login' %}">تسجيل الدخول</a>
     </div>
   </div>
 </div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+  // إظهار/إخفاء كلمة المرور
+  var passwordToggles = document.querySelectorAll('.password-toggle');
+
+  passwordToggles.forEach(function(toggle) {
+    toggle.addEventListener('click', function() {
+      var targetId = this.getAttribute('data-target');
+      var passwordInput = document.getElementById(targetId);
+
+      if (passwordInput) {
+        var type = passwordInput.getAttribute('type') === 'password' ? 'text' : 'password';
+        passwordInput.setAttribute('type', type);
+
+        var toggleIcon = this.querySelector('.toggle-icon');
+        toggleIcon.textContent = type === 'password' ? '👁️' : '👁️‍🗨️';
+      }
+    });
+  });
+
+  // التحقق من قوة كلمة المرور
+  var passwordInput = document.getElementById('id_password1');
+  var strengthFill = document.querySelector('.strength-fill');
+  var strengthText = document.querySelector('.strength-text');
+
+  function calculatePasswordStrength(password) {
+    var strength = 0;
+
+    if (password.length >= 8) strength += 1;
+    if (password.match(/[a-z]/) && password.match(/[A-Z]/)) strength += 1;
+    if (password.match(/\d/)) strength += 1;
+    if (password.match(/[^a-zA-Z\d]/)) strength += 1;
+    if (password.length >= 12) strength += 1;
+
+    if (strength > 4) strength = 4;
+    if (strength < 0) strength = 0;
+    return strength;
+  }
+
+  if (passwordInput && strengthFill && strengthText) {
+    passwordInput.addEventListener('input', function() {
+      var password = this.value;
+      var strength = calculatePasswordStrength(password);
+
+      strengthFill.setAttribute('data-strength', String(strength));
+
+      var strengthLabels = ['ضعيفة جداً', 'ضعيفة', 'متوسطة', 'قوية', 'قوية جداً'];
+      strengthText.textContent = 'قوة كلمة المرور: ' + strengthLabels[strength];
+    });
+  }
+
+  // التحقق من مطابقة كلمة المرور
+  var password1 = document.getElementById('id_password1');
+  var password2 = document.getElementById('id_password2');
+  var passwordMatch = document.querySelector('.password-match');
+
+  function checkPasswordMatch() {
+    if (!password1 || !password2 || !passwordMatch) return;
+
+    var match = password1.value === password2.value;
+    var hasValue = password2.value.length > 0;
+
+    var icon = passwordMatch.querySelector('.match-icon');
+    var text = passwordMatch.querySelector('.match-text');
+
+    if (!icon || !text) return;
+
+    if (!hasValue) {
+      passwordMatch.classList.remove('valid');
+      passwordMatch.classList.remove('invalid');
+      icon.textContent = '↯';
+      text.textContent = 'يجب أن تتطابق كلمتا المرور';
+      return;
+    }
+
+    if (match) {
+      passwordMatch.classList.add('valid');
+      passwordMatch.classList.remove('invalid');
+      icon.textContent = '✓';
+      text.textContent = 'كلمتا المرور متطابقتان';
+    } else {
+      passwordMatch.classList.add('invalid');
+      passwordMatch.classList.remove('valid');
+      icon.textContent = '✗';
+      text.textContent = 'كلمتا المرور غير متطابقتان';
+    }
+  }
+
+  if (password1 && password2) {
+    password1.addEventListener('input', checkPasswordMatch);
+    password2.addEventListener('input', checkPasswordMatch);
+  }
+
+  // تأثيرات النموذج
+  var formInputs = document.querySelectorAll('.form-input');
+  formInputs.forEach(function(input) {
+    input.addEventListener('focus', function() {
+      this.parentElement.classList.add('focused');
+    });
+
+    input.addEventListener('blur', function() {
+      if (!this.value) {
+        this.parentElement.classList.remove('focused');
+      }
+    });
+  });
+
+  // تأثير تحميل الزر + التحقق من الموافقة على الشروط
+  var registerForm = document.querySelector('.register-form');
+  var registerButton = document.querySelector('.btn-register');
+
+  if (registerForm && registerButton) {
+    registerForm.addEventListener('submit', function(e) {
+      var agreeTerms = document.querySelector('input[name="agree_terms"]');
+
+      if (agreeTerms && !agreeTerms.checked) {
+        e.preventDefault();
+        if (typeof window.showToast === 'function') {
+          window.showToast('يجب الموافقة على شروط الخدمة وسياسة الخصوصية', 'error');
+        } else {
+          alert('يجب الموافقة على شروط الخدمة وسياسة الخصوصية');
+        }
+        return;
+      }
+
+      var btnText = registerButton.querySelector('.btn-text');
+      var btnLoader = registerButton.querySelector('.btn-loader');
+
+      if (btnText && btnLoader) {
+        btnText.style.display = 'none';
+        btnLoader.style.display = 'inline-block';
+        registerButton.disabled = true;
+      }
+    });
+  }
+
+  // إضافة تأثيرات scroll-reveal
+  var revealElements = document.querySelectorAll('.scroll-reveal');
+  var observer = new IntersectionObserver(function(entries) {
+    entries.forEach(function(entry) {
+      if (entry.isIntersecting) {
+        entry.target.classList.add('revealed');
+      }
+    });
+  }, { threshold: 0.1 });
+
+  revealElements.forEach(function(element) {
+    observer.observe(element);
+  });
+});
+</script>
 {% endblock %}

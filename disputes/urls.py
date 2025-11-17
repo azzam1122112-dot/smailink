@@ -90,4 +90,6 @@ urlpatterns += [
     path("open/<int:request_id>/", open_alias_short, name="open_alias_short"),
     path("d/<int:pk>/", detail_alias_id, name="detail_alias_id"),
     path("d/<int:pk>/status/", update_status_alias, name="update_status_alias"),
+    path("<int:pk>/", views.dispute_detail, name="detail"),
+
 ]

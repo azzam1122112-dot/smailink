@@ -1,198 +1,455 @@
-{# disputes/templates/disputes/open_dispute.html #}
+{# disputes/templates/disputes/dispute_open.html (أو الاسم الذي تستخدمه في urls) #}
 {% extends "base.html" %}
 {% block title %}فتح نزاع — طلب #{{ req.pk }}{% endblock %}
 
-{% block extra_css %}
+{% block extra_head %}
 <style>
-  .fade-in{animation:fadeIn .45s ease} @keyframes fadeIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
-  .card{border-radius:1rem}
-  .hint{font-size:.8rem;color:#64748b}
-  .danger{background:#fef2f2;border-color:#fecaca;color:#991b1b}
-  .input-focus:focus{box-shadow:0 0 0 3px rgba(99,102,241,.12);outline:0}
-  .counter{font-size:.75rem}
-  .backdrop{position:fixed;inset:0;background:rgba(2,6,23,.45);display:none;z-index:60}
-  .modal{background:var(--tw-bg, #fff);border-radius:1rem;max-width:28rem;margin-inline:auto}
-  .dark .modal{--tw-bg:#0f172a}
+  /* صفحة فتح النزاع */
+  .page-open-dispute {
+    padding: 3rem 0 4rem;
+  }
+
+  .open-dispute-inner {
+    max-width: 720px;
+    margin: 0 auto;
+  }
+
+  .fade-in {
+    animation: fadeIn .45s ease-out;
+  }
+
+  @keyframes fadeIn {
+    from {
+      opacity: 0;
+      transform: translateY(8px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+
+  .open-dispute-card {
+    background: var(--white);
+    border-radius: 1.4rem;
+    border: 1px solid var(--dark-100);
+    box-shadow: var(--shadow-md);
+    padding: 1.8rem 1.6rem;
+  }
+
+  .open-dispute-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 1rem;
+    margin-bottom: 1.5rem;
+  }
+
+  .open-dispute-title {
+    font-size: 1.35rem;
+    font-weight: 800;
+    color: var(--dark-900);
+  }
+
+  .open-dispute-subtitle {
+    font-size: 0.9rem;
+    color: var(--dark-500);
+    margin-top: 0.3rem;
+  }
+
+  .open-dispute-title span {
+    color: var(--primary-700);
+  }
+
+  /* تنسيق الأخطاء العامة */
+  .alert-danger {
+    margin-bottom: 1.2rem;
+    padding: 0.8rem 1rem;
+    border-radius: 1rem;
+    border: 1px solid #fecaca;
+    background: #fef2f2;
+    color: #991b1b;
+    font-size: 0.85rem;
+  }
+
+  /* مجموعات الحقول */
+  .field-group {
+    margin-bottom: 1.4rem;
+  }
+
+  .field-label {
+    display: block;
+    font-size: 0.9rem;
+    font-weight: 600;
+    color: var(--dark-700);
+    margin-bottom: 0.3rem;
+  }
+
+  .field-hint {
+    font-size: 0.78rem;
+    color: var(--dark-500);
+  }
+
+  .field-input,
+  .field-textarea,
+  .field-select {
+    width: 100%;
+    border-radius: 0.9rem;
+    border: 1px solid var(--dark-200);
+    padding: 0.5rem 0.75rem;
+    font-size: 0.9rem;
+    outline: none;
+    transition: var(--transition-fast);
+    background: #fff;
+  }
+
+  .field-textarea {
+    min-height: 120px;
+    resize: vertical;
+  }
+
+  .field-input:focus,
+  .field-textarea:focus,
+  .field-select:focus {
+    border-color: var(--primary-500);
+    box-shadow: 0 0 0 3px rgba(59, 130, 246, .16);
+  }
+
+  .field-error {
+    margin-top: 0.25rem;
+    font-size: 0.78rem;
+    color: #b91c1c;
+  }
+
+  /* عدّاد الأحرف */
+  .field-footer {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-top: 0.3rem;
+  }
+
+  .char-counter {
+    font-size: 0.75rem;
+    color: var(--dark-500);
+  }
+
+  /* منطقة الأزرار السفلية */
+  .form-actions {
+    margin-top: 1.8rem;
+    display: flex;
+    gap: 0.6rem;
+    flex-wrap: wrap;
+  }
+
+  .btn.is-disabled {
+    opacity: .6;
+    pointer-events: none;
+  }
+
+  @media (max-width: 640px) {
+    .open-dispute-card {
+      padding: 1.4rem 1.1rem;
+    }
+
+    .open-dispute-header {
+      flex-direction: column-reverse;
+      align-items: flex-start;
+    }
+
+    .open-dispute-title {
+      font-size: 1.2rem;
+    }
+  }
+
+  /* المودال */
+  .modal-backdrop {
+    position: fixed;
+    inset: 0;
+    background: rgba(15, 23, 42, 0.5);
+    display: none;
+    z-index: 60;
+  }
+
+  .modal-backdrop.is-visible {
+    display: block;
+  }
+
+  .modal-box {
+    background: #fff;
+    border-radius: 1.2rem;
+    max-width: 420px;
+    margin: 6rem auto 0;
+    padding: 1.5rem 1.4rem 1.3rem;
+    box-shadow: 0 18px 40px rgba(15, 23, 42, .28);
+  }
+
+  .modal-title {
+    font-size: 1.05rem;
+    font-weight: 700;
+    color: var(--dark-900);
+    margin-bottom: 0.4rem;
+  }
+
+  .modal-text {
+    font-size: 0.88rem;
+    color: var(--dark-600);
+  }
+
+  .modal-actions {
+    margin-top: 1.2rem;
+    display: flex;
+    gap: 0.5rem;
+    justify-content: flex-end;
+  }
 </style>
 {% endblock %}
 
 {% block content %}
-<section class="max-w-2xl mx-auto rtl py-8" dir="rtl">
-  <div class="card border bg-white dark:bg-slate-800 p-6 space-y-5 fade-in">
-    <header class="flex items-start justify-between">
-      <div>
-        <h1 class="text-xl font-extrabold text-slate-900 dark:text-white">
-          فتح نزاع للطلب <span class="text-indigo-600 dark:text-indigo-300">#{{ req.pk }}</span>
-        </h1>
-        <p class="mt-1 text-slate-600 dark:text-slate-300 text-sm">
-          سيتم إشعار قسم النزاعات وإيقاف أي صرف مالي تلقائي لحين معالجة الطلب.
-        </p>
-      </div>
-      <a href="{% url 'marketplace:request_detail' req.pk %}"
-         class="btn btn-light">
-        رجوع
-      </a>
-    </header>
+<section class="page-open-dispute" dir="rtl">
+  <div class="container open-dispute-inner">
+    <div class="open-dispute-card fade-in">
 
-    {# أخطاء عامة للنموذج #}
-    {% if form.non_field_errors %}
-      <div class="p-3 rounded-xl border danger">
-        {% for err in form.non_field_errors %}
-          <div class="text-sm">{{ err }}</div>
-        {% endfor %}
-      </div>
-    {% endif %}
-
-    <form id="open-dispute-form"
-          method="post"
-          action="{% url 'disputes:open_by_request' req.pk %}"
-          novalidate>
-      {% csrf_token %}
-      {{ form.media }}
-
-      <div class="space-y-5">
-        {# العنوان #}
+      {# رأس الصفحة #}
+      <header class="open-dispute-header">
         <div>
-          <label class="block text-sm font-semibold text-slate-700 dark:text-slate-200 mb-1">
+          <h1 class="open-dispute-title">
+            فتح نزاع للطلب <span>#{{ req.pk }}</span>
+          </h1>
+          <p class="open-dispute-subtitle">
+            سيتم إشعار قسم النزاعات وإيقاف أي صرف مالي تلقائي حتى تتم مراجعة النزاع.
+          </p>
+        </div>
+        <a href="{% url 'marketplace:request_detail' req.pk %}" class="btn btn-light">
+          رجوع إلى الطلب
+        </a>
+      </header>
+
+      {# أخطاء عامة للنموذج #}
+      {% if form.non_field_errors %}
+        <div class="alert-danger">
+          {% for err in form.non_field_errors %}
+            <div>{{ err }}</div>
+          {% endfor %}
+        </div>
+      {% endif %}
+
+      <form id="open-dispute-form"
+            method="post"
+            action="{% url 'disputes:open_by_request' req.pk %}"
+            novalidate>
+        {% csrf_token %}
+        {{ form.media }}
+
+        {# العنوان #}
+        <div class="field-group">
+          <label for="{{ form.title.id_for_label }}" class="field-label">
             العنوان
           </label>
-          {{ form.title|add_class:"w-full rounded-xl border px-4 py-2 input-focus bg-white dark:bg-slate-700 dark:border-slate-600" }}
+          {{ form.title }}
           {% if form.title.errors %}
-            <p class="mt-1 text-xs text-rose-600">
-              {% for e in form.title.errors %}{{ e }}{% if not forloop.last %}<br>{% endif %}{% endfor %}
-            </p>
+            <div class="field-error">
+              {% for e in form.title.errors %}
+                {{ e }}{% if not forloop.last %}<br>{% endif %}
+              {% endfor %}
+            </div>
           {% endif %}
-          <div class="flex items-center justify-between mt-1">
-            <span class="hint">اكتب وصفًا مختصرًا وواضحًا لموضوع النزاع.</span>
-            <span class="counter text-slate-500" data-counter-for="id_title"></span>
+          <div class="field-footer">
+            <span class="field-hint">
+              اكتب وصفًا مختصرًا وواضحًا لموضوع النزاع.
+            </span>
+            <span class="char-counter" data-counter-for="id_title"></span>
           </div>
         </div>
 
         {# السبب #}
-        <div>
-          <label class="block text-sm font-semibold text-slate-700 dark:text-slate-200 mb-1">
+        <div class="field-group">
+          <label for="{{ form.reason.id_for_label }}" class="field-label">
             السبب
           </label>
-          {{ form.reason|add_class:"w-full rounded-xl border px-4 py-2 input-focus bg-white dark:bg-slate-700 dark:border-slate-600" }}
+          {{ form.reason }}
           {% if form.reason.errors %}
-            <p class="mt-1 text-xs text-rose-600">
-              {% for e in form.reason.errors %}{{ e }}{% if not forloop.last %}<br>{% endif %}{% endfor %}
-            </p>
+            <div class="field-error">
+              {% for e in form.reason.errors %}
+                {{ e }}{% if not forloop.last %}<br>{% endif %}
+              {% endfor %}
+            </div>
           {% endif %}
-          <div class="flex items-center justify-between mt-1">
-            <span class="hint">اختر/اكتب سببًا محددًا يُسهل المعالجة.</span>
-            <span class="counter text-slate-500" data-counter-for="id_reason"></span>
+          <div class="field-footer">
+            <span class="field-hint">
+              اختر أو اكتب سببًا محددًا يُسهّل على الفريق معالجة النزاع.
+            </span>
+            <span class="char-counter" data-counter-for="id_reason"></span>
           </div>
         </div>
 
         {# التفاصيل الإضافية #}
-        <div>
-          <label class="block text-sm font-semibold text-slate-700 dark:text-slate-200 mb-1">
+        <div class="field-group">
+          <label for="{{ form.details.id_for_label }}" class="field-label">
             تفاصيل إضافية
           </label>
-          {{ form.details|add_class:"w-full rounded-xl border px-4 py-3 input-focus bg-white dark:bg-slate-700 dark:border-slate-600" }}
+          {{ form.details }}
           {% if form.details.errors %}
-            <p class="mt-1 text-xs text-rose-600">
-              {% for e in form.details.errors %}{{ e }}{% if not forloop.last %}<br>{% endif %}{% endfor %}
-            </p>
+            <div class="field-error">
+              {% for e in form.details.errors %}
+                {{ e }}{% if not forloop.last %}<br>{% endif %}
+              {% endfor %}
+            </div>
           {% endif %}
-          <div class="flex items-center justify-between mt-1">
-            <span class="hint">أدرج وقائع مختصرة وأدلّة (أرقام فواتير/مراحل… إلخ).</span>
-            <span class="counter text-slate-500" data-counter-for="id_details"></span>
+          <div class="field-footer">
+            <span class="field-hint">
+              أدرج وقائع مختصرة وأدلّة (أرقام فواتير، مراحل، تواريخ… إلخ).
+            </span>
+            <span class="char-counter" data-counter-for="id_details"></span>
           </div>
         </div>
 
-        {# اختياري: ربط النزاع بمرحلة معينة إن رغبت #}
+        {# ربط النزاع بمرحلة معينة (اختياري) #}
         {% if request.GET.milestone_id %}
           <input type="hidden" name="milestone_id" value="{{ request.GET.milestone_id }}">
         {% endif %}
-      </div>
 
-      <div class="mt-6 flex items-center gap-3">
-        <button id="submit-btn" type="button"
-                class="btn btn-danger px-5">
-          فتح نزاع
-        </button>
-        <a href="{% url 'marketplace:request_detail' req.pk %}" class="btn btn-ghost">
-          رجوع
-        </a>
-      </div>
-    </form>
+        <div class="form-actions">
+          <button id="submit-btn" type="button" class="btn btn-danger">
+            فتح النزاع
+          </button>
+          <a href="{% url 'marketplace:request_detail' req.pk %}" class="btn btn-ghost">
+            إلغاء والرجوع
+          </a>
+        </div>
+      </form>
+    </div>
   </div>
 </section>
 
-{# Modal تأكيد خفيف #}
-<div id="confirm-backdrop" class="backdrop">
-  <div class="modal border mx-4 mt-24 p-6 shadow-xl">
-    <h3 class="text-lg font-bold text-slate-900 dark:text-white">تأكيد فتح النزاع</h3>
-    <p class="mt-2 text-slate-600 dark:text-slate-300 text-sm">
-      سيتم فتح نزاع لهذا الطلب وإيقاف أي صرف حتى تتم المراجعة. هل تريد المتابعة؟
+{# نافذة تأكيد بسيطة #}
+<div id="confirm-backdrop" class="modal-backdrop">
+  <div class="modal-box" role="dialog" aria-modal="true">
+    <h3 class="modal-title">تأكيد فتح النزاع</h3>
+    <p class="modal-text">
+      سيتم فتح نزاع لهذا الطلب وإيقاف أي صرف مالي حتى تتم المراجعة.
+      هل تريد المتابعة؟
     </p>
-    <div class="mt-5 flex gap-2 justify-end">
-      <button id="cancel-confirm" class="btn btn-light">إلغاء</button>
-      <button id="confirm-submit" class="btn btn-danger">تأكيد</button>
+    <div class="modal-actions">
+      <button id="cancel-confirm" type="button" class="btn btn-light">
+        تراجع
+      </button>
+      <button id="confirm-submit" type="button" class="btn btn-danger">
+        تأكيد فتح النزاع
+      </button>
     </div>
   </div>
 </div>
 
 <script>
-(function(){
-  const form = document.getElementById('open-dispute-form');
-  const submitBtn = document.getElementById('submit-btn');
-  const backdrop = document.getElementById('confirm-backdrop');
-  const confirmBtn = document.getElementById('confirm-submit');
-  const cancelBtn = document.getElementById('cancel-confirm');
+(function () {
+  var form = document.getElementById("open-dispute-form");
+  var submitBtn = document.getElementById("submit-btn");
+  var backdrop = document.getElementById("confirm-backdrop");
+  var confirmBtn = document.getElementById("confirm-submit");
+  var cancelBtn = document.getElementById("cancel-confirm");
 
-  // عدّادات الأحرف (تقرأ maxlength إن وُجد وإلا تعرض العدد الحالي فقط)
-  function wireCounter(id){
-    const el = document.getElementById(id);
-    const counter = document.querySelector('[data-counter-for="'+id+'"]');
-    if(!el || !counter) return;
-    const max = el.getAttribute('maxlength');
-    const update = () => {
-      const len = (el.value || '').length;
-      counter.textContent = max ? (len + ' / ' + max) : (len + ' حرف');
-    };
-    el.addEventListener('input', update);
+  // إضافة كلاس تنسيق للحقول (حتى لو لم تُضبط من الفورم)
+  ["id_title", "id_reason", "id_details"].forEach(function (id) {
+    var el = document.getElementById(id);
+    if (!el) return;
+    var tag = el.tagName.toLowerCase();
+    if (tag === "textarea") {
+      el.classList.add("field-textarea");
+    } else if (tag === "select") {
+      el.classList.add("field-select");
+    } else {
+      el.classList.add("field-input");
+    }
+  });
+
+  // عدّادات الأحرف
+  function wireCounter(id) {
+    var el = document.getElementById(id);
+    var counter = document.querySelector('[data-counter-for="' + id + '"]');
+    if (!el || !counter) return;
+
+    var max = el.getAttribute("maxlength");
+    function update() {
+      var len = (el.value || "").length;
+      if (max) {
+        counter.textContent = len + " / " + max;
+      } else {
+        counter.textContent = len + " حرف";
+      }
+    }
+    el.addEventListener("input", update);
     update();
   }
-  ['id_title','id_reason','id_details'].forEach(wireCounter);
 
-  // منع الإرسال المكرر
-  function lockForm(){
-    const btn = form.querySelector('button[type="submit"], #submit-btn');
-    if(btn){ btn.setAttribute('disabled','disabled'); btn.classList.add('opacity-60','pointer-events-none'); }
+  ["id_title", "id_reason", "id_details"].forEach(wireCounter);
+
+  function lockForm() {
+    if (submitBtn) {
+      submitBtn.classList.add("is-disabled");
+      submitBtn.setAttribute("disabled", "disabled");
+    }
   }
 
-  // تأكيد عبر Modal
-  function openModal(){ backdrop.style.display='block'; }
-  function closeModal(){ backdrop.style.display='none'; }
+  function openModal() {
+    if (backdrop) {
+      backdrop.classList.add("is-visible");
+    }
+  }
 
-  submitBtn?.addEventListener('click', function(){
-    openModal();
-  });
-  cancelBtn?.addEventListener('click', function(){
-    closeModal();
-  });
-  backdrop?.addEventListener('click', function(e){
-    if(e.target === backdrop) closeModal();
-  });
+  function closeModal() {
+    if (backdrop) {
+      backdrop.classList.remove("is-visible");
+    }
+  }
 
-  confirmBtn?.addEventListener('click', function(){
-    // تحويل زر الإرسال الحقيقي إلى submit ثم قفل
-    const hiddenSubmit = document.createElement('button');
-    hiddenSubmit.type = 'submit';
-    hiddenSubmit.style.display = 'none';
-    form.appendChild(hiddenSubmit);
-    lockForm();
-    form.submit();
-  });
+  if (submitBtn) {
+    submitBtn.addEventListener("click", function () {
+      openModal();
+    });
+  }
 
-  // تحسين لوحة المفاتيح
-  document.addEventListener('keydown', function(e){
-    if(backdrop.style.display==='block'){
-      if(e.key==='Escape'){ closeModal(); }
-      if(e.key==='Enter'){ confirmBtn.click(); }
+  if (cancelBtn) {
+    cancelBtn.addEventListener("click", function () {
+      closeModal();
+    });
+  }
+
+  if (backdrop) {
+    backdrop.addEventListener("click", function (e) {
+      if (e.target === backdrop) {
+        closeModal();
+      }
+    });
+  }
+
+  if (confirmBtn) {
+    confirmBtn.addEventListener("click", function () {
+      // إنشاء زر submit مخفي حتى نضمن الإرسال
+      var hiddenSubmit = document.createElement("button");
+      hiddenSubmit.type = "submit";
+      hiddenSubmit.style.display = "none";
+      form.appendChild(hiddenSubmit);
+      lockForm();
+      form.submit();
+    });
+  }
+
+  // تحسين تجربة لوحة المفاتيح داخل المودال
+  document.addEventListener("keydown", function (e) {
+    if (!backdrop) return;
+    var visible = backdrop.classList.contains("is-visible");
+    if (!visible) return;
+
+    if (e.key === "Escape") {
+      e.preventDefault();
+      closeModal();
+    }
+    if (e.key === "Enter") {
+      e.preventDefault();
+      if (confirmBtn) {
+        confirmBtn.click();
+      }
     }
   });
 })();

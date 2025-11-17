@@ -317,8 +317,11 @@ def dispute_update_status(request, pk: int):
 # ======================================================
 # عرض نزاع
 # ======================================================
-@login_required
-def dispute_detail(request, pk: int):
-    """عرض نزاع مبسّط — مفيد لروابط الإشعارات والمراجعة اليدوية."""
-    dispute = get_object_or_404(Dispute.objects.select_related("request", "opened_by"), pk=pk)
-    return render(request, "disputes/detail.html", {"dispute": dispute, "req": dispute.request})
+
+def dispute_detail(request, pk):
+    dispute = get_object_or_404(Dispute, pk=pk)
+    events = dispute.events.all().order_by("created_at") if hasattr(dispute, "events") else None
+    return render(request, "disputes/dispute_detail.html", {
+        "dispute": dispute,
+        "events": events,
+    })

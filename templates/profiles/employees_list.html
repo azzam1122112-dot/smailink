@@ -95,11 +95,6 @@
         </div>
       </div>
 
-      <!-- حالة التوفر -->
-      <div class="availability">
-        <div class="availability-dot {% if forloop.counter|divisibleby:2 %}available{% else %}busy{% endif %}"></div>
-        <span>{% if forloop.counter|divisibleby:2 %}متصل الآن{% else %}مشغول{% endif %}</span>
-      </div>
 
       <!-- أزرار الإجراءات -->
       <div class="employee-actions">
@@ -113,9 +108,7 @@
           <span>عرض البروفايل</span>
         </span>
         {% endif %}
-        <button class="btn-contact" title="التواصل السريع">
-          💬
-        </button>
+
       </div>
 
     </div>

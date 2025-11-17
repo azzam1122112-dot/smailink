@@ -468,7 +468,10 @@ def disputes_list(request):
     qs = Dispute.objects.all()
 
     if q:
-        qs = qs.filter(Q(title__icontains=q) | Q(note__icontains=q))
+        if q.isdigit():
+            qs = qs.filter(request_id=int(q))
+        else:
+            qs = qs.filter(Q(title__icontains=q) | Q(details__icontains=q) | Q(reason__icontains=q))
 
     if status_val and d_status:
         qs = qs.filter(**{d_status: status_val})
@@ -476,7 +479,7 @@ def disputes_list(request):
     if d_created:
         qs = qs.filter(**{f"{d_created}__date__gte": d_from, f"{d_created}__date__lte": d_to})
 
-    fields = _only_fields(Dispute, ["id", d_status or "", "title", "note"])
+    fields = _only_fields(Dispute, ["id", d_status or "", "title", "details", "reason"])
     if not fields:
         fields = ["id"]
     qs = qs.only(*fields).order_by(f"-{d_created}" if d_created else "-id")

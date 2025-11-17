@@ -58,21 +58,6 @@
       </div>
     </div>
     
-    <div class="profile-actions">
-      {% if wa_redirect_url %}
-        <a href="{{ wa_redirect_url }}" class="btn btn-primary contact-button" rel="nofollow">
-          📞 التواصل عبر واتساب
-        </a>
-      {% else %}
-        <button class="btn btn-secondary contact-button contact-disabled" title="موقوف مؤقتًا حسب سياسة المنصة">
-          📞 التواصل عبر واتساب
-        </button>
-      {% endif %}
-      
-      {% if masked_phone %}
-        <div class="phone-info">الجوال: {{ masked_phone }}</div>
-      {% endif %}
-    </div>
   </div>
 
   <!-- السيرة الذاتية -->
@@ -88,32 +73,6 @@
   <!-- المؤشرات والمهارات -->
   <div class="grid md:grid-cols-3 gap-6">
     <!-- المؤشرات -->
-    <section class="profile-section scroll-reveal">
-      <h2 class="section-title">مؤشرات الأداء</h2>
-      <div class="stats-grid">
-        <div class="stat-card">
-          <div class="stat-value">{{ emp.completed_jobs }}</div>
-          <div class="stat-label">مشاريع مكتملة</div>
-        </div>
-        
-        <div class="stat-card">
-          <div class="stat-value">{{ emp.avg_response_minutes }}</div>
-          <div class="stat-label">دقيقة متوسط الاستجابة</div>
-        </div>
-        
-        <div class="stat-card">
-          <div class="stat-value">{{ emp.client_satisfaction|floatformat:0 }}%</div>
-          <div class="stat-label">رضا العملاء</div>
-        </div>
-        
-        {% if emp.hourly_rate %}
-        <div class="stat-card">
-          <div class="stat-value">{{ emp.hourly_rate|floatformat:2 }}</div>
-          <div class="stat-label">ريال/ساعة</div>
-        </div>
-        {% endif %}
-      </div>
-    </section>
 
     <!-- المهارات -->
     <section class="profile-section md:col-span-2 scroll-reveal">
@@ -178,12 +137,7 @@
           </div>
         </div>
         
-        <div class="project-status">
-          <span class="status-badge status-completed">مكتمل</span>
-          <a href="{% url 'marketplace:request_detail' req.pk %}" class="text-sm text-primary-600 hover:text-primary-700">
-            عرض التفاصيل
-          </a>
-        </div>
+
       </div>
       {% endfor %}
     </div>

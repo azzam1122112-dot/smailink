@@ -1,35 +1,145 @@
 {% extends "base.html" %}
 {% block title %}ملفي الشخصي{% endblock %}
+
 {% block content %}
-<div class="max-w-4xl mx-auto p-6">
+<div class="employee-profile">
   {% include "accounts/_messages.html" %}
-  <div class="grid md:grid-cols-3 gap-6">
-    <div class="md:col-span-1">
-      <div class="bg-white rounded-2xl shadow border p-6">
-        <div class="w-24 h-24 mx-auto rounded-full bg-gradient-to-tr from-indigo-200 to-sky-200 grid place-items-center text-3xl">👤</div>
-        <h2 class="text-center text-xl font-bold mt-3">{{ request.user.name|default:request.user.email }}</h2>
-        <p class="text-center text-slate-500">{{ request.user.email }}</p>
+
+  <!-- هيدر الملف الشخصي -->
+  <div class="profile-header">
+    <!-- الصورة / الأفاتار -->
+    <div class="profile-avatar">
+      {% if request.user.profile_picture %}
+        <img src="{{ request.user.profile_picture.url }}" alt="صورة الملف الشخصي">
+      {% else %}
+        <div class="profile-avatar-placeholder" style="display:flex;align-items:center;justify-content:center;font-size:2rem;background:var(--primary-100);color:var(--primary-700);width:100%;height:100%;">
+          <span style="font-size:2.2rem;">{{ request.user.name|default:request.user.email|slice:':1'|upper }}</span>
+        </div>
+      {% endif %}
+    </div>
+
+    <!-- معلومات أساسية -->
+    <div class="profile-info">
+      <h1 class="profile-name">
+        {{ request.user.name|default:request.user.email }}
+      </h1>
+
+      <div class="profile-title">
+        {{ request.user.get_role_display|default:request.user.role|title }}
+      </div>
+
+      <div class="profile-location">
+        <span class="meta-item">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
+            <path d="M4 4h16v16H4z" stroke="currentColor" stroke-width="2" />
+            <path d="M4 7l8 5 8-5" stroke="currentColor" stroke-width="2" />
+          </svg>
+          <span>{{ request.user.email }}</span>
+        </span>
         {% if request.user.phone %}
-          <p class="text-center text-slate-600 mt-2">الجوال: {{ request.user.phone }}</p>
-          <div class="text-center mt-3">
-            <a class="text-sm text-emerald-600 hover:underline" href="{{ request.user.whatsapp_link }}" target="_blank" rel="noopener">التواصل واتساب</a>
-          </div>
+        <span class="meta-item">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
+            <path d="M3 5a2 2 0 012-2h3.3a1 1 0 01.95.68l1.5 4.5a1 1 0 01-.5 1.2l-2.3 1.1a11 11 0 005.5 5.5l1.1-2.3a1 1 0 011.2-.5l4.5 1.5a1 1 0 01.7.95V19a2 2 0 01-2 2h-1C9.7 21 3 14.3 3 6V5z"
+                  stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
+          </svg>
+          <span>{{ request.user.phone }}</span>
+        </span>
         {% endif %}
       </div>
-    </div>
-    <div class="md:col-span-2">
-      <div class="bg-white rounded-2xl shadow border p-6">
-        <div class="flex items-center justify-between mb-4">
-          <h3 class="text-lg font-semibold">بيانات الحساب</h3>
-          <a href="{% url 'accounts:profile_edit' %}" class="text-indigo-600 hover:underline">تعديل</a>
+
+      <div class="profile-stats">
+        <div class="profile-stat">
+          <span class="stat-number">
+            {{ request.user.date_joined|date:"Y-m-d" }}
+          </span>
+          <span class="stat-label">تاريخ الانضمام</span>
         </div>
-        <ul class="space-y-2 text-slate-700">
-          <li><span class="font-semibold">الدور:</span> {{ request.user.get_role_display }}</li>
-          <li><span class="font-semibold">الحالة:</span> {% if request.user.is_active %}مفعّل{% else %}غير مفعّل{% endif %}</li>
-          <li><span class="font-semibold">الانضمام:</span> {{ request.user.date_joined|date:"Y-m-d H:i" }}</li>
-        </ul>
+        <div class="profile-stat">
+          <span class="stat-number">
+            {% if request.user.is_active %}مفعّل{% else %}غير مفعّل{% endif %}
+          </span>
+          <span class="stat-label">حالة الحساب</span>
+        </div>
       </div>
     </div>
+
+    <!-- أزرار الإجراءات -->
+    <div class="profile-actions">
+      <a href="{% url 'accounts:profile_edit' %}" class="btn btn-primary btn-sm">
+        تعديل البيانات
+      </a>
+      <a href="{% url 'accounts:password_change' %}" class="btn btn-outline btn-sm">
+        تغيير كلمة المرور
+      </a>
+
+      {% if request.user.phone and request.user.whatsapp_link %}
+      <a href="{{ request.user.whatsapp_link }}" target="_blank" rel="noopener"
+         class="btn btn-secondary btn-sm">
+        واتساب
+      </a>
+      {% endif %}
+    </div>
   </div>
+
+  <!-- قسم بيانات الحساب -->
+  <section class="profile-section">
+    <h2 class="section-title">بيانات الحساب</h2>
+
+    <div class="project-meta">
+      <div class="meta-item">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
+          <circle cx="12" cy="7" r="4" stroke="currentColor" stroke-width="2" />
+          <path d="M5 21c0-3.3 3.1-6 7-6s7 2.7 7 6" stroke="currentColor" stroke-width="2" />
+        </svg>
+        <span>الاسم: {{ request.user.name|default:request.user.email }}</span>
+      </div>
+      <div class="meta-item">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
+          <path d="M4 4h16v16H4z" stroke="currentColor" stroke-width="2" />
+          <path d="M4 7l8 5 8-5" stroke="currentColor" stroke-width="2" />
+        </svg>
+        <span>البريد الإلكتروني: {{ request.user.email }}</span>
+      </div>
+      {% if request.user.phone %}
+      <div class="meta-item">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
+          <path d="M3 5a2 2 0 012-2h3.3a1 1 0 01.95.68l1.5 4.5a1 1 0 01-.5 1.2l-2.3 1.1a11 11 0 005.5 5.5l1.1-2.3a1 1 0 011.2-.5l4.5 1.5a1 1 0 01.7.95V19a2 2 0 01-2 2h-1C9.7 21 3 14.3 3 6V5z"
+                stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
+        </svg>
+        <span>الجوال: {{ request.user.phone }}</span>
+      </div>
+      {% endif %}
+      <div class="meta-item">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
+          <path d="M5 4h14v2H5zM5 11h14v2H5zM5 18h14v2H5z"
+                stroke="currentColor" stroke-width="2" />
+        </svg>
+        <span>الدور: {{ request.user.get_role_display|default:request.user.role|title }}</span>
+      </div>
+    </div>
+  </section>
+
+  <!-- قسم نظرة عامة / إحصائيات -->
+  <section class="profile-section">
+    <h2 class="section-title">نظرة عامة</h2>
+    {% if stats.activity_count or stats.notifications_count %}
+      <div class="stats-grid">
+        {% if stats.activity_count %}
+        <div class="stat-card">
+          <span class="stat-number">{{ stats.activity_count }}</span>
+          <span class="stat-label">النشاطات</span>
+        </div>
+        {% endif %}
+        {% if stats.notifications_count %}
+        <div class="stat-card">
+          <span class="stat-number">{{ stats.notifications_count }}</span>
+          <span class="stat-label">الإشعارات</span>
+        </div>
+        {% endif %}
+      </div>
+    {% else %}
+      <div class="text-slate-500 text-center py-4">لا توجد إحصائيات متاحة حاليًا لهذا الحساب.</div>
+    {% endif %}
+  </section>
 </div>
 {% endblock %}

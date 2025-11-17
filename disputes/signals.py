@@ -5,7 +5,7 @@ import logging
 from typing import Optional
 
 from django.conf import settings
-from django.db import transaction
+from django.db import transaction, models
 from django.db.models.signals import pre_save, post_save, post_delete
 from django.dispatch import receiver
 
@@ -201,7 +201,6 @@ def _notify_parties_on_open(dispute: Dispute) -> None:
         url = ""
         try:
             from django.urls import reverse
-
             url = reverse("marketplace:request_detail", args=[req.pk])
         except Exception:
             url = ""
@@ -209,10 +208,26 @@ def _notify_parties_on_open(dispute: Dispute) -> None:
         _safe_notify(getattr(req, "client", None), "تم فتح نزاع على طلبك", f"رقم الطلب #{req.pk}.", url)
         # الموظف
         _safe_notify(getattr(req, "assigned_employee", None), "تم فتح نزاع على طلب مُسند لك", f"رقم الطلب #{req.pk}.", url)
-        # المالية (إن وُجدت مجموعة/دور)
-        finance_user = getattr(getattr(settings, "FINANCE_CONTACT", None), "user", None)
-        if finance_user:
-            _safe_notify(finance_user, "إشعار مالي: نزاع جديد", f"طلب #{req.pk} تحت النزاع.", url)
+        # المالية: إشعار جميع المستخدمين بدور المالية
+        try:
+            from accounts.models import User
+            finance_users = User.objects.filter(role="finance", is_active=True)
+            for fuser in finance_users:
+                _safe_notify(fuser, "إشعار مالي: نزاع جديد", f"طلب #{req.pk} تحت النزاع.", url)
+        except Exception:
+            logger.debug("تعذر إرسال إشعار للمالية عند فتح النزاع", exc_info=True)
+
+        # إشعار جميع المدراء (role=admin أو is_staff أو is_superuser)
+        try:
+            from accounts.models import User
+            admins = User.objects.filter(
+                models.Q(role="admin") | models.Q(is_staff=True) | models.Q(is_superuser=True),
+                is_active=True
+            ).distinct()
+            for admin in admins:
+                _safe_notify(admin, "إشعار إداري: نزاع جديد", f"تم فتح نزاع على طلب #{req.pk}.", url)
+        except Exception:
+            logger.debug("تعذر إرسال إشعار للمدراء عند فتح النزاع", exc_info=True)
     except Exception:
         logger.debug("تعذر إرسال إشعارات فتح النزاع", exc_info=True)
 

@@ -61,6 +61,7 @@ INSTALLED_APPS = [
     # طرف ثالث
     "rest_framework",
     "django_filters",
+    "widget_tweaks",
     # "corsheaders",  # فعّل ثم أضف إلى MIDDLEWARE إذا احتجت CORS
 
     # تطبيقات المشروع

@@ -1,0 +1,463 @@
+{# disputes/templates/disputes/dispute_detail.html #}
+{% extends "base.html" %}
+{% block title %}نزاع #{{ dispute.id }} — طلب #{{ dispute.request_id }}{% endblock %}
+
+{% block extra_head %}
+<style>
+  .dispute-detail-page {
+    padding: 2.5rem 0;
+  }
+
+  .dispute-detail-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 1.25rem;
+    margin-bottom: 1.75rem;
+    flex-wrap: wrap;
+  }
+
+  .dispute-detail-title {
+    font-size: 1.6rem;
+    font-weight: 800;
+    color: var(--dark-900);
+    margin: 0 0 .35rem;
+  }
+
+  .dispute-detail-subtitle {
+    font-size: .9rem;
+    color: var(--dark-500);
+  }
+
+  .dispute-meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: .4rem .75rem;
+    margin-top: .5rem;
+    font-size: .8rem;
+    color: var(--dark-600);
+  }
+
+  .meta-item {
+    padding: .25rem .6rem;
+    border-radius: 999px;
+    background: var(--dark-25);
+  }
+
+  .dispute-main-layout {
+    display: grid;
+    grid-template-columns: minmax(0, 2.5fr) minmax(0, 1.4fr);
+    gap: 1.5rem;
+  }
+
+  @media (max-width: 900px) {
+    .dispute-main-layout {
+      grid-template-columns: minmax(0,1fr);
+    }
+  }
+
+  .dispute-card {
+    background: #fff;
+    border-radius: var(--radius-lg);
+    border: 1px solid var(--dark-200);
+    box-shadow: var(--shadow-sm);
+    padding: 1.25rem 1.4rem;
+    margin-bottom: 1rem;
+  }
+
+  .dispute-card-title {
+    font-size: .95rem;
+    font-weight: 700;
+    color: var(--dark-800);
+    margin: 0 0 .5rem;
+  }
+
+  .dispute-card-body {
+    font-size: .9rem;
+    color: var(--dark-700);
+    line-height: 1.7;
+    white-space: pre-line;
+  }
+
+  .dispute-status-chip {
+    display: inline-flex;
+    align-items: center;
+    padding: .18rem .65rem;
+    border-radius: 999px;
+    font-size: .78rem;
+    border: 1px solid var(--dark-150);
+    background: #f9fafb;
+    color: var(--dark-700);
+  }
+
+  .dispute-status-open {
+    background: #fef3c7;
+    color: #92400e;
+    border-color: #fed7aa;
+  }
+
+  .dispute-status-review {
+    background: #e0f2fe;
+    color: #075985;
+    border-color: #bae6fd;
+  }
+
+  .dispute-status-resolved {
+    background: #dcfce7;
+    color: #166534;
+    border-color: #bbf7d0;
+  }
+
+  .dispute-status-canceled {
+    background: #f1f5f9;
+    color: #475569;
+    border-color: #cbd5f5;
+  }
+
+  .dispute-badge-frozen {
+    background: #fef2f2;
+    color: #b91c1c;
+    border-color: #fecaca;
+  }
+
+  .dispute-side-section-title {
+    font-size: .9rem;
+    font-weight: 700;
+    color: var(--dark-700);
+    margin-bottom: .6rem;
+  }
+
+  .dispute-side-list {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+    font-size: .84rem;
+    color: var(--dark-700);
+  }
+
+  .dispute-side-list li {
+    display: flex;
+    justify-content: space-between;
+    gap: .75rem;
+    padding: .3rem 0;
+    border-bottom: 1px dashed var(--dark-100);
+  }
+
+  .dispute-side-label {
+    color: var(--dark-500);
+  }
+
+  .dispute-side-value {
+    font-weight: 600;
+    color: var(--dark-800);
+  }
+
+  .dispute-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: .4rem;
+    margin-top: 1rem;
+  }
+
+  .btn-small {
+    padding: .4rem .8rem;
+    font-size: .8rem;
+    border-radius: .7rem;
+  }
+
+  .dispute-footer-actions {
+    margin-top: 2rem;
+    display: flex;
+    justify-content: space-between;
+    gap: .75rem;
+    flex-wrap: wrap;
+  }
+
+  .dispute-footer-actions-left,
+  .dispute-footer-actions-right {
+    display: flex;
+    flex-wrap: wrap;
+    gap: .5rem;
+  }
+
+  .dispute-timeline {
+    margin-top: .4rem;
+    padding-left: .3rem;
+    border-right: 2px solid var(--dark-100);
+  }
+
+  .dispute-timeline-item {
+    position: relative;
+    padding: .4rem .7rem .4rem 0;
+    margin-right: .4rem;
+  }
+
+  .dispute-timeline-item::before {
+    content: "";
+    position: absolute;
+    right: -6px;
+    top: .6rem;
+    width: .55rem;
+    height: .55rem;
+    border-radius: 999px;
+    background: var(--primary-500);
+  }
+
+  .dispute-timeline-text {
+    font-size: .82rem;
+    color: var(--dark-700);
+  }
+
+  .dispute-timeline-meta {
+    font-size: .75rem;
+    color: var(--dark-500);
+  }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container dispute-detail-page">
+
+  {# رأس الصفحة #}
+  <header class="dispute-detail-header">
+    <div>
+      <h1 class="dispute-detail-title">
+        نزاع رقم D{{ dispute.id }}
+        {% if dispute.request_id %}
+          <span style="font-size:.9rem;color:var(--dark-500);font-weight:400;">
+            — طلب #{{ dispute.request_id }}
+          </span>
+        {% endif %}
+      </h1>
+
+      <div class="dispute-meta">
+        <span class="meta-item">
+          الحالة:
+          {% if dispute.status == "open" %}
+            <span class="dispute-status-chip dispute-status-open">مفتوح</span>
+          {% elif dispute.status == "in_review" %}
+            <span class="dispute-status-chip dispute-status-review">قيد المراجعة</span>
+          {% elif dispute.status == "resolved" %}
+            <span class="dispute-status-chip dispute-status-resolved">محسوم</span>
+          {% elif dispute.status == "canceled" %}
+            <span class="dispute-status-chip dispute-status-canceled">ملغي</span>
+          {% else %}
+            <span class="dispute-status-chip">{{ dispute.status|default:"غير محدد" }}</span>
+          {% endif %}
+        </span>
+
+        {% if dispute.is_frozen %}
+          <span class="meta-item dispute-status-chip dispute-badge-frozen">
+            مجمّد ماليًا
+          </span>
+        {% endif %}
+
+        {% if dispute.milestone %}
+          <span class="meta-item">
+            مرتبط بالمرحلة:
+            مرحلة رقم {{ dispute.milestone.order|default:"1" }}
+          </span>
+        {% endif %}
+      </div>
+
+      <p class="dispute-detail-subtitle">
+        تم إنشاء هذا النزاع لمراجعة حالة الطلب ومعالجة أي إشكالات بين العميل والتقني.
+      </p>
+    </div>
+
+    <div class="dispute-actions">
+      {% if dispute.request %}
+        <a href="{{ dispute.request.get_absolute_url }}" class="btn btn-outline btn-sm btn-small">
+          الرجوع لتفاصيل الطلب
+        </a>
+      {% endif %}
+      <a href="{% url 'dashboard:disputes_list' %}?q={{ dispute.request_id }}" class="btn btn-light btn-sm btn-small">
+        قائمة نزاعات الطلب
+      </a>
+    </div>
+  </header>
+
+  <div class="dispute-main-layout">
+
+    {# العمود الرئيسي: السبب + التفاصيل + الملاحظات #}
+    <div>
+
+      <div class="dispute-card">
+        <h2 class="dispute-card-title">عنوان النزاع</h2>
+        <div class="dispute-card-body">
+          {% if dispute.title %}
+            {{ dispute.title }}
+          {% else %}
+            لا يوجد عنوان محدد للنزاع.
+          {% endif %}
+        </div>
+      </div>
+
+      <div class="dispute-card">
+        <h2 class="dispute-card-title">السبب</h2>
+        <div class="dispute-card-body">
+          {% if dispute.reason %}
+            {{ dispute.reason }}
+          {% else %}
+            لم يتم تحديد سبب النزاع بشكل نصّي.
+          {% endif %}
+        </div>
+      </div>
+
+      <div class="dispute-card">
+        <h2 class="dispute-card-title">تفاصيل إضافية</h2>
+        <div class="dispute-card-body">
+          {% if dispute.details %}
+            {{ dispute.details }}
+          {% else %}
+            لا توجد تفاصيل إضافية مسجّلة.
+          {% endif %}
+        </div>
+      </div>
+
+      {% if dispute.resolution_note %}
+        <div class="dispute-card">
+          <h2 class="dispute-card-title">ملخص الحسم / القرار</h2>
+          <div class="dispute-card-body">
+            {{ dispute.resolution_note }}
+          </div>
+        </div>
+      {% endif %}
+
+      {% if events %}
+        <div class="dispute-card">
+          <h2 class="dispute-card-title">سجل الأحداث</h2>
+          <div class="dispute-timeline">
+            {% for e in events %}
+              <div class="dispute-timeline-item">
+                <div class="dispute-timeline-text">
+                  {{ e.message|default:"حدث" }}
+                </div>
+                <div class="dispute-timeline-meta">
+                  {% if e.created_at %}{{ e.created_at|date:"Y-m-d H:i" }}{% endif %}
+                  {% if e.actor %} — بواسطة {{ e.actor }}{% endif %}
+                </div>
+              </div>
+            {% endfor %}
+          </div>
+        </div>
+      {% endif %}
+
+    </div>
+
+    {# العمود الجانبي: معلومات سريعة + إجراءات #}
+    <aside>
+
+      <div class="dispute-card">
+        <h3 class="dispute-side-section-title">معلومات النزاع</h3>
+        <ul class="dispute-side-list">
+          <li>
+            <span class="dispute-side-label">رقم النزاع:</span>
+            <span class="dispute-side-value">D{{ dispute.id }}</span>
+          </li>
+          <li>
+            <span class="dispute-side-label">رقم الطلب:</span>
+            <span class="dispute-side-value">
+              {% if dispute.request_id %}#{{ dispute.request_id }}{% else %}-{% endif %}
+            </span>
+          </li>
+          <li>
+            <span class="dispute-side-label">افتتح بواسطة:</span>
+            <span class="dispute-side-value">
+              {% if dispute.opened_by %}{{ dispute.opened_by }}{% else %}-{% endif %}
+            </span>
+          </li>
+          <li>
+            <span class="dispute-side-label">دور صاحب النزاع:</span>
+            <span class="dispute-side-value">
+              {% if dispute.opener_role %}{{ dispute.opener_role }}{% else %}-{% endif %}
+            </span>
+          </li>
+          <li>
+            <span class="dispute-side-label">تاريخ الفتح:</span>
+            <span class="dispute-side-value">
+              {% if dispute.opened_at %}
+                {{ dispute.opened_at|date:"Y-m-d H:i" }}
+              {% elif dispute.created_at %}
+                {{ dispute.created_at|date:"Y-m-d H:i" }}
+              {% else %}
+                -
+              {% endif %}
+            </span>
+          </li>
+          <li>
+            <span class="dispute-side-label">تاريخ الإغلاق:</span>
+            <span class="dispute-side-value">
+              {% if dispute.closed_at %}
+                {{ dispute.closed_at|date:"Y-m-d H:i" }}
+              {% else %}
+                — لم يُغلق بعد
+              {% endif %}
+            </span>
+          </li>
+        </ul>
+      </div>
+
+      {# إجراءات الإدارة (الحماية الفعلية بالـ view، هنا للعرض فقط) #}
+      {% if request.user.is_staff or request.user.is_superuser or request.user.role == "admin" or request.user.role == "finance" %}
+        <div class="dispute-card">
+          <h3 class="dispute-side-section-title">إجراءات سريعة</h3>
+          <p style="font-size:.8rem;color:var(--dark-500);margin-bottom:.75rem;">
+            الإجراءات التالية متاحة للمسؤولين ومستخدمي المالية. سيتم تسجيل كل تغيير في سجل الأحداث.
+          </p>
+          <div class="dispute-actions">
+            <form method="post" action="{% url 'disputes:update_status' dispute.id %}">
+              {% csrf_token %}
+              <input type="hidden" name="next" value="{{ request.get_full_path }}">
+              <button name="action" value="review" class="btn btn-secondary btn-small">
+                بدء مراجعة
+              </button>
+            </form>
+            <form method="post" action="{% url 'disputes:update_status' dispute.id %}">
+              {% csrf_token %}
+              <input type="hidden" name="next" value="{{ request.get_full_path }}">
+              <button name="action" value="resolve" class="btn btn-success btn-small">
+                تأكيد الحسم
+              </button>
+            </form>
+            <form method="post" action="{% url 'disputes:update_status' dispute.id %}">
+              {% csrf_token %}
+              <input type="hidden" name="next" value="{{ request.get_full_path }}">
+              <button name="action" value="cancel" class="btn btn-outline btn-small">
+                إلغاء النزاع
+              </button>
+            </form>
+            <form method="post" action="{% url 'disputes:update_status' dispute.id %}">
+              {% csrf_token %}
+              <input type="hidden" name="next" value="{{ request.get_full_path }}">
+              <button name="action" value="reopen" class="btn btn-danger btn-small">
+                إعادة فتح النزاع
+              </button>
+            </form>
+          </div>
+        </div>
+      {% endif %}
+
+    </aside>
+  </div>
+
+  <div class="dispute-footer-actions">
+    <div class="dispute-footer-actions-left">
+      {% if dispute.request %}
+        <a href="{{ dispute.request.get_absolute_url }}" class="btn btn-light btn-sm">
+          الرجوع لتفاصيل الطلب
+        </a>
+      {% endif %}
+      <a href="{% url 'dashboard:disputes_list' %}?q={{ dispute.request_id }}" class="btn btn-outline btn-sm">
+        كافة النزاعات لنفس الطلب
+      </a>
+    </div>
+    <div class="dispute-footer-actions-right">
+      <button type="button" class="btn btn-secondary btn-sm" onclick="window.print()">
+        طباعة صفحة النزاع
+      </button>
+    </div>
+  </div>
+
+</div>
+{% endblock %}

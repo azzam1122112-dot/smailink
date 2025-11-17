@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% load static %}
 {% block title %}طلب جديد{% endblock %}
 {% block content %}
 <div class="max-w-3xl mx-auto py-8 rtl" dir="rtl">
@@ -8,11 +9,7 @@
     <h1 class="text-2xl md:text-3xl font-extrabold tracking-tight text-slate-900 dark:text-white">
       إنشاء طلب جديد
     </h1>
-    <a href="{% url 'marketplace:request_list' %}"
-       class="inline-flex items-center gap-2 px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-200 transition">
-      <span class="i-lucide:arrow-right rtl:rotate-180" aria-hidden="true"></span>
-      العودة للطلبات
-    </a>
+
   </div>
 
   {# ===== بطاقة النموذج ===== #}
