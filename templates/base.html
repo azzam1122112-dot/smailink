@@ -1,3 +1,4 @@
+{# templates/base.html #}
 {% load static %}
 
 <!DOCTYPE html>
@@ -5,35 +6,51 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
+
   <title>{% block title %}منصة سامي لينك التقنية{% endblock %}</title>
-  
-  <!-- الخطوط -->
+
+  {# الخط الأساسي #}
   <link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
-  
-  <!-- CSS الجديد -->
+
+  {# ملف التنسيق الرئيسي #}
   <link rel="stylesheet" href="{% static 'css/app-new.css' %}">
-  
+
+  {# تعديل بسيط ليكون الـ main محايد في كل الصفحات #}
+  <style>
+    .page-main {
+      padding: 2.5rem 0 4rem;
+      background: #f8fafc;
+    }
+    .page-content-container {
+      max-width: 1100px;
+      margin: 0 auto;
+      padding: 0 1rem;
+    }
+  </style>
+
   {% block extra_head %}{% endblock %}
 </head>
 
-<body class="page-wrapper">
-  <!-- نظام التوست -->
+<body class="page-wrapper {% block body_class %}{% endblock %}">
+
+  {# نظام التوست للرسائل #}
   <div id="toast-container" class="toast-container">
     {% if messages %}
       {% for message in messages %}
         <div class="toast {% if message.tags == 'error' %}error{% else %}success{% endif %}">
           <div class="toast-message">{{ message }}</div>
-          <button class="toast-close">✕</button>
+          <button class="toast-close" type="button">✕</button>
         </div>
       {% endfor %}
     {% endif %}
   </div>
 
-  <!-- الهيدر المحسن -->
+  {# الهيدر الرئيسي #}
   <header class="main-header">
     <div class="container">
       <div class="header-content">
-        <!-- العلامة التجارية -->
+
+        {# الشعار والعلامة التجارية #}
         <a href="{% url 'website:home' %}" class="brand">
           <div class="brand-logo">
             <img src="{% static 'img/logo.png' %}" alt="شعار سامي لينك">
@@ -44,53 +61,167 @@
           </div>
         </a>
 
-        <!-- التنقل الرئيسي -->
+        {# القائمة الرئيسية #}
         <nav class="main-nav">
           <ul class="nav-links">
-            <li><a href="{% url 'website:home' %}#hero" class="nav-link active">الرئيسية</a></li>
-            <li><a href="{% url 'website:home' %}#how-it-works" class="nav-link">كيف تعمل</a></li>
-            <li><a href="{% url 'profiles:employees_list' %}" class="nav-link">التقنيون</a></li>
-            <li><a href="{% url 'website:home' %}#contact" class="nav-link">اتصل بنا</a></li>
+            <li>
+              <a href="{% url 'website:home' %}#hero"
+                 class="nav-link {% block nav_home_active %}{% endblock %}">
+                الرئيسية
+              </a>
+            </li>
+            <li>
+              <a href="{% url 'website:home' %}#how-it-works"
+                 class="nav-link {% block nav_how_active %}{% endblock %}">
+                كيف تعمل
+              </a>
+            </li>
+            <li>
+              <a href="{% url 'profiles:employees_list' %}"
+                 class="nav-link {% block nav_employees_active %}{% endblock %}">
+                التقنيون
+              </a>
+            </li>
+            <li>
+              <a href="{% url 'website:home' %}#contact"
+                 class="nav-link {% block nav_contact_active %}{% endblock %}">
+                اتصل بنا
+              </a>
+            </li>
           </ul>
 
+          {# منطقة المستخدم / المصادقة #}
           <div class="auth-buttons">
             {% if user.is_authenticated %}
-              <div class="user-info">
-                <span>{{ user.get_full_name|default:user.email }}</span>
-                <span class="user-role-badge">
-                  {% if user.role == 'admin' %}مدير{% endif %}
-                  {% if user.role == 'finance' %}مالي{% endif %}
-                  {% if user.role == 'employee' or user.role == 'tech' %}تقني{% endif %}
-                  {% if user.role == 'client' %}عميل{% endif %}
+
+              {# زر اطلب خدمة دائماً في الهيدر #}
+              <a href="{% url 'marketplace:request_create' %}"
+                 class="btn btn-primary btn-sm cta-request-btn">
+                اطلب خدمة
+              </a>
+
+              {# روابط اللوحات حسب الدور #}
+              {% if user.role == "admin" %}
+                <a href="{% url 'dashboard:admin_dashboard' %}"
+                   class="btn btn-outline btn-sm">
+                  لوحة المدير
+                </a>
+              {% endif %}
+
+              {% if user.role == "finance" %}
+                <a href="{% url 'finance:finance_home' %}"
+                   class="btn btn-outline btn-sm">
+                  لوحة المالية
+                </a>
+              {% endif %}
+
+
+              {% if user.role == "employee" or user.role == "tech" %}
+                <div class="employee-header-actions" style="display: flex; align-items: center; gap: 0.5rem;">
+                  <a href="{% url 'marketplace:new_requests' %}"
+                     class="employee-header-btn employee-header-newreq"
+                     title="طلبات جديدة">
+                    <span class="icon-box">
+                      <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#7c3aed" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="7" width="18" height="13" rx="2"/><path d="M16 3v4"/><path d="M8 3v4"/><path d="M3 11h18"/></svg>
+                    </span>
+                    <span class="employee-header-label">طلبات جديدة</span>
+                  </a>
+                  <a href="{% url 'marketplace:my_tasks' %}"
+                     class="employee-header-btn employee-header-tasks">
+                    <span class="icon-box">
+                      <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#16a34a" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M9 9h6"/><path d="M9 13h6"/></svg>
+                    </span>
+                    <span class="employee-header-label">مهامي</span>
+                  </a>
+                </div>
+              {% endif %}
+
+              {% if user.role == "client" %}
+                <a href="{% url 'marketplace:my_requests' %}"
+                   class="btn btn-outline btn-sm">
+                  طلباتي
+                </a>
+              {% endif %}
+
+              {# أيقونة الإشعارات #}
+              <a href="{% url 'notifications:list' %}" class="notif-bell-link" title="الإشعارات" style="margin: 0 1rem; position: relative; display: inline-flex; align-items: center;">
+                <span class="notif-bell-icon" style="font-size: 1.6em; line-height: 1;">
+                  <svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
                 </span>
+                {% if notifications_unread_count %}
+                  <span class="notif-bell-badge" style="position: absolute; top: 0; left: 0; background: #e53e3e; color: #fff; border-radius: 50%; font-size: 0.7em; min-width: 1.2em; height: 1.2em; display: flex; align-items: center; justify-content: center; padding: 0 0.3em;">{{ notifications_unread_count }}</span>
+                {% endif %}
+              </a>
+
+              {# قائمة البروفايل المنسدلة #}
+              <div class="profile-menu">
+                <button type="button"
+                        class="profile-trigger"
+                        id="profileMenuButton"
+                        aria-haspopup="true"
+                        aria-expanded="false">
+                  <div class="profile-avatar">
+                    <span>👤</span>
+                  </div>
+                  <div class="profile-text">
+                    <span class="profile-name">
+                      {{ user.get_full_name|default:user.email }}
+                    </span>
+                    <span class="profile-role">
+                      {% if user.role == "admin" %}مدير عام{% endif %}
+                      {% if user.role == "finance" %}مالي{% endif %}
+                      {% if user.role == "employee" or user.role == "tech" %}تقني{% endif %}
+                      {% if user.role == "client" %}عميل{% endif %}
+                    </span>
+                  </div>
+                  <span class="profile-caret">▾</span>
+                </button>
+
+                <div class="profile-dropdown" id="profileMenuDropdown">
+                  <a href="{% url 'accounts:profile' %}" class="dropdown-item">
+                    ملفي الشخصي
+                  </a>
+
+                  <a href="{% url 'notifications:list' %}" class="dropdown-item">
+                    الإشعارات
+                    {% if notifications_unread_count %}
+                      <span class="dropdown-badge">
+                        {{ notifications_unread_count }}
+                      </span>
+                    {% endif %}
+                  </a>
+
+                  <div class="dropdown-divider"></div>
+
+                  <a href="{% url 'accounts:logout' %}"
+                     class="dropdown-item dropdown-danger">
+                    تسجيل الخروج
+                  </a>
+                </div>
               </div>
-              
-              {% if user.role == 'admin' %}
-                <a href="{% url 'dashboard:admin_dashboard' %}" class="btn btn-outline btn-sm">لوحة المدير</a>
-              {% endif %}
-              
-              {% if user.role == 'finance' %}
-                <a href="{% url 'finance:finance_home' %}" class="btn btn-outline btn-sm">لوحة المالية</a>
-              {% endif %}
-              
-              {% if user.role == 'employee' or user.role == 'tech' %}
-                <a href="{% url 'marketplace:my_tasks' %}" class="btn btn-outline btn-sm">مهامي</a>
-              {% endif %}
-              
-              {% if user.role == 'client' %}
-                <a href="{% url 'marketplace:my_requests' %}" class="btn btn-outline btn-sm">طلباتي</a>
-              {% endif %}
-              
-              <a href="{% url 'accounts:logout' %}" class="btn btn-secondary btn-sm">تسجيل الخروج</a>
+
             {% else %}
-              <a href="{% url 'accounts:login' %}" class="btn btn-primary btn-sm">تسجيل الدخول</a>
-              <a href="{% url 'accounts:register' %}" class="btn btn-outline btn-sm">إنشاء حساب</a>
+              {# للزائر: زر اطلب خدمة + تسجيل الدخول + إنشاء حساب #}
+              <a href="{% url 'marketplace:request_create' %}"
+                 class="btn btn-primary btn-sm cta-request-btn">
+                اطلب خدمة
+              </a>
+              <a href="{% url 'accounts:login' %}"
+                 class="btn btn-outline btn-sm">
+                تسجيل الدخول
+              </a>
+              <a href="{% url 'accounts:register' %}"
+                 class="btn btn-outline btn-sm">
+                إنشاء حساب
+              </a>
             {% endif %}
           </div>
         </nav>
 
-        <!-- زر القائمة المتنقلة -->
-        <button class="menu-toggle">
+        {# زر القائمة للجوال #}
+        <button class="menu-toggle"
+                type="button"
+                aria-label="فتح أو إغلاق القائمة">
           <span></span>
           <span></span>
           <span></span>
@@ -99,15 +230,21 @@
     </div>
   </header>
 
-  <!-- المحتوى الرئيسي -->
-  <main>
-    {% block content %}{% endblock %}
+  {# المحتوى الرئيسي #}
+  <main class="page-main">
+    {# للصفحات التي تحتاج Hero خاص (مثل الرئيسية) #}
+    {% block page_hero %}{% endblock %}
+
+    <div class="page-content-container">
+      {% block content %}{% endblock %}
+    </div>
   </main>
 
-  <!-- الفوتر المحسن -->
+  {# الفوتر #}
   <footer class="main-footer">
     <div class="container">
       <div class="footer-content">
+
         <div class="footer-brand">
           <div class="footer-logo">
             <img src="{% static 'img/logo.png' %}" alt="شعار سامي لينك">
@@ -117,7 +254,7 @@
             وسيط سعودي منظم لإدارة الطلبات والاتفاقيات والفواتير بين العملاء والتقنيين.
           </p>
         </div>
-        
+
         <div class="footer-links">
           <div class="footer-title">روابط سريعة</div>
           <a href="{% url 'website:home' %}#hero" class="footer-link">الرئيسية</a>
@@ -125,14 +262,14 @@
           <a href="{% url 'profiles:employees_list' %}" class="footer-link">التقنيون</a>
           <a href="{% url 'website:home' %}#contact" class="footer-link">اتصل بنا</a>
         </div>
-        
+
         <div class="footer-links">
           <div class="footer-title">الحساب</div>
           {% if user.is_authenticated %}
             <a href="{% url 'accounts:profile' %}" class="footer-link">ملفي</a>
-            {% if user.role == 'client' %}
+            {% if user.role == "client" %}
               <a href="{% url 'marketplace:my_requests' %}" class="footer-link">طلباتي</a>
-            {% elif user.role == 'employee' or user.role == 'tech' %}
+            {% elif user.role == "employee" or user.role == "tech" %}
               <a href="{% url 'marketplace:my_tasks' %}" class="footer-link">مهامي</a>
             {% endif %}
             <a href="{% url 'accounts:logout' %}" class="footer-link">تسجيل الخروج</a>
@@ -141,7 +278,7 @@
             <a href="{% url 'accounts:register' %}" class="footer-link">إنشاء حساب</a>
           {% endif %}
         </div>
-        
+
         <div class="footer-links">
           <div class="footer-title">الدعم</div>
           <a href="mailto:support@samilink.sa" class="footer-link">support@samilink.sa</a>
@@ -150,16 +287,16 @@
           <a href="#" class="footer-link">الشروط والأحكام</a>
         </div>
       </div>
-      
+
       <div class="footer-bottom">
         <p>جميع الحقوق محفوظة © {% now "Y" %} - منصة سامي لينك التقنية</p>
       </div>
     </div>
   </footer>
 
-  <!-- JavaScript الجديد -->
+  {# ملف الجافاسكربت الرئيسي #}
   <script src="{% static 'js/app-new.js' %}"></script>
-  
+
   {% block extra_scripts %}{% endblock %}
 </body>
 </html>

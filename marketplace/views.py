@@ -282,7 +282,7 @@ class MyAssignedRequestsView(LoginRequiredMixin, ListView):
 # ======================
 # إنشاء الطلب + “طلباتي”
 # ======================
-class RequestCreateView(LoginRequiredMixin, ClientOnlyMixin, CreateView):
+class RequestCreateView(LoginRequiredMixin, CreateView):
     template_name = "marketplace/request_create.html"
     model = Request
     form_class = RequestCreateForm
@@ -842,14 +842,7 @@ def my_tasks(request):
     u = request.user
     qs = Request.objects.select_related("client", "assigned_employee").filter(assigned_employee=u)
 
-    done_like = _status_vals("COMPLETED", "CANCELED", "CLOSED")
-    qs = qs.exclude(status__in=done_like)
-
-    if hasattr(Request, "Status") and hasattr(Request.Status, "DISPUTED"):
-        qs = qs.exclude(status=Request.Status.DISPUTED)
-    else:
-        qs = qs.exclude(status="disputed")
-
+    # Show all assigned tasks, regardless of status
     if hasattr(Request, "is_frozen"):
         qs = qs.filter(Q(is_frozen=False) | Q(is_frozen__isnull=True))
 
