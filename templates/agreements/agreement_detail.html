@@ -1,12 +1,13 @@
 {# agreements/templates/agreements/agreement_detail.html #}
 {% extends "base.html" %}
 {% load static %}
+{% load humanize %}
 {% block title %}اتفاقية — {{ agreement.title }}{% endblock %}
 
 {% block content %}
 <section class="page-section agreement-detail-page">
   <div class="container">
-    
+
     {# ===== رأس الصفحة ===== #}
     <div class="section-header text-center">
       <div class="agreement-header-badge profile-section" style="background: linear-gradient(135deg, var(--primary-600) 0%, #7c3aed 100%); color: white; display: inline-flex; align-items: center; gap: 1rem; padding: 1.5rem 2rem; border-radius: var(--radius-xl); margin-bottom: 2rem;">
@@ -23,42 +24,59 @@
       </p>
     </div>
 
+    {# ===== سبب الرفض (إن وجد) ===== #}
+    {% if agreement.status == 'rejected' and agreement.rejection_reason %}
+      <div class="profile-section scroll-reveal" style="background: #fef2f2; border: 1.5px solid #fecaca; border-radius: var(--radius-xl); margin-bottom: 2rem;">
+        <div style="display: flex; align-items: flex-start; gap: 1.25rem;">
+          <div style="font-size: 2.2rem; color: #e11d48;">❌</div>
+          <div>
+            <div style="font-weight: bold; color: #e11d48; font-size: 1.1rem; margin-bottom: 0.5rem;">
+              سبب رفض الاتفاقية من العميل:
+            </div>
+            <div style="color: #b91c1c; font-size: 1rem; line-height: 1.8; white-space: pre-line;">
+              {{ agreement.rejection_reason }}
+            </div>
+          </div>
+        </div>
+      </div>
+    {% endif %}
+
+    {# ===== تحديد صلاحية عرض التفاصيل المالية الموسعة ===== #}
+    {% if user.is_authenticated %}
+      {% if user.is_staff or user.is_superuser or user.id == agreement.employee_id or user.role == 'admin' or user.role == 'manager' or user.role == 'finance' %}
+        {% with can_view_financials=1 %}
+        {% endwith %}
+      {% endif %}
+    {% endif %}
+
     {# ===== بطاقة المعلومات الأساسية ===== #}
     <div class="profile-section scroll-reveal">
       <div class="agreement-stats-grid" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem;">
-            {# ===== سبب الرفض (إن وجد) ===== #}
-            {% if agreement.status == 'rejected' and agreement.rejection_reason %}
-              <div class="profile-section scroll-reveal" style="background: #fef2f2; border: 1.5px solid #fecaca; border-radius: var(--radius-xl); margin-bottom: 2rem;">
-                <div style="display: flex; align-items: flex-start; gap: 1.25rem;">
-                  <div style="font-size: 2.2rem; color: #e11d48;">❌</div>
-                  <div>
-                    <div style="font-weight: bold; color: #e11d48; font-size: 1.1rem; margin-bottom: 0.5rem;">
-                      سبب رفض الاتفاقية من العميل:
-                    </div>
-                    <div style="color: #b91c1c; font-size: 1rem; line-height: 1.8; white-space: pre-line;">
-                      {{ agreement.rejection_reason }}
-                    </div>
-                  </div>
-                </div>
-              </div>
-            {% endif %}
-        {# ====== عرض التفاصيل المالية حسب الدور ====== #}
-        {% if user.is_authenticated and user.is_staff or user.is_authenticated and user.is_superuser or user.is_authenticated and user.id == agreement.employee_id or user.is_authenticated and user.role in 'admin,manager,finance' %}
+
+        {# ===== الإجمالي النهائي للعميل (العميل لا يتحمل العمولة) ===== #}
+        {% if can_view_financials %}
           <div class="stat-item text-center" style="background: var(--primary-50); padding: 1.5rem; border-radius: var(--radius-lg); border: 1px solid var(--primary-200);">
-            <div class="stat-label" style="color: var(--primary-600); margin-bottom: 0.5rem;">الإجمالي النهائي للعميل</div>
+            <div class="stat-label" style="color: var(--primary-600); margin-bottom: 0.5rem;">الإجمالي المطلوب من العميل</div>
             <div class="stat-value" style="font-size: 1.5rem; font-weight: 800; color: var(--primary-700);">
               {{ breakdown.client_total|floatformat:2 }} ر.س
+            </div>
+            <div class="text-xs text-gray-500 mt-1">
+              السعر المقترح + ضريبة القيمة المضافة
             </div>
           </div>
         {% else %}
           <div class="stat-item text-center" style="background: var(--primary-50); padding: 1.5rem; border-radius: var(--radius-lg); border: 1px solid var(--primary-200); grid-column: 1 / -1;">
-            <div class="stat-label" style="color: var(--primary-600); margin-bottom: 0.5rem;">الإجمالي النهائي للعميل</div>
+            <div class="stat-label" style="color: var(--primary-600); margin-bottom: 0.5rem;">الإجمالي المطلوب من العميل</div>
             <div class="stat-value" style="font-size: 2rem; font-weight: 900; color: var(--primary-700);">
               {{ breakdown.client_total|floatformat:2 }} ر.س
+            </div>
+            <div class="text-xs text-gray-500 mt-1">
+              السعر المقترح + ضريبة القيمة المضافة
             </div>
           </div>
         {% endif %}
 
+        {# ===== المدة ===== #}
         <div class="stat-item text-center" style="background: var(--secondary-50); padding: 1.5rem; border-radius: var(--radius-lg); border: 1px solid var(--secondary-200);">
           <div class="stat-label" style="color: var(--secondary-600); margin-bottom: 0.5rem;">المدة</div>
           <div class="stat-value" style="font-size: 1.5rem; font-weight: 800; color: var(--secondary-700);">
@@ -66,6 +84,7 @@
           </div>
         </div>
 
+        {# ===== الحالة ===== #}
         <div class="stat-item text-center" style="background: var(--dark-50); padding: 1.5rem; border-radius: var(--radius-lg); border: 1px solid var(--dark-200);">
           <div class="stat-label" style="color: var(--dark-600); margin-bottom: 0.5rem;">الحالة</div>
           <div class="stat-value" style="font-size: 1.5rem; font-weight: 800; color: var(--dark-700);">
@@ -73,6 +92,7 @@
           </div>
         </div>
 
+        {# ===== رقم الطلب ===== #}
         <div class="stat-item text-center" style="background: var(--dark-50); padding: 1.5rem; border-radius: var(--radius-lg); border: 1px solid var(--dark-200);">
           <div class="stat-label" style="color: var(--dark-600); margin-bottom: 0.5rem;">رقم الطلب</div>
           <div class="stat-value" style="font-size: 1.5rem; font-weight: 800; color: var(--primary-600);">
@@ -81,8 +101,59 @@
             </a>
           </div>
         </div>
+
       </div>
     </div>
+
+    {# ===== تفاصيل مالية موسعة (للأدوار المصرّح لها فقط) ===== #}
+    {% if can_view_financials %}
+      <div class="profile-section scroll-reveal" style="margin-top: 1.5rem;">
+        <div class="section-header-with-icon">
+          <div class="section-icon" style="width: 3rem; height: 3rem; background: var(--primary-100); color: var(--primary-600); border-radius: var(--radius-lg); display: flex; align-items: center; justify-content: center; font-size: 1.2rem; font-weight: 800; margin-left: 1rem;">
+            $
+          </div>
+          <h2 class="section-title">تفاصيل مالية</h2>
+        </div>
+
+        <div class="agreement-stats-grid" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem; margin-top: 1.25rem;">
+
+          <div class="stat-item text-center" style="background: var(--white); padding: 1.25rem; border-radius: var(--radius-lg); border: 1px solid var(--dark-200);">
+            <div class="stat-label text-sm text-gray-600 mb-1">السعر قبل الضريبة (P)</div>
+            <div class="stat-value text-lg font-extrabold text-gray-900">
+              {{ breakdown.project_price|floatformat:2 }} ر.س
+            </div>
+          </div>
+
+          <div class="stat-item text-center" style="background: var(--white); padding: 1.25rem; border-radius: var(--radius-lg); border: 1px solid var(--dark-200);">
+            <div class="stat-label text-sm text-gray-600 mb-1">ضريبة القيمة المضافة (VAT)</div>
+            <div class="stat-value text-lg font-extrabold text-gray-900">
+              {{ breakdown.vat_amount|floatformat:2 }} ر.س
+            </div>
+            <div class="text-xs text-gray-500 mt-1">
+              {{ breakdown.vat_rate|floatformat:4 }}
+            </div>
+          </div>
+
+          <div class="stat-item text-center" style="background: var(--white); padding: 1.25rem; border-radius: var(--radius-lg); border: 1px solid var(--dark-200);">
+            <div class="stat-label text-sm text-gray-600 mb-1">عمولة المنصّة (تُخصم من الموظف)</div>
+            <div class="stat-value text-lg font-extrabold text-gray-900">
+              {{ breakdown.platform_fee_value|floatformat:2 }} ر.س
+            </div>
+            <div class="text-xs text-gray-500 mt-1">
+              {{ breakdown.fee_percent|floatformat:4 }}
+            </div>
+          </div>
+
+          <div class="stat-item text-center" style="background: var(--white); padding: 1.25rem; border-radius: var(--radius-lg); border: 1px solid var(--dark-200);">
+            <div class="stat-label text-sm text-gray-600 mb-1">صافي الموظف</div>
+            <div class="stat-value text-lg font-extrabold text-green-700">
+              {{ breakdown.tech_payout|floatformat:2 }} ر.س
+            </div>
+          </div>
+
+        </div>
+      </div>
+    {% endif %}
 
     {# ===== تفاصيل الاتفاقية ===== #}
     <div class="profile-section scroll-reveal">
@@ -100,7 +171,8 @@
           اتفق الطرف الأول <strong style="color: var(--dark-900);">(العميل) {{ agreement.client_display }}</strong>
           مع الطرف الثاني <strong style="color: var(--dark-900);">(الموظف) {{ agreement.employee_display }}</strong>
           على تنفيذ <strong style="color: var(--dark-900);">"{{ agreement.title }}"</strong>
-          بمبلغ <strong style="color: var(--primary-600);">{{ breakdown.client_total|floatformat:2 }} ر.س</strong>
+          بمبلغ إجمالي على العميل قدره
+          <strong style="color: var(--primary-600);">{{ breakdown.client_total|floatformat:2 }} ر.س</strong>
           ومدة تنفيذ <strong style="color: var(--secondary-600);">{{ agreement.duration_days }} يومًا</strong>.
         </p>
 
@@ -235,15 +307,14 @@
         <div class="action-group" style="display: flex; gap: 1rem; flex-wrap: wrap;">
           {% if user.is_authenticated %}
             {% if user.is_staff or user.is_superuser or user.id == agreement.employee_id %}
-  
+              <a href="{% url 'agreements:edit' agreement.pk %}" class="btn btn-secondary">
+                ✏️ تحرير الاتفاقية
+              </a>
             {% endif %}
           {% endif %}
-          <a href="{% url 'agreements:edit' agreement.pk %}" class="btn btn-secondary">
-            ✏️ تحرير الاتفاقية
-          </a>
         </div>
 
-        <div class="action-group" style="display: flex; gap: 1rem; flex-wrap: wrap%;">
+        <div class="action-group" style="display: flex; gap: 1rem; flex-wrap: wrap;">
           <button onclick="window.print()" class="btn btn-success">
             🖨️ طباعة الوثيقة
           </button>
@@ -262,12 +333,10 @@
   {{ block.super }}
   <script>
   (function () {
-    // تهيئة تأثيرات التمرير
     if (typeof initScrollReveal === 'function') {
       initScrollReveal();
     }
 
-    // تأثيرات على الأزرار
     document.querySelectorAll('.btn').forEach(function(button){
       button.addEventListener('click', function() {
         if (typeof animateButtonClick === 'function') {
@@ -276,7 +345,6 @@
       });
     });
 
-    // تأثيرات على بنود الاتفاقية
     document.querySelectorAll('.clause-item').forEach(function(clause, index){
       clause.style.animationDelay = String(index * 0.1) + 's';
       clause.addEventListener('mouseenter', function() {
@@ -289,7 +357,6 @@
       });
     });
 
-    // تأثيرات على بطاقات التوقيع
     document.querySelectorAll('.signature-box').forEach(function(box){
       box.addEventListener('mouseenter', function() {
         this.style.borderColor = 'var(--primary-500)';
@@ -301,7 +368,6 @@
       });
     });
 
-    // تحسينات الطباعة
     var printButton = document.querySelector('button[onclick="window.print()"]');
     if (printButton) {
       printButton.addEventListener('click', function() {
@@ -314,7 +380,6 @@
       });
     }
 
-    // تأثيرات على الإحصائيات
     document.querySelectorAll('.stat-item').forEach(function(stat, index){
       stat.style.animationDelay = String(index * 0.2) + 's';
       stat.classList.add('scroll-reveal');
@@ -418,14 +483,8 @@
   }
 
   @keyframes slideInFromRight {
-    from {
-      opacity: 0;
-      transform: translateX(20px);
-    }
-    to {
-      opacity: 1;
-      transform: translateX(0);
-    }
+    from { opacity: 0; transform: translateX(20px); }
+    to   { opacity: 1; transform: translateX(0); }
   }
 
   .agreement-detail-page .scroll-reveal {

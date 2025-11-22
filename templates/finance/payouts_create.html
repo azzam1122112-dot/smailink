@@ -16,7 +16,7 @@
         إنشاء أمر صرف
       </h1>
       <p class="section-description">
-        نموذج توضيحي — يفعّل عند إضافة view للمسار
+        إنشاء صرف لصافي مستحقات الموظف (بعد خصم عمولة المنصّة)
       </p>
     </div>
 
@@ -24,7 +24,7 @@
     <div class="profile-section" style="max-width: 600px; margin: 0 auto;">
       
       {# ===== تنبيه تجريبي ===== #}
-      <div class="demo-alert profile-section" style="background: var(--secondary-50); border-color: var(--secondary-200); margin-bottom: 2rem;">
+      <div class="demo-alert profile-section" style="background: var(--secondary-50); border-color: var(--secondary-200); margin-bottom: 1.5rem;">
         <div class="card-row" style="display: flex; align-items: flex-start; gap: 1rem;">
           <span class="alert-icon" style="color: var(--secondary-600); font-size: 1.2rem;">🧪</span>
           <div class="alert-content">
@@ -33,6 +33,25 @@
             </div>
             <p class="card-section-note" style="color: var(--secondary-600);">
               هذا النموذج توضيحي وسيتم تفعيله بالكامل عند إضافة الـ view المناسب للمسار
+            </p>
+          </div>
+        </div>
+      </div>
+
+      {# ===== تنبيه مالي مهم ===== #}
+      <div class="profile-section" style="background: var(--primary-50); border-color: var(--primary-200); margin-bottom: 2rem;">
+        <div class="card-row" style="display: flex; align-items: flex-start; gap: 1rem;">
+          <span style="font-size: 1.2rem;">💡</span>
+          <div>
+            <div class="card-section-title" style="color: var(--primary-700); margin-bottom: 0.25rem;">
+              تنبيه مالي
+            </div>
+            <p class="card-section-note" style="color: var(--primary-700);">
+              مبلغ أمر الصرف يمثل <b>صافي الموظف</b> بعد خصم عمولة المنصّة.
+              <br>
+              <span style="color: var(--dark-600); font-weight: 600;">
+                العميل لا يتحمل عمولة المنصّة، والضريبة تُحصّل من العميل ضمن الفاتورة وليس ضمن الصرف.
+              </span>
             </p>
           </div>
         </div>
@@ -62,7 +81,7 @@
           {# ===== حقل المبلغ ===== #}
           <div class="form-field">
             <label class="form-label">
-              💰 المبلغ
+              💰 مبلغ الصرف (صافي الموظف)
             </label>
             <div class="amount-input-wrapper">
               <input type="number" 
@@ -76,7 +95,7 @@
               <span class="currency-symbol">ر.س</span>
             </div>
             <p class="field-hint">
-              المبلغ يجب أن يكون أكبر من الصفر
+              أدخل صافي مستحق الموظف بعد خصم عمولة المنصّة.
             </p>
           </div>
         </div>
@@ -92,16 +111,18 @@
                     placeholder="وصف مختصر لأمر الصرف..."
                     id="descriptionInput"></textarea>
           <p class="field-hint">
-            مثلاً: مستحقات مشروع #123 أو تسوية رصيد
+            مثلاً: صافي مستحقات الطلب #123 أو تسوية مستحقات مرحلة
           </p>
         </div>
 
         {# ===== معاينة المبلغ ===== #}
         <div class="amount-preview profile-section" style="background: var(--primary-50); border-color: var(--primary-200); margin: 1.5rem 0; display: none;" id="amountPreview">
-          <div class="card-section-title" style="color: var(--primary-700);">معاينة المبلغ</div>
+          <div class="card-section-title" style="color: var(--primary-700);">معاينة الصرف</div>
           <div class="preview-content" style="display: flex; justify-content: space-between; align-items: center;">
-            <div class="preview-label" style="color: var(--primary-600);">المبلغ المدخل:</div>
-            <div class="preview-amount" style="font-size: 1.5rem; font-weight: 800; color: var(--primary-700);" id="previewAmount">0.00 ر.س</div>
+            <div class="preview-label" style="color: var(--primary-600);">صافي الصرف للموظف:</div>
+            <div class="preview-amount" style="font-size: 1.5rem; font-weight: 800; color: var(--primary-700);" id="previewAmount">
+              0.00 ر.س
+            </div>
           </div>
         </div>
 
@@ -132,8 +153,8 @@
         <div class="help-item">
           <div class="help-icon">📋</div>
           <div class="help-content">
-            <div class="help-title">المستندات</div>
-            <div class="help-text">يُفضّل إرفاق مستندات داعمة إن وجدت</div>
+            <div class="help-title">التحقق</div>
+            <div class="help-text">تأكد أن المبلغ هو صافي الموظف بعد خصم عمولة المنصّة</div>
           </div>
         </div>
         <div class="help-item">
@@ -269,40 +290,34 @@
           return false;
         }
 
-        // تأكيد قبل الإرسال
         const amount = parseFloat(amountInput.value);
         const employee = employeeInput.value.trim();
         
-        const confirmMsg = `هل أنت متأكد من إنشاء أمر صرف للموظف ${employee} بمبلغ ${formatAmount(amount)} ريال؟`;
+        const confirmMsg = `هل أنت متأكد من إنشاء أمر صرف (صافي الموظف) للموظف ${employee} بمبلغ ${formatAmount(amount)} ريال؟`;
         
         if (!confirm(confirmMsg)) {
           return false;
         }
 
-        // تعطيل الزر وإظهار حالة التحميل
         if (submitBtn) {
           submitBtn.disabled = true;
           submitBtn.innerHTML = '⏳ جاري إنشاء أمر الصرف...';
           
-          // تأثير النقر
           if (typeof animateButtonClick === 'function') {
             animateButtonClick(submitBtn);
           }
         }
 
-        // استخدام نظام التوست
         if (typeof showToast === 'function') {
           showToast('جاري إنشاء أمر الصرف...', 'info');
         }
 
-        // محاكاة الإرسال (سيتم استبدالها بالوظيفة الفعلية)
+        // نموذج تجريبي
         setTimeout(() => {
-          // هذا مجرد نموذج توضيحي
           if (typeof showToast === 'function') {
             showToast('تم إنشاء أمر الصرف بنجاح (نموذج تجريبي)', 'success');
           }
           
-          // إعادة تعيين النموذج
           form.reset();
           amountPreview.style.display = 'none';
           
@@ -312,11 +327,10 @@
           }
         }, 2000);
 
-        return false; // منع الإرسال الفعلي في النموذج التجريبي
+        return false;
       });
     }
 
-    // تأثيرات على عناصر المساعدة
     document.querySelectorAll('.help-item').forEach((item, index) => {
       item.style.animationDelay = `${index * 0.2}s`;
       item.classList.add('scroll-reveal');

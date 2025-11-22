@@ -5,27 +5,30 @@
 {% block title %}لوحة تحكم المدير{% endblock %}
 
 {% block page_header %}
-<div class="admin-header profile-section" style="background: linear-gradient(135deg, var(--primary-50) 0%, var(--white) 100%);">
-  <div class="admin-header-content" style="display: flex; justify-content: space-between; align-items: flex-start; gap: 2rem;">
-    <div style="flex: 1;">
-      <div class="section-badge" style="margin-bottom: 1rem;">
-        🛠️ لوحة المدير العام
+<div class="profile-section" style="background: linear-gradient(135deg, var(--primary-50) 0%, var(--white) 100%); border: none;">
+  <div class="admin-header-content" style="display: flex; flex-direction: column; gap: 1.5rem;">
+    <div style="display: flex; justify-content: space-between; align-items: flex-start; gap: 2rem;">
+      <div style="flex: 1;">
+        <div class="section-badge" style="margin-bottom: 1rem;">
+          🛠️ لوحة المدير العام
+        </div>
+        <h1 class="section-title" style="margin-bottom: 0.5rem;">
+          مرحبًا بك في لوحة التحكم
+        </h1>
+        <p class="section-description">
+          متابعة أداء المنصّة والطلبات والفواتير والاتفاقيات والنزاعات في نظرة واحدة.
+        </p>
       </div>
-      <h1 class="section-title" style="margin-bottom: 0.5rem;">
-        مرحبًا بك في لوحة التحكّم
-      </h1>
-      <p class="section-description">
-        متابعة أداء المنصّة، الطلبات، الفواتير، الاتفاقيات والنزاعات في نظرة واحدة.
-      </p>
-    </div>
-    <div class="admin-meta" style="display: flex; gap: 1rem; flex-wrap: wrap;">
-      <div class="meta-item profile-section" style="padding: 1rem; min-width: 140px;">
-        <div class="meta-label">📅 تاريخ اليوم</div>
-        <div class="meta-value">{{ today|date:"Y-m-d" }}</div>
-      </div>
-      <div class="meta-item profile-section" style="padding: 1rem; min-width: 140px;">
-        <div class="meta-label">👥 إجمالي المستخدمين</div>
-        <div class="meta-value">{{ users_total|default:0|intcomma }}</div>
+
+      <div class="admin-meta" style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 0.75rem; min-width: 220px;">
+        <div class="profile-section text-center" style="padding: 1rem;">
+          <div class="meta-label" style="font-size: 0.875rem; color: var(--dark-500); margin-bottom: 0.5rem;">📅 تاريخ اليوم</div>
+          <div class="meta-value" style="font-size: 1.25rem; font-weight: 800; color: var(--dark-800);">{{ today|date:"Y-m-d" }}</div>
+        </div>
+        <div class="profile-section text-center" style="padding: 1rem;">
+          <div class="meta-label" style="font-size: 0.875rem; color: var(--dark-500); margin-bottom: 0.5rem;">👥 إجمالي المستخدمين</div>
+          <div class="meta-value" style="font-size: 1.25rem; font-weight: 800; color: var(--dark-800);">{{ users_total|default:0|intcomma }}</div>
+        </div>
       </div>
     </div>
   </div>
@@ -33,198 +36,419 @@
 {% endblock %}
 
 {% block content %}
-{# روابط احتياطية آمنة #}
+{# روابط احتياطية آمنية #}
+{% url 'dashboard:all_requests' as all_requests_url %}
 {% url 'marketplace:request_list' as req_list_url %}
 {% url 'finance:invoice_list' as inv_list_url %}
+
+<div style="margin-bottom: 1.5rem; text-align: left;">
+  <a href="{{ all_requests_url }}" class="btn btn-info" style="font-size: 1.1rem;">
+    <span style="font-size:1.3em;vertical-align:middle;">📋</span>
+    جميع الطلبات
+  </a>
+</div>
 {% url 'disputes:list' as disputes_list_url %}
 {% url 'agreements:list' as agreements_list_url %}
 {% url 'accounts:user_list' as users_list_url %}
 {% url 'marketplace:offers_list' as offers_list_url %}
 
-
-{# ===== بطاقات المؤشرات الرئيسية ===== #}
-<section class="admin-section">
-  <div class="section-header">
-    <h2 class="section-title">📊 المؤشرات الرئيسية</h2>
-    <p class="section-description">نظرة سريعة على أداء المنصة</p>
+{# ===== تنبيهات تشغيلية ===== #}
+{% if ops_alerts %}
+<div class="profile-section" style="background: var(--secondary-50); border-color: var(--secondary-200); margin-bottom: 2rem;">
+  <div class="card-section-title">⚠️ تنبيهات تشغيلية</div>
+  <p class="card-section-note" style="margin-bottom: 1rem;">تحتاج متابعة</p>
+  <div class="alerts-list" style="display: flex; flex-direction: column; gap: 0.75rem;">
+    {% for a in ops_alerts %}
+      <div class="alert-item" style="display: flex; align-items: flex-start; gap: 0.75rem; padding: 0.75rem; background: var(--white); border-radius: var(--radius-lg); border: 1px solid var(--secondary-200);">
+        <span class="alert-dot" style="width: 6px; height: 6px; background: var(--secondary-500); border-radius: 50%; margin-top: 0.5rem; flex-shrink: 0;"></span>
+        <span class="alert-text" style="color: var(--secondary-700); font-size: 0.9rem; line-height: 1.4;">{{ a }}</span>
+      </div>
+    {% endfor %}
   </div>
+</div>
+{% endif %}
+
+{# ===== المؤشرات الرئيسية KPI ===== #}
+<div class="section-header" style="margin-bottom: 1.5rem;">
+  <h2 class="section-title">📊 المؤشرات الرئيسية</h2>
+  <p class="section-description">نظرة سريعة على المنصّة</p>
+</div>
+
+<div class="kpi-grid" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 1.5rem; margin-bottom: 2rem;">
   
-  <div class="kpi-grid" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 1.5rem;">
-    
-    {# بطاقة الطلبات #}
-    <div class="profile-section kpi-card">
-      <div class="kpi-header" style="display: flex; align-items: center; gap: 1rem; margin-bottom: 1rem;">
-        <div class="kpi-icon" style="width: 3rem; height: 3rem; background: var(--primary-100); color: var(--primary-600); border-radius: var(--radius-lg); display: flex; align-items: center; justify-content: center; font-size: 1.5rem;">
-          <a href="/dashboard/requests/" style="color:inherit;text-decoration:none;">📋</a>
-        </div>
-        <div>
-          <h3 class="card-section-title">الطلبات</h3>
-          <p class="card-section-note">توزيع الطلبات حسب الحالة</p>
-        </div>
+  {# الطلبات #}
+  <div class="profile-section kpi-card">
+    <div class="kpi-header" style="display: flex; align-items: center; gap: 1rem; margin-bottom: 1rem;">
+      <div class="kpi-icon" style="width: 3rem; height: 3rem; background: var(--primary-100); color: var(--primary-600); border-radius: var(--radius-lg); display: flex; align-items: center; justify-content: center; font-size: 1.5rem;">
+        📋
       </div>
-      <div class="kpi-value" style="font-size: 2.7rem; font-weight: 900; color: var(--primary-700); margin-bottom: 0.5rem; letter-spacing:1px;">
-        {{ req_total|default:'0'|intcomma }}
+      <div>
+        <h3 class="card-section-title">إجمالي الطلبات</h3>
+        <p class="card-section-note">كل الحالات</p>
       </div>
-      <div class="kpi-subtitle" style="font-size:1.1rem; color:var(--dark-500); margin-bottom:0.5rem;">إجمالي الطلبات</div>
-      <div class="kpi-details">
-        {% for row in req_counts %}
-          <div class="kpi-row" style="display: flex; justify-content: space-between; padding: 0.5rem 0; border-bottom: 1px solid var(--dark-100);">
-            <span class="kpi-label" style="color: var(--dark-600);">
-              {% if row.state == 'new' %}جديد{% elif row.state == 'completed' %}مكتمل{% elif row.state == 'in_progress' %}قيد التنفيذ{% elif row.state == 'cancelled' %}ملغى{% elif row.state == 'disputed' %}نزاع{% elif row.state == 'offer_selected' %}تم اختيار عرض{% elif row.state == 'agreement_pending' %}بانتظار الاتفاقية{% else %}{{ row.state|default:'غير محدد' }}{% endif %}
-            </span>
-            <span class="kpi-count" style="color: var(--primary-600); font-weight: 700; font-size:1.1rem;">
-              {{ row.c|intcomma }}
-            </span>
-          </div>
-        {% empty %}
-          <div class="kpi-row" style="display: flex; justify-content: space-between; padding: 0.5rem 0;">
-            <span class="kpi-label" style="color: var(--dark-600);">لا توجد بيانات</span>
-            <span class="kpi-count" style="color: var(--dark-700); font-weight: 600;">0</span>
-          </div>
-        {% endfor %}
-      </div>
-      <div class="kpi-actions employee-actions" style="margin-top: 1rem;">
-        <a href="/dashboard/requests/" class="btn btn-outline btn-sm">
+    </div>
+    <div class="kpi-value" style="font-size: 2.5rem; font-weight: 800; color: var(--primary-600); margin-bottom: 1rem;">
+      {{ req_total|default:0|intcomma }}
+    </div>
+    <div class="kpi-actions">
+      {% if urls.requests or req_list_url %}
+        <a href="{{ all_requests_url }}" class="btn btn-outline btn-sm">
           عرض جميع الطلبات
         </a>
-      </div>
-    </div>
-
-    {# بطاقة الفواتير #}
-    <div class="profile-section kpi-card">
-      <div class="kpi-header" style="display: flex; align-items: center; gap: 1rem; margin-bottom: 1rem;">
-        <div class="kpi-icon" style="width: 3rem; height: 3rem; background: var(--secondary-100); color: var(--secondary-600); border-radius: var(--radius-lg); display: flex; align-items: center; justify-content: center; font-size: 1.5rem;">
-          💰
-        </div>
-        <div>
-          <h3 class="card-section-title">الفواتير</h3>
-          <p class="card-section-note">إجمالي المبالغ المتداولة</p>
-        </div>
-      </div>
-      <div class="kpi-value" style="font-size: 2.6rem; font-weight: 900; color: #d4a100; margin-bottom: 0.5rem; letter-spacing:1px;">
-        {{ inv_totals.total|default:0|floatformat:2|intcomma }} <span style="font-size:1.1rem; color:#bfa700;">ريال</span>
-      </div>
-      <div class="kpi-breakdown" style="margin-bottom: 1rem;">
-        <div style="display: flex; justify-content: space-between; padding: 0.25rem 0; color: var(--dark-700); font-size: 1rem; font-weight:700;">
-          <span>إجمالي المبالغ</span>
-          <span>{{ inv_totals.total|default:0|floatformat:2|intcomma }} ر.س</span>
-        </div>
-      </div>
-      <div class="kpi-details">
-        <div class="kpi-row" style="display: flex; justify-content: space-between; padding: 0.5rem 0; border-bottom: 1px solid var(--dark-100);">
-          <span class="kpi-label" style="color: var(--dark-600);">مدفوعة</span>
-          <span class="kpi-count" style="color: #16a34a; font-weight: 700;">{{ inv_totals.paid|default:0|floatformat:2|intcomma }}</span>
-        </div>
-        <div class="kpi-row" style="display: flex; justify-content: space-between; padding: 0.5rem 0; border-bottom: 1px solid var(--dark-100);">
-          <span class="kpi-label" style="color: var(--dark-600);">غير مدفوعة</span>
-          <span class="kpi-count" style="color: #eab308; font-weight: 700;">{{ inv_totals.unpaid|default:0|floatformat:2|intcomma }}</span>
-        </div>
-        <div class="kpi-row" style="display: flex; justify-content: space-between; padding: 0.5rem 0;">
-          <span class="kpi-label" style="color: var(--dark-600);">متأخرة</span>
-          <span class="kpi-count" style="color: #ef4444; font-weight: 700;">{{ overdue_count|default:0|intcomma }}</span>
-        </div>
-      </div>
-      {% if urls.invoices or inv_list_url %}
-        <div class="kpi-actions employee-actions" style="margin-top: 1rem;">
-          <a href="{{ urls.invoices|default:inv_list_url }}" class="btn btn-outline btn-sm">
-            لوحة الفواتير
-          </a>
-        </div>
+      {% else %}
+        <span class="btn btn-outline btn-sm" style="opacity: 0.6;">—</span>
       {% endif %}
     </div>
+  </div>
 
-    {# بطاقة الاتفاقيات والعروض #}
-    <div class="profile-section kpi-card">
-      <div class="kpi-header" style="display: flex; align-items: center; gap: 1rem; margin-bottom: 1rem;">
-        <div class="kpi-icon" style="width: 3rem; height: 3rem; background: var(--primary-100); color: var(--primary-600); border-radius: var(--radius-lg); display: flex; align-items: center; justify-content: center; font-size: 1.5rem;">
-          🤝
-        </div>
-        <div>
-          <h3 class="card-section-title">أحدث الاتفاقيات</h3>
-          <p class="card-section-note">أحدث 3 اتفاقيات مضافة</p>
-        </div>
+  {# المستخدمون #}
+  <div class="profile-section kpi-card">
+    <div class="kpi-header" style="display: flex; align-items: center; gap: 1rem; margin-bottom: 1rem;">
+      <div class="kpi-icon" style="width: 3rem; height: 3rem; background: #f3e8ff; color: #7c3aed; border-radius: var(--radius-lg); display: flex; align-items: center; justify-content: center; font-size: 1.5rem;">
+        👥
       </div>
-      <div class="kpi-details" style="margin-bottom: 0.5rem;">
-        {% for ag in agreements_recent|slice:":3" %}
-        <div class="kpi-row" style="display: flex; flex-direction: column; align-items: flex-start; padding: 0.7rem 0; border-bottom: 1px solid var(--dark-100);">
-          <div style="font-weight:700; color:var(--primary-700); font-size:1.1rem; margin-bottom:0.2rem;">
-            {{ ag.title|default:"—" }}
-          </div>
-          <div style="font-size:0.97rem; color:var(--dark-700); margin-bottom:0.1rem;">
-            <span style="color:var(--primary-600); font-weight:600;">الموظف:</span> {{ ag.employee_display|default:"—" }}
-          </div>
-          <div style="font-size:0.97rem; color:var(--dark-700); margin-bottom:0.1rem;">
-            <span style="color:var(--primary-600); font-weight:600;">الحالة:</span> 
-            {% if ag.get_status_display %}
-              <span class="badge badge-default">{{ ag.get_status_display }}</span>
-            {% else %}
-              <span class="badge badge-default">{{ ag.status|default:"غير محددة" }}</span>
-            {% endif %}
-          </div>
-          <div style="font-size:0.95rem; color:var(--dark-500);">
-            <span style="color:var(--primary-600); font-weight:600;">تاريخ الإنشاء:</span> {{ ag.created_at|date:"Y-m-d H:i" }}
-          </div>
-        </div>
-        {% empty %}
-        <div class="kpi-row" style="padding: 0.7rem 0; color:var(--dark-400);">لا توجد اتفاقيات حديثة.</div>
-        {% endfor %}
-      </div>
-      <div class="kpi-actions employee-actions" style="margin-top: 1rem; display: flex; gap: 0.5rem;">
-        {% if urls.agreements or agreements_list_url %}
-          <a href="{{ urls.agreements|default:agreements_list_url }}" class="btn btn-outline btn-sm">
-            جميع الاتفاقيات
-          </a>
-        {% endif %}
+      <div>
+        <h3 class="card-section-title">المستخدمون</h3>
+        <p class="card-section-note">موظفون: {{ users_staff|default:0|intcomma }}</p>
       </div>
     </div>
-
-    {# بطاقة النزاعات المصغرة #}
-    <div class="profile-section kpi-card">
-      <div class="kpi-header" style="display: flex; align-items: center; gap: 1rem; margin-bottom: 1rem;">
-        <div class="kpi-icon" style="width: 3rem; height: 3rem; background: var(--danger-100, #fee2e2); color: var(--danger-600, #dc2626); border-radius: var(--radius-lg); display: flex; align-items: center; justify-content: center; font-size: 1.5rem;">
-          ⚖️
-        </div>
-        <div>
-          <h3 class="card-section-title">أحدث النزاعات</h3>
-          <p class="card-section-note">أحدث 3 نزاعات مضافة</p>
-        </div>
-      </div>
-      <div class="kpi-details" style="margin-bottom: 0.5rem;">
-        {% for d in disputes_recent|slice:":3" %}
-        <div class="kpi-row" style="display: flex; flex-direction: column; align-items: flex-start; padding: 0.7rem 0; border-bottom: 1px solid var(--dark-100);">
-          <div style="font-weight:700; color:var(--danger-700,#b91c1c); font-size:1.1rem; margin-bottom:0.2rem;">
-            {% if d.title %}{{ d.title }}{% elif d.note %}{{ d.note|truncatechars:60 }}{% elif d.reason %}{{ d.reason|truncatechars:60 }}{% else %}—{% endif %}
-          </div>
-          <div style="font-size:0.97rem; color:var(--dark-700); margin-bottom:0.1rem;">
-            <span style="color:var(--danger-600,#dc2626); font-weight:600;">الحالة:</span> 
-            {% if d.status %}
-              <span class="badge badge-rejected">{{ d.status }}</span>
-            {% elif d.state %}
-              <span class="badge badge-rejected">{{ d.state }}</span>
-            {% else %}
-              <span class="badge badge-rejected">غير محددة</span>
-            {% endif %}
-          </div>
-          <div style="font-size:0.95rem; color:var(--dark-500);">
-            <span style="color:var(--danger-600,#dc2626); font-weight:600;">تاريخ الإنشاء:</span> {{ d.created_at|date:"Y-m-d H:i" }}
-          </div>
-        </div>
-        {% empty %}
-        <div class="kpi-row" style="padding: 0.7rem 0; color:var(--dark-400);">لا توجد نزاعات حديثة.</div>
-        {% endfor %}
-      </div>
-      <div class="kpi-actions employee-actions" style="margin-top: 1rem; display: flex; gap: 0.5rem;">
-        {% if urls.disputes or disputes_list_url %}
-          <a href="{{ urls.disputes|default:disputes_list_url }}" class="btn btn-outline btn-sm">
-            جميع النزاعات
-          </a>
-        {% endif %}
-      </div>
+    <div class="kpi-value" style="font-size: 2.5rem; font-weight: 800; color: #7c3aed; margin-bottom: 1rem;">
+      {{ users_total|default:0|intcomma }}
+    </div>
+    <div class="kpi-actions">
+      {% if urls.users or users_list_url %}
+        <a href="{{ urls.users|default:users_list_url }}" class="btn btn-outline btn-sm">
+          إدارة المستخدمين
+        </a>
+      {% else %}
+        <span class="btn btn-outline btn-sm" style="opacity: 0.6;">—</span>
+      {% endif %}
     </div>
   </div>
-</section>
 
+  {# الفواتير - إجمالي #}
+  <div class="profile-section kpi-card">
+    <div class="kpi-header" style="display: flex; align-items: center; gap: 1rem; margin-bottom: 1rem;">
+      <div class="kpi-icon" style="width: 3rem; height: 3rem; background: var(--secondary-100); color: var(--secondary-600); border-radius: var(--radius-lg); display: flex; align-items: center; justify-content: center; font-size: 1.5rem;">
+        💳
+      </div>
+      <div>
+        <h3 class="card-section-title">إجمالي الفواتير</h3>
+        <p class="card-section-note">مدفوعة + غير مدفوعة</p>
+      </div>
+    </div>
+    <div class="kpi-value" style="font-size: 2rem; font-weight: 800; color: var(--secondary-600); margin-bottom: 1rem;">
+      {{ inv_totals.total|default:0|floatformat:2|intcomma }} ر.س
+    </div>
+    <div class="kpi-actions">
+      {% if urls.invoices or inv_list_url %}
+        <a href="{{ urls.invoices|default:inv_list_url }}" class="btn btn-outline btn-sm">
+          تفاصيل الفواتير
+        </a>
+      {% else %}
+        <span class="btn btn-outline btn-sm" style="opacity: 0.6;">—</span>
+      {% endif %}
+    </div>
+  </div>
 
+  {# الفواتير - متأخرة #}
+  <div class="profile-section kpi-card">
+    <div class="kpi-header" style="display: flex; align-items: center; gap: 1rem; margin-bottom: 1rem;">
+      <div class="kpi-icon" style="width: 3rem; height: 3rem; background: #fef2f2; color: #ef4444; border-radius: var(--radius-lg); display: flex; align-items: center; justify-content: center; font-size: 1.5rem;">
+        ⏳
+      </div>
+      <div>
+        <h3 class="card-section-title">فواتير متأخرة</h3>
+        <p class="card-section-note">أقدم من 3 أيام</p>
+      </div>
+    </div>
+    <div class="kpi-value" style="font-size: 2.5rem; font-weight: 800; color: #ef4444; margin-bottom: 1rem;">
+      {{ overdue_count|default:0|intcomma }}
+    </div>
+    <div class="kpi-actions">
+      <span class="btn btn-outline btn-sm" style="background: #fef2f2; color: #ef4444; border-color: #fecaca;">
+        متابعة
+      </span>
+    </div>
+  </div>
+</div>
+
+{# ===== تفاصيل المالية ===== #}
+<div class="section-header" style="margin-bottom: 1rem;">
+  <h3 class="section-title">💰 التفاصيل المالية</h3>
+  <p class="section-description">تفصيل المبالغ والعمولات</p>
+</div>
+
+<div class="finance-grid" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem; margin-bottom: 2rem;">
+  <div class="profile-section text-center">
+    <div class="finance-label" style="font-size: 0.875rem; color: var(--dark-500); margin-bottom: 0.5rem;">مدفوع</div>
+    <div class="finance-value" style="font-size: 1.5rem; font-weight: 700; color: var(--primary-600);">
+      {{ inv_totals.paid|default:0|floatformat:2|intcomma }} ر.س
+    </div>
+  </div>
+  
+  <div class="profile-section text-center">
+    <div class="finance-label" style="font-size: 0.875rem; color: var(--dark-500); margin-bottom: 0.5rem;">غير مدفوع</div>
+    <div class="finance-value" style="font-size: 1.5rem; font-weight: 700; color: var(--secondary-600);">
+      {{ inv_totals.unpaid|default:0|floatformat:2|intcomma }} ر.س
+    </div>
+  </div>
+  
+  <div class="profile-section text-center">
+    <div class="finance-label" style="font-size: 0.875rem; color: var(--dark-500); margin-bottom: 0.5rem;">مجمّد (نزاعات)</div>
+    <div class="finance-value" style="font-size: 1.5rem; font-weight: 700; color: #ef4444;">
+      {{ inv_totals.disputed_total|default:0|floatformat:2|intcomma }} ر.س
+    </div>
+  </div>
+  
+  <div class="profile-section text-center">
+    <div class="finance-label" style="font-size: 0.875rem; color: var(--dark-500); margin-bottom: 0.5rem;">الضريبة (VAT)</div>
+    <div class="finance-value" style="font-size: 1.5rem; font-weight: 700; color: var(--dark-700);">
+      {{ inv_totals.vat_total|default:0|floatformat:2|intcomma }} ر.س
+    </div>
+  </div>
+  
+  <div class="profile-section text-center">
+    <div class="finance-label" style="font-size: 0.875rem; color: var(--dark-500); margin-bottom: 0.5rem;">عمولة المنصّة</div>
+    <div class="finance-value" style="font-size: 1.5rem; font-weight: 700; color: var(--primary-600);">
+      {{ inv_totals.platform_fee_total|default:0|floatformat:2|intcomma }} ر.س
+    </div>
+  </div>
+</div>
+
+{# ===== الجداول الرئيسية ===== #}
+<div class="tables-grid" style="display: grid; grid-template-columns: 2fr 1fr; gap: 1.5rem; margin-bottom: 2rem;">
+  
+  {# آخر الطلبات #}
+  <div class="profile-section">
+    <div class="data-card-header" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
+      <h3 class="card-section-title">🧾 آخر الطلبات</h3>
+      <a href="{% url 'dashboard:all_requests' %}" class="btn btn-outline btn-sm">
+        جميع الطلبات
+      </a>
+    </div>
+    
+    <div class="table-wrapper">
+      <table class="table table-clean">
+        <thead>
+          <tr>
+            <th>#</th>
+            <th>العنوان</th>
+            <th>العميل</th>
+            <th>الحالة</th>
+            <th>التاريخ</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for r in req_recent|slice:":5" %}
+            <tr class="scroll-reveal">
+              <td class="text-muted">#{{ r.id }}</td>
+              <td>{{ r.title|default:"—" }}</td>
+              <td>
+                {% if r.client %}
+                  {% if r.client.name %}
+                    {{ r.client.name }}
+                  {% elif r.client.phone %}
+                    {{ r.client.phone }}
+                  {% elif r.client.email %}
+                    {{ r.client.email }}
+                  {% else %}
+                    {{ r.client }}
+                  {% endif %}
+                {% else %}
+                  —
+                {% endif %}
+              </td>
+              <td>
+                {% if r.status %}
+                  <span class="badge badge-default">{{ r.status }}</span>
+                {% elif r.state %}
+                  <span class="badge badge-default">{{ r.state }}</span>
+                {% else %}
+                  <span class="badge badge-default">غير محدد</span>
+                {% endif %}
+              </td>
+              <td class="text-muted">
+                {% if r.created_at %}
+                  {{ r.created_at|date:"Y-m-d H:i" }}
+                {% else %}
+                  {{ r.id }}
+                {% endif %}
+              </td>
+            </tr>
+          {% empty %}
+            <tr>
+              <td colspan="5" class="text-center text-muted" style="padding: 2rem;">
+                لا توجد طلبات حديثة
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  {# آخر النزاعات #}
+  <div class="profile-section">
+    <div class="data-card-header" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
+      <h3 class="card-section-title">⚖️ آخر النزاعات</h3>
+      {% if urls.disputes or disputes_list_url %}
+        <a href="{{ urls.disputes|default:disputes_list_url }}" class="btn btn-outline btn-sm">
+          كل النزاعات
+        </a>
+      {% endif %}
+    </div>
+    
+    <div class="disputes-list" style="display: flex; flex-direction: column; gap: 1rem;">
+      {% for d in disputes_recent|slice:":3" %}
+        <div class="profile-section" style="border: 2px dashed var(--dark-200); padding: 1rem;">
+          <div class="dispute-header" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;">
+            <div class="dispute-title" style="font-weight: 600; color: var(--dark-800);">
+              {% if d.request %}
+                نزاع على طلب #{{ d.request.id }}
+              {% else %}
+                نزاع #{{ d.id }}
+              {% endif %}
+            </div>
+            <span class="badge badge-rejected">
+              {% if d.status %}{{ d.status }}{% elif d.state %}{{ d.state }}{% else %}غير محدد{% endif %}
+            </span>
+          </div>
+          
+          {% if d.reason %}
+            <div class="dispute-reason" style="color: var(--dark-600); font-size: 0.875rem; line-height: 1.4; margin-bottom: 0.5rem;">
+              {{ d.reason|truncatewords:20 }}
+            </div>
+          {% elif d.note %}
+            <div class="dispute-reason" style="color: var(--dark-600); font-size: 0.875rem; line-height: 1.4; margin-bottom: 0.5rem;">
+              {{ d.note|truncatewords:20 }}
+            </div>
+          {% endif %}
+          
+          <div class="dispute-date" style="color: var(--dark-500); font-size: 0.75rem;">
+            {% if d.created_at %}
+              {{ d.created_at|date:"Y-m-d H:i" }}
+            {% else %}
+              —
+            {% endif %}
+          </div>
+        </div>
+      {% empty %}
+        <div class="text-center text-muted" style="padding: 2rem;">
+          لا توجد نزاعات حديثة
+        </div>
+      {% endfor %}
+    </div>
+  </div>
+</div>
+
+{# ===== آخر الفواتير ===== #}
+<div class="profile-section" style="margin-bottom: 2rem;">
+  <div class="data-card-header" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
+    <h3 class="card-section-title">💳 آخر الفواتير</h3>
+    {% if urls.invoices or inv_list_url %}
+      <a href="{{ urls.invoices|default:inv_list_url }}" class="btn btn-outline btn-sm">
+        جميع الفواتير
+      </a>
+    {% endif %}
+  </div>
+  
+  <div class="table-wrapper">
+    <table class="table table-clean">
+      <thead>
+        <tr>
+          <th>#</th>
+          <th>الطلب/الاتفاقية</th>
+          <th>المبلغ</th>
+          <th>الحالة</th>
+          <th>التاريخ</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for inv in inv_recent|slice:":5" %}
+          <tr class="scroll-reveal">
+            <td class="text-muted">#{{ inv.id }}</td>
+            <td>
+              {% if inv.agreement and inv.agreement.request %}
+                طلب #{{ inv.agreement.request.id }}
+              {% elif inv.agreement %}
+                اتفاقية #{{ inv.agreement.id }}
+              {% else %}
+                —
+              {% endif %}
+            </td>
+            <td style="font-weight: 700; color: var(--primary-600);">
+              {% if inv.client_total %}
+                {{ inv.client_total|floatformat:2|intcomma }}
+              {% elif inv.total_amount %}
+                {{ inv.total_amount|floatformat:2|intcomma }}
+              {% elif inv.gross_amount %}
+                {{ inv.gross_amount|floatformat:2|intcomma }}
+              {% elif inv.amount %}
+                {{ inv.amount|floatformat:2|intcomma }}
+              {% else %}
+                0.00
+              {% endif %}
+              ر.س
+            </td>
+            <td>
+              {% if inv.status %}
+                <span class="badge 
+                  {% if inv.status == 'paid' or inv.is_paid %}badge-verified
+                  {% else %}badge-pending{% endif %}">
+                  {{ inv.status }}
+                </span>
+              {% else %}
+                <span class="badge badge-default">غير محدد</span>
+              {% endif %}
+            </td>
+            <td class="text-muted">
+              {% if inv.issued_at %}
+                {{ inv.issued_at|date:"Y-m-d" }}
+              {% elif inv.created_at %}
+                {{ inv.created_at|date:"Y-m-d" }}
+              {% else %}
+                —
+              {% endif %}
+            </td>
+          </tr>
+        {% empty %}
+          <tr>
+            <td colspan="5" class="text-center text-muted" style="padding: 2rem;">
+              لا توجد فواتير حديثة
+            </td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+{# ===== روابط سريعة ===== #}
+<div class="section-header" style="margin-bottom: 1rem;">
+  <h3 class="section-title">⚡ إجراءات سريعة</h3>
+  <p class="section-description">اختصارات الإدارة</p>
+</div>
+
+<div class="quick-links-grid" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 1rem; margin-bottom: 2rem;">
+  {% for ql in quick %}
+    {% if ql.url %}
+      <a href="{{ ql.url }}" class="quick-link profile-section text-center">
+        <div class="quick-icon" style="font-size: 2rem; margin-bottom: 0.75rem;">
+          {% if ql.icon == 'fa-receipt' %}🧾
+          {% elif ql.icon == 'fa-list' %}📋
+          {% elif ql.icon == 'fa-file-signature' %}📝
+          {% elif ql.icon == 'fa-scale-balanced' %}⚖️
+          {% elif ql.icon == 'fa-users' %}👥
+          {% else %}⚡{% endif %}
+        </div>
+        <div class="quick-text" style="font-weight: 600; color: var(--dark-700); font-size: 0.9rem;">
+          {{ ql.label }}
+        </div>
+      </a>
+    {% endif %}
+  {% endfor %}
+</div>
 
 {% endblock %}
 
@@ -241,20 +465,18 @@
     document.querySelectorAll('.profile-section').forEach((card, index) => {
       card.style.animationDelay = `${index * 0.1}s`;
       
-      // تأثير hover على البطاقات
-      card.addEventListener('mouseenter', function() {
-        if (this.classList.contains('kpi-card') || this.classList.contains('quick-link')) {
+      // تأثير hover على البطاقات KPI والروابط السريعة
+      if (card.classList.contains('kpi-card') || card.classList.contains('quick-link')) {
+        card.addEventListener('mouseenter', function() {
           this.style.transform = 'translateY(-5px)';
           this.style.boxShadow = 'var(--shadow-lg)';
-        }
-      });
-      
-      card.addEventListener('mouseleave', function() {
-        if (this.classList.contains('kpi-card') || this.classList.contains('quick-link')) {
+        });
+        
+        card.addEventListener('mouseleave', function() {
           this.style.transform = 'translateY(0)';
           this.style.boxShadow = '';
-        }
-      });
+        });
+      }
     });
 
     // تأثيرات على الأزرار
@@ -277,10 +499,10 @@
       });
     });
 
-    // تحديث حيوي للبيانات (يمكن تطويره لاحقًا)
+    // تحديث حيوي للبيانات
     function refreshDashboard() {
       // يمكن إضافة تحديث تلقائي للبيانات هنا
-      console.log('Refreshing dashboard data...');
+      console.log('Refreshing admin dashboard data...');
     }
 
     // تحديث كل 30 ثانية (اختياري)
@@ -290,41 +512,25 @@
   </script>
 
   <style>
-  .admin-dashboard .admin-header {
-    margin-bottom: 2rem;
-    border-radius: var(--radius-xl);
-  }
-
-  .admin-dashboard .meta-item {
-    border-radius: var(--radius-lg);
-    border: 1px solid var(--dark-200);
-    text-align: center;
-  }
-
-  .admin-dashboard .meta-label {
-    font-size: 0.875rem;
-    color: var(--dark-600);
-    margin-bottom: 0.5rem;
-  }
-
-  .admin-dashboard .meta-value {
-    font-size: 1.25rem;
-    font-weight: 700;
-    color: var(--dark-800);
+  .admin-dashboard .admin-header-content {
+    padding: 2rem;
   }
 
   .admin-dashboard .kpi-card {
     transition: all 0.3s ease;
-    min-height: 280px;
+    min-height: 200px;
     display: flex;
     flex-direction: column;
     justify-content: space-between;
   }
 
+  .admin-dashboard .finance-grid {
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  }
+
   .admin-dashboard .quick-link {
     transition: all 0.3s ease;
     text-decoration: none;
-    text-align: center;
     padding: 1.5rem 1rem;
     border-radius: var(--radius-xl);
   }
@@ -333,17 +539,10 @@
     text-decoration: none;
   }
 
-  .admin-dashboard .data-card {
-    min-height: 300px;
-    display: flex;
-    flex-direction: column;
-  }
-
   .admin-dashboard .table-wrapper {
     overflow-x: auto;
     border-radius: var(--radius-lg);
     border: 1px solid var(--dark-200);
-    flex: 1;
   }
 
   .admin-dashboard .table-clean {
@@ -382,10 +581,6 @@
     .admin-dashboard .tables-grid {
       grid-template-columns: 1fr;
     }
-    
-    .admin-dashboard .kpi-grid {
-      grid-template-columns: 1fr;
-    }
   }
 
   @media (max-width: 768px) {
@@ -395,7 +590,14 @@
     
     .admin-dashboard .admin-meta {
       width: 100%;
-      justify-content: center;
+    }
+    
+    .admin-dashboard .kpi-grid {
+      grid-template-columns: 1fr;
+    }
+    
+    .admin-dashboard .finance-grid {
+      grid-template-columns: repeat(2, 1fr);
     }
     
     .admin-dashboard .quick-links-grid {
@@ -404,12 +606,12 @@
   }
 
   @media (max-width: 480px) {
-    .admin-dashboard .quick-links-grid {
+    .admin-dashboard .finance-grid {
       grid-template-columns: 1fr;
     }
     
-    .admin-dashboard .kpi-value {
-      font-size: 2rem;
+    .admin-dashboard .quick-links-grid {
+      grid-template-columns: 1fr;
     }
   }
 

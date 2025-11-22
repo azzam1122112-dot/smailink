@@ -1,0 +1,267 @@
+{% extends "base.html" %}
+{% load humanize %}
+
+{% block title %}مستحقات الموظفين (إدارة){% endblock %}
+
+{% block content %}
+<section class="page-section" dir="rtl">
+  <div class="container">
+
+    {# =================== رأس الصفحة =================== #}
+    <div class="section-header" style="text-align:right;margin-bottom:1.5rem;">
+      <div class="section-badge">👨‍💻 مستحقات الموظفين</div>
+      <h1 class="section-title">مستحقات الموظفين (إدارة)</h1>
+      <p class="section-description">
+        متابعة مستحقات الموظفين للطلبات المكتملة والمدفوعة، مع تطبيق نافذة أمان {{ safety_days|default:3 }} أيام
+        تبدأ من **تاريخ اكتمال المشروع** قبل الصرف.
+      </p>
+
+      <div style="margin-top:1rem;display:flex;gap:.5rem;flex-wrap:wrap;">
+        <a href="{% url 'finance:payouts_list' %}" class="btn btn-outline btn-sm">📤 أوامر الصرف</a>
+        <a href="{% url 'finance:invoice_list' %}" class="btn btn-outline btn-sm">🧾 الفواتير</a>
+        <a href="{% url 'finance:finance_home' %}" class="btn btn-outline btn-sm">💰 لوحة المالية</a>
+      </div>
+    </div>
+
+    {# =================== كروت معلومات سريعة =================== #}
+    <div class="stats-grid"
+         style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));
+                gap:1rem;margin-bottom:1.25rem;">
+
+      <div class="stat-card profile-section">
+        <div class="stat-label">عدد الاتفاقيات المعروضة</div>
+        <div class="stat-value">{{ rows|length }}</div>
+        <div class="text-muted text-xs mt-1">يشمل المؤهل وقيد الانتظار والمجمّد</div>
+      </div>
+
+      <div class="stat-card profile-section">
+        <div class="stat-label">نافذة الأمان</div>
+        <div class="stat-value">{{ safety_days|default:3 }} أيام</div>
+        <div class="text-muted text-xs mt-1">تبدأ من اكتمال المشروع</div>
+      </div>
+
+      <div class="stat-card profile-section">
+        <div class="stat-label">آخر تحديث</div>
+        <div class="stat-value">{{ now|date:"Y-m-d H:i" }}</div>
+      </div>
+
+      <div class="stat-card profile-section">
+        <div class="stat-label">تنبيه</div>
+        <div class="stat-value text-sm">الصرف يتوقف عند النزاعات</div>
+      </div>
+    </div>
+
+    {# =================== فلاتر محليّة =================== #}
+    <div class="profile-section" style="padding:.75rem 1rem;margin-bottom:1rem;">
+      <div style="display:flex;gap:.5rem;flex-wrap:wrap;align-items:center;">
+        <span class="text-sm text-muted">فلترة حسب الاستحقاق:</span>
+
+        <button type="button" class="btn btn-outline btn-sm js-filter-btn" data-filter="all">الكل</button>
+        <button type="button" class="btn btn-outline btn-sm js-filter-btn" data-filter="eligible">مؤهل الآن</button>
+        <button type="button" class="btn btn-outline btn-sm js-filter-btn" data-filter="pending">قيد الانتظار</button>
+        <button type="button" class="btn btn-outline btn-sm js-filter-btn" data-filter="held">مجمّد</button>
+
+        <div class="text-xs text-muted" id="filter-count" style="margin-right:auto;"></div>
+      </div>
+    </div>
+
+    {# =================== جدول المستحقات =================== #}
+    <div class="profile-section data-card">
+      <div class="data-card-header"
+           style="display:flex;align-items:center;justify-content:space-between;gap:1rem;flex-wrap:wrap;">
+        <h3 class="card-section-title">📌 الاتفاقيات المستحقة</h3>
+        <div class="text-muted text-xs">آخر تحديث: {{ now|date:"Y-m-d H:i" }}</div>
+      </div>
+
+      <div class="table-wrapper">
+        <table class="table table-clean">
+          <thead>
+            <tr>
+              <th>الاتفاقية / الطلب</th>
+              <th>الموظف</th>
+              <th>صافي الموظف</th>
+              <th>فاتورة مدفوعة</th>
+              <th>اكتمال المشروع</th>
+              <th>آخر سداد</th>
+              <th>الاستحقاق</th>
+              <th>حالة الصرف</th>
+              <th>إجراءات</th>
+            </tr>
+          </thead>
+
+          <tbody>
+            {% for row in rows %}
+              {% with ag=row.agreement req=row.request inv=row.invoice_to_link payout=row.payout %}
+              <tr class="scroll-reveal due-row"
+                  data-state="{% if row.held_reason %}held{% elif row.eligible_now %}eligible{% else %}pending{% endif %}">
+
+                {# الاتفاقية/الطلب #}
+                <td>
+                  <div style="font-weight:700;">
+                    Agreement #{{ ag.id }}
+                    {% if req %}
+                      — طلب #{{ req.id }} {{ req.title }}
+                    {% endif %}
+                  </div>
+
+                  {% if req %}
+                    <div class="text-muted text-xs mt-1">
+                      حالة الطلب: {{ req.get_status_display|default:req.status }}
+                    </div>
+                  {% endif %}
+                </td>
+
+                {# الموظف #}
+                <td>
+                  <div style="font-weight:700;">{{ row.employee }}</div>
+                </td>
+
+                {# صافي الموظف #}
+                <td class="value-strong">
+                  {{ row.net_for_employee|default:0|floatformat:2 }} ر.س
+                </td>
+
+                {# فاتورة مدفوعة #}
+                <td>
+                  {% if inv %}
+                    <div style="font-weight:700;">#{{ inv.id }}</div>
+                    <div class="text-muted text-xs">مدفوعة</div>
+                  {% else %}
+                    <span class="badge badge-default">لا توجد</span>
+                  {% endif %}
+                </td>
+
+                {# اكتمال المشروع #}
+                <td>
+                  {% if row.completed_at %}
+                    {{ row.completed_at|date:"Y-m-d H:i" }}
+                  {% else %}
+                    —
+                  {% endif %}
+                </td>
+
+                {# آخر سداد #}
+                <td>
+                  {% if row.last_paid_at %}
+                    {{ row.last_paid_at|date:"Y-m-d H:i" }}
+                  {% else %}
+                    —
+                  {% endif %}
+                </td>
+
+                {# الاستحقاق #}
+                <td>
+                  {% if row.held_reason %}
+                    <span class="badge badge-rejected">مجمّد</span>
+                    <div class="text-muted text-xs mt-1">{{ row.held_reason }}</div>
+                  {% else %}
+                    {% if row.eligible_now %}
+                      <span class="badge badge-verified">مؤهل للصرف الآن</span>
+                    {% else %}
+                      <span class="badge badge-pending">قيد الانتظار</span>
+                      {% if row.ready_at %}
+                        <div class="text-muted text-xs mt-1">
+                          متاح في {{ row.ready_at|date:"Y-m-d H:i" }}
+                        </div>
+                      {% endif %}
+                    {% endif %}
+                  {% endif %}
+                </td>
+
+                {# حالة الصرف #}
+                <td>
+                  {% if payout %}
+                    {% if payout.status == 'paid' %}
+                      <span class="badge badge-verified">مدفوع</span>
+                      <div class="text-muted text-xs mt-1">Payout #{{ payout.id }}</div>
+                    {% elif payout.status == 'pending' %}
+                      <span class="badge badge-pending">بانتظار الصرف</span>
+                      <div class="text-muted text-xs mt-1">Payout #{{ payout.id }}</div>
+                    {% else %}
+                      <span class="badge badge-default">
+                        {{ payout.get_status_display|default:payout.status }}
+                      </span>
+                    {% endif %}
+                  {% else %}
+                    <span class="badge badge-default">لا يوجد أمر صرف</span>
+                  {% endif %}
+                </td>
+
+                {# إجراءات #}
+                <td style="white-space:nowrap;">
+                  <a href="{% url 'finance:payouts_list' %}?agreement={{ ag.id }}"
+                     class="btn btn-outline btn-sm">
+                    📄 الصرفيات
+                  </a>
+
+                  {% if not payout %}
+                    {% if row.eligible_now %}
+                      <form method="post" style="display:inline;">
+                        {% csrf_token %}
+                        <input type="hidden" name="agreement_id" value="{{ ag.id }}">
+                        <button type="submit" class="btn btn-primary btn-sm">
+                          ✅ إنشاء أمر صرف
+                        </button>
+                      </form>
+                    {% else %}
+                      <button type="button" class="btn btn-outline btn-sm" disabled>
+                        ⏳ غير مؤهل بعد
+                      </button>
+                    {% endif %}
+                  {% endif %}
+                </td>
+
+              </tr>
+              {% endwith %}
+            {% empty %}
+              <tr>
+                <td colspan="9" class="text-center text-muted" style="padding:2.5rem;">
+                  <div class="text-4xl mb-2 opacity-40">🧾</div>
+                  لا توجد اتفاقيات مستحقة للعرض حاليًا.
+                </td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+  </div>
+</section>
+
+{# =================== فلترة محلية بدون إعادة تحميل =================== #}
+<script>
+(function () {
+  const rows = Array.from(document.querySelectorAll("tr.due-row"));
+  const btns = Array.from(document.querySelectorAll(".js-filter-btn"));
+  const countEl = document.getElementById("filter-count");
+
+  function applyFilter(filter) {
+    let visible = 0;
+
+    rows.forEach(tr => {
+      const state = tr.getAttribute("data-state");
+      const show = filter === "all" || state === filter;
+      tr.style.display = show ? "" : "none";
+      if (show) visible++;
+    });
+
+    if (countEl) {
+      countEl.textContent = "المعروض: " + visible + " من " + rows.length;
+    }
+
+    btns.forEach(b => {
+      const isActive = b.getAttribute("data-filter") === filter;
+      b.classList.toggle("btn-primary", isActive);
+      b.classList.toggle("btn-outline", !isActive);
+    });
+  }
+
+  applyFilter("all");
+
+  btns.forEach(b => {
+    b.addEventListener("click", () => applyFilter(b.getAttribute("data-filter")));
+  });
+})();
+</script>
+{% endblock %}

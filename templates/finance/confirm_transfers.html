@@ -13,7 +13,7 @@
       <div class="section-badge">💸 تحويلات العملاء</div>
       <h1 class="section-title">تأكيد تحويلات العملاء</h1>
       <p class="section-description">
-        فواتير غير مدفوعة قام العميل بإدخال مرجع التحويل البنكي لها.  
+        فواتير غير مدفوعة قام العميل بإدخال مرجع التحويل البنكي لها.
         يمكنك مراجعتها ووسمها كمدفوعة مباشرة.
       </p>
     </div>
@@ -25,7 +25,7 @@
           <tr class="bg-slate-50 dark:bg-slate-800 text-slate-600 dark:text-slate-300 border-b">
             <th class="py-3 px-4 text-right">رقم الفاتورة</th>
             <th class="py-3 px-4 text-right">الاتفاقية / الطلب</th>
-            <th class="py-3 px-4 text-right">المبلغ</th>
+            <th class="py-3 px-4 text-right">إجمالي العميل</th>
             <th class="py-3 px-4 text-right">المرجع البنكي</th>
             <th class="py-3 px-4 text-center">الإجراء</th>
           </tr>
@@ -35,7 +35,9 @@
           {% if invoices %}
             {% for inv in invoices %}
             <tr class="border-b hover:bg-slate-50 dark:hover:bg-slate-700 transition">
-              <td class="py-3 px-4 font-semibold text-slate-800 dark:text-slate-100">#{{ inv.id }}</td>
+              <td class="py-3 px-4 font-semibold text-slate-800 dark:text-slate-100">
+                #{{ inv.id }}
+              </td>
 
               <td class="py-3 px-4 text-slate-700 dark:text-slate-200">
                 A{{ inv.agreement_id }}
@@ -44,37 +46,51 @@
                 {% endif %}
               </td>
 
+              {# السياسة الجديدة:
+                 إجمالي العميل = amount + VAT(amount فقط)
+                 لا تُضاف عمولة المنصة على العميل
+              #}
               <td class="py-3 px-4 font-bold text-primary-700 dark:text-primary-300">
-                {{ inv.client_total_amount|floatformat:2 }} ر.س
+                {% if inv.client_total_amount %}
+                  {{ inv.client_total_amount|floatformat:2 }} ر.س
+                {% else %}
+                  {{ inv.amount|floatformat:2 }} ر.س
+                {% endif %}
               </td>
 
               <td class="py-3 px-4">
-                <code class="px-2 py-1 bg-slate-100 dark:bg-slate-800 rounded text-slate-700 dark:text-slate-300">
-                  {{ inv.paid_ref }}
-                </code>
+                {% if inv.paid_ref %}
+                  <code class="px-2 py-1 bg-slate-100 dark:bg-slate-800 rounded text-slate-700 dark:text-slate-300">
+                    {{ inv.paid_ref }}
+                  </code>
+                {% else %}
+                  <span class="text-slate-400">—</span>
+                {% endif %}
               </td>
 
-              <td class="py-3 px-4 text-center flex flex-col md:flex-row gap-2 justify-center items-center">
+              <td class="py-3 px-4 text-center">
+                <div class="flex flex-col md:flex-row gap-2 justify-center items-center">
 
-                {# زر وسم كمدفوعة #}
-                <form method="post"
-                      action="{% url 'finance:mark_invoice_paid' inv.id %}"
-                      class="inline">
-                  {% csrf_token %}
-                  <input type="hidden" name="method" value="bank">
-                  <input type="hidden" name="ref_code" value="{{ inv.ref_code }}">
-                  <input type="hidden" name="paid_ref" value="{{ inv.paid_ref }}">
-                  <button class="btn btn-primary btn-sm w-full md:w-auto">
-                    ✅ وسم كمدفوعة
-                  </button>
-                </form>
+                  {# زر وسم كمدفوعة #}
+                  <form method="post"
+                        action="{% url 'finance:mark_invoice_paid' inv.id %}"
+                        class="inline w-full md:w-auto">
+                    {% csrf_token %}
+                    <input type="hidden" name="method" value="bank">
+                    <input type="hidden" name="ref_code" value="{{ inv.ref_code }}">
+                    <input type="hidden" name="paid_ref" value="{{ inv.paid_ref }}">
+                    <button class="btn btn-primary btn-sm w-full md:w-auto">
+                      ✅ وسم كمدفوعة
+                    </button>
+                  </form>
 
-                {# زر التفاصيل #}
-                <a href="{% url 'finance:invoice_detail' inv.id %}"
-                   class="btn btn-outline btn-sm w-full md:w-auto">
-                  👁️ تفاصيل
-                </a>
+                  {# زر التفاصيل #}
+                  <a href="{% url 'finance:invoice_detail' inv.id %}"
+                     class="btn btn-outline btn-sm w-full md:w-auto">
+                    👁️ تفاصيل
+                  </a>
 
+                </div>
               </td>
             </tr>
             {% endfor %}

@@ -19,7 +19,7 @@ User = settings.AUTH_USER_MODEL
 def _normalize_percent(value) -> Decimal:
     """
     يحوّل القيمة إلى نسبة عشرية:
-    - 10  -> 0.10
+    - 10   -> 0.10
     - 0.10 -> 0.10
     """
     if value is None:
@@ -106,7 +106,6 @@ class Request(models.Model):
 
         # 4) اتساق العلم مع الحالة (نسمح بالتعايش لأجل التوافق)
         if self.has_dispute and self.status != self.Status.DISPUTED:
-            # لا نرمي استثناءً هنا لأجل التوافق الخلفي؛ العلم يبقى لأغراض التقارير فقط.
             pass
 
     def save(self, *args, skip_clean: bool = False, **kwargs):
@@ -114,9 +113,72 @@ class Request(models.Model):
         نحافظ على صحة البيانات باستدعاء full_clean() افتراضيًا قبل الحفظ.
         مرّر skip_clean=True عند الحاجة (داخل معاملات كبيرة) لتجنّب كلفة التحقق المتكرر.
         """
+        old_status = None
+        if self.pk:
+            try:
+                prev = Request.objects.only("status").get(pk=self.pk)
+                old_status = prev.status
+            except Request.DoesNotExist:
+                pass
         if not skip_clean:
             self.full_clean()
-        return super().save(*args, **kwargs)
+        result = super().save(*args, **kwargs)
+
+        # إشعار للعميل والموظف عند تغير حالة الطلب
+        try:
+            from notifications.utils import create_notification
+            employee = getattr(self, "assigned_employee", None)
+            client = getattr(self, "client", None)
+            if old_status and self.status != old_status:
+                # إشعار الموظف
+                if employee:
+                    create_notification(
+                        recipient=employee,
+                        title=f"تغيرت حالة الطلب #{self.pk}",
+                        body=f"قام العميل {client} بتغيير حالة الطلب '{self.title}' إلى '{self.get_status_display()}'. يمكنك مراجعة التفاصيل في حسابك.",
+                        url=self.get_absolute_url() if hasattr(self, "get_absolute_url") else None,
+                        actor=client,
+                        target=self,
+                    )
+                # إشعار العميل
+                if client:
+                    create_notification(
+                        recipient=client,
+                        title=f"تم تحديث حالة طلبك #{self.pk}",
+                        body=f"تم تغيير حالة طلبك '{self.title}' إلى '{self.get_status_display()}'. يمكنك مراجعة التفاصيل في حسابك.",
+                        url=self.get_absolute_url() if hasattr(self, "get_absolute_url") else None,
+                        actor=employee,
+                        target=self,
+                    )
+        except Exception:
+            pass
+
+        # إشعار المدير عند تأخر المشروع عن موعده الفعلي
+        try:
+            from django.contrib.auth import get_user_model
+            from notifications.utils import create_notification
+            User = get_user_model()
+            admin_users = User.objects.filter(role="admin", is_active=True)
+            # نفترض وجود حقل deadline أو estimated_duration_days
+            deadline = None
+            if hasattr(self, "deadline") and self.deadline:
+                deadline = self.deadline
+            elif hasattr(self, "created_at") and hasattr(self, "estimated_duration_days"):
+                deadline = self.created_at + timedelta(days=self.estimated_duration_days)
+            from django.utils import timezone
+            if deadline and timezone.now() > deadline and self.status not in [self.Status.COMPLETED, self.Status.CANCELLED]:
+                for user in admin_users:
+                    create_notification(
+                        recipient=user,
+                        title=f"مشروع متأخر #{self.pk}",
+                        body=f"المشروع '{self.title}' تجاوز موعده الفعلي ولم يكتمل بعد. يرجى مراجعة حالة التنفيذ.",
+                        url=self.get_absolute_url() if hasattr(self, "get_absolute_url") else None,
+                        actor=employee,
+                        target=self,
+                    )
+        except Exception:
+            pass
+        return result
 
     # -------------------------
     # خصائص قراءة للقوالب
@@ -167,7 +229,6 @@ class Request(models.Model):
     def selected_offer(self):
         """إرجاع العرض المختار (إن وُجد)."""
         try:
-            # لتفادي مشاكل الاستيراد الدائري نستخدم الاستيراد المتأخر
             from .models import Offer  # type: ignore
             return (
                 self.offers.select_related("employee")
@@ -215,10 +276,8 @@ class Request(models.Model):
         self.assigned_employee = employee
         self.status = self.Status.OFFER_SELECTED
         self.selected_at = now
-        # مهلة إرسال الاتفاقية 3 أيام من الاختيار
         self.agreement_due_at = now + timedelta(days=3)
         self.sla_agreement_overdue = False
-        # بعد الاختيار، نافذة العروض لا تُهم — لكن نضمن أنها معبأة لأغراض التقارير
         self.ensure_offers_window()
         self.save(
             update_fields=[
@@ -296,7 +355,6 @@ class Request(models.Model):
                 .update(status=getattr(Offer.Status, "REJECTED", "rejected"))
             )
         except Exception:
-            # في حال فشل الاستيراد أو التحديث، نكمل إعادة الضبط بدون كسر النظام
             pass
 
         self.assigned_employee = None
@@ -335,6 +393,25 @@ class Request(models.Model):
         self.status = self.Status.DISPUTED
         self.has_dispute = True
         self.save(update_fields=["status", "has_dispute", "updated_at"])
+
+        # إشعار المالية والمدير عند حدوث نزاع جديد
+        try:
+            from django.contrib.auth import get_user_model
+            from notifications.utils import create_notification
+            User = get_user_model()
+            finance_users = User.objects.filter(role="finance", is_active=True)
+            admin_users = User.objects.filter(role="admin", is_active=True)
+            for user in list(finance_users) + list(admin_users):
+                create_notification(
+                    recipient=user,
+                    title=f"نزاع جديد على الطلب #{self.pk}",
+                    body=f"تم فتح نزاع جديد على الطلب '{self.title}'. يرجى مراجعة التفاصيل واتخاذ الإجراء المناسب.",
+                    url=self.get_absolute_url() if hasattr(self, "get_absolute_url") else None,
+                    actor=self.client if hasattr(self, "client") else None,
+                    target=self,
+                )
+        except Exception:
+            pass
 
     @transaction.atomic
     def close_dispute(self, resume_status: Optional[str] = None):
@@ -384,24 +461,20 @@ class Request(models.Model):
 
 
 class Offer(models.Model):
-    client_total_amount_cache = models.DecimalField(max_digits=12, decimal_places=2, null=True, blank=True, editable=False)
-
-    def save(self, *args, **kwargs):
-        # جميع الحسابات المالية تعتمد فقط على المبلغ المدخل (proposed_price)
-        try:
-            self.client_total_amount_cache = Decimal(self.proposed_price or 0).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
-        except Exception:
-            self.client_total_amount_cache = None
-        super().save(*args, **kwargs)
     """
     عرض واحد فعّال لكل تقني على الطلب (يمكن سحب العرض ثم إعادة التقديم داخل النافذة).
     نافذة العروض = OFFERS_WINDOW_DAYS (افتراضي 5) من إنشاء الطلب.
 
-    💰 منطق المال:
-      - proposed_price = صافي الموظف (P).
-      - platform_fee_amount = دخل المنصّة = P × نسبة المنصّة.
-      - vat_amount = ضريبة القيمة المضافة على P فقط.
-      - client_total_amount = المبلغ المطلوب من العميل = P + العمولة + الضريبة.
+    💰 سياسة المال (المعتمدة):
+      - P = proposed_price (السعر المقترح قبل خصم عمولة المنصة).
+      - عمولة المنصة تُخصم من الموظف فقط:
+            fee = P × fee%
+      - صافي الموظف:
+            net_emp = P - fee
+      - ضريبة العميل على السعر المقترح فقط:
+            vat = P × vat%
+      - إجمالي العميل (لا يشمل عمولة المنصة):
+            client_total = P + vat
     """
 
     class Status(models.TextChoices):
@@ -423,16 +496,19 @@ class Offer(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
+    # كاش اختياري لإجمالي العميل (للتسريع في القوائم)
+    client_total_amount_cache = models.DecimalField(
+        max_digits=12, decimal_places=2, null=True, blank=True, editable=False
+    )
+
     class Meta:
         ordering = ["-created_at"]
         constraints = [
-            # عرض مختار واحد فقط لكل طلب
             models.UniqueConstraint(
                 fields=["request"],
                 condition=Q(status="selected"),
                 name="uq_request_single_selected_offer",
             ),
-            # عرض فعّال واحد لكل (request, employee) (يسمح بتكرار WITHDRAWN)
             models.UniqueConstraint(
                 fields=["request", "employee"],
                 condition=~Q(status="withdrawn"),
@@ -449,87 +525,117 @@ class Offer(models.Model):
         ]
 
     # -------------------------
-    # 💰 منطق المال: proposed_price = صافي الموظف (P)
+    # إعدادات المالية
     # -------------------------
-    @property
-    def net_for_employee(self) -> Decimal:
-        """
-        صافي الموظف = السعر المقترح - نسبة المنصة
-        """
-        proposed = Decimal(self.proposed_price or 0).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
-        platform_fee = self.platform_fee_amount
-        return (proposed - platform_fee).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
-
     @cached_property
     def _finance_settings(self):
         """
-        جلب إعدادات المالية (نِسَب المنصّة والضريبة) مرة واحدة مع كاش على مستوى الكائن.
-        استخدام import داخلي لتفادي أي دورات استيراد.
+        جلب إعدادات المالية (نسبة المنصّة والضريبة) مرة واحدة.
         """
-        from finance.models import FinanceSettings  # محلي لتفادي الدورة
+        from finance.models import FinanceSettings
         return FinanceSettings.get_solo()
 
     @property
     def platform_fee_percent(self) -> Decimal:
         """
-        تم تعطيل أي حساب تلقائي للنسبة. تعيد صفر.
+        نسبة المنصة من FinanceSettings (مثال: 10 تعني 10%).
         """
-        return Decimal("0.00")
+        return Decimal(str(self._finance_settings.platform_fee_percent or 0)).quantize(
+            Decimal("0.01"), rounding=ROUND_HALF_UP
+        )
 
     @property
     def vat_percent(self) -> Decimal:
         """
-        تم تعطيل أي حساب تلقائي للنسبة. تعيد صفر.
+        نسبة الضريبة من FinanceSettings.
         """
-        return Decimal("0.00")
+        return Decimal(str(self._finance_settings.vat_rate or 0)).quantize(
+            Decimal("0.01"), rounding=ROUND_HALF_UP
+        )
+
+    # -------------------------
+    # 💰 الحسابات المالية المعتمدة
+    # -------------------------
+    @property
+    def proposed_price_q(self) -> Decimal:
+        """
+        P = السعر المقترح (مُكمّم لرقمين عشريين).
+        """
+        return Decimal(self.proposed_price or 0).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
 
     @property
     def platform_fee_amount(self) -> Decimal:
         """
-        تم تعطيل أي حساب تلقائي للعمولة. تعيد نفس المبلغ المدخل.
+        fee = P × fee%
+        (عمولة المنصة على الموظف فقط)
         """
-        return Decimal(self.proposed_price or 0).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+        p = self.proposed_price_q
+        fee_rate = _normalize_percent(self.platform_fee_percent)
+        return (p * fee_rate).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+
+    @property
+    def net_for_employee(self) -> Decimal:
+        """
+        net_emp = P − fee
+        """
+        p = self.proposed_price_q
+        return (p - self.platform_fee_amount).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
 
     @property
     def subtotal_before_vat(self) -> Decimal:
         """
-        تم تعطيل أي حساب تلقائي. تعيد نفس المبلغ المدخل.
+        حسب السياسة: مبلغ العميل قبل الضريبة = السعر المقترح نفسه (بدون عمولة).
         """
-        return Decimal(self.proposed_price or 0).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+        return self.proposed_price_q
 
     @property
     def vat_amount(self) -> Decimal:
         """
-        تم تعطيل أي حساب تلقائي للضريبة. تعيد نفس المبلغ المدخل.
+        vat = P × vat%
+        (الضريبة على السعر المقترح فقط)
         """
-        return Decimal(self.proposed_price or 0).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+        p = self.proposed_price_q
+        vat_rate = _normalize_percent(self.vat_percent)
+        return (p * vat_rate).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
 
     @property
     def client_total_amount(self) -> Decimal:
         """
-        الإجمالي = المبلغ المدخل فقط.
+        client_total = P + vat
+        (العميل لا يتحمل عمولة المنصة)
         """
         if self.client_total_amount_cache is not None:
-            return self.client_total_amount_cache
-        return Decimal(self.proposed_price or 0).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+            return Decimal(self.client_total_amount_cache).quantize(
+                Decimal("0.01"), rounding=ROUND_HALF_UP
+            )
+        return (self.proposed_price_q + self.vat_amount).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
 
     def as_financial_dict(self) -> dict:
         """
-        إرجاع تفاصيل المبلغ على شكل قاموس موحّد للاستخدام في الفيوز/القوالب:
-
-        {
-          "employee_net": ...       # مستحقات الموظف (P)
-          "platform_fee": ...       # دخل المنصّة
-          "vat_amount": ...         # الضريبة
-          "client_total": ...       # المبلغ المطلوب من العميل
-        }
+        تفاصيل المبلغ بشكل موحّد للفيوز/القوالب.
         """
         return {
-            "employee_net": self.net_for_employee,
-            "platform_fee": self.platform_fee_amount,
-            "vat_amount": self.vat_amount,
-            "client_total": self.client_total_amount,
+            "proposed_price": self.proposed_price_q,   # P
+            "employee_net": self.net_for_employee,     # صافي الموظف
+            "platform_fee": self.platform_fee_amount,  # عمولة المنصة (على الموظف)
+            "vat_amount": self.vat_amount,             # ضريبة العميل على السعر
+            "client_total": self.client_total_amount,  # إجمالي العميل (P + VAT)
         }
+
+    # -------------------------
+    # حفظ مع كاش
+    # -------------------------
+    def save(self, *args, skip_clean: bool = False, **kwargs):
+        """
+        نحسب كاش إجمالي العميل وقت الحفظ لتسريع القوائم.
+        """
+        if not skip_clean:
+            self.full_clean()
+        try:
+            self.client_total_amount_cache = self.client_total_amount
+        except Exception:
+            self.client_total_amount_cache = None
+        return super().save(*args, **kwargs)
 
     # -------------------------
     # صلاحيات أساسية (مستعملة في القوالب/الفيوز)
@@ -581,7 +687,6 @@ class Offer(models.Model):
                 and req.offers_window_ends_at
                 and timezone.now() > req.offers_window_ends_at
             ):
-                # يُسمح بالحفظ لو كان العرض WITHDRAWN (أرشيفي) لكن تُمنع العروض الفعالة الجديدة
                 if self.status != self.Status.WITHDRAWN:
                     raise ValidationError("انتهت نافذة استقبال العروض لهذا الطلب.")
 
@@ -631,5 +736,4 @@ class ServiceRequest(Request):
         if not self.created_at:
             return False
         limit = self.created_at + timedelta(days=days)
-        # اعتبر الطلب ضمن نافذة العروض إذا كان NEW وما قبل انتهاء المهلة
         return timezone.now() < limit and self.status == Request.Status.NEW

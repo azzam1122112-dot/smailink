@@ -1,0 +1,258 @@
+{% extends "base.html" %}
+{% load humanize %}
+
+{% block title %}لوحة الضرائب{% endblock %}
+
+{% block content %}
+<section class="page-section" dir="rtl">
+  <div class="container mx-auto px-4 py-6">
+
+    {# ===== رأس الصفحة ===== #}
+    <div class="mb-6">
+      <div class="flex items-center gap-2">
+        <div class="badge badge-default">🧾 VAT</div>
+        <h1 class="text-2xl md:text-3xl font-extrabold">لوحة الضرائب (VAT)</h1>
+      </div>
+      <p class="text-sm text-gray-600 mt-1">
+        إجماليات الضريبة من الاتفاقيات والفواتير، وحالة التوريد وفق السياسة الجديدة
+        (الضريبة على P فقط — وعمولة المنصّة لا يتحملها العميل).
+      </p>
+    </div>
+
+    {# ===== KPIs ===== #}
+    <div class="stats-grid grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div class="profile-section" style="background:linear-gradient(135deg,#ecfeff 0%, #fff 100%);">
+        <div class="card-section-title">✅ VAT مُحصّلة من العملاء</div>
+        <div class="stat-value" style="color:#0e7490;font-size:1.8rem;font-weight:800;">
+          {{ vat_collected|default:0|floatformat:2 }} ريال
+        </div>
+        <div class="text-xs text-gray-500 mt-1">من فواتير مدفوعة</div>
+      </div>
+
+      <div class="profile-section" style="background:linear-gradient(135deg,#fef3c7 0%, #fff 100%);">
+        <div class="card-section-title">⏳ VAT غير مُحصّلة بعد</div>
+        <div class="stat-value" style="color:#b45309;font-size:1.8rem;font-weight:800;">
+          {{ vat_pending|default:0|floatformat:2 }} ريال
+        </div>
+        <div class="text-xs text-gray-500 mt-1">من فواتير غير مدفوعة</div>
+      </div>
+
+      <div class="profile-section" style="background:linear-gradient(135deg,#ede9fe 0%, #fff 100%);">
+        <div class="card-section-title">🏛️ VAT مُورّدة</div>
+        <div class="stat-value" style="color:#6d28d9;font-size:1.8rem;font-weight:800;">
+          {{ remitted_total|default:0|floatformat:2 }} ريال
+        </div>
+        <div class="text-xs text-gray-500 mt-1">توريدات مسجلة</div>
+      </div>
+
+      <div class="profile-section" style="background:linear-gradient(135deg,#dcfce7 0%, #fff 100%);">
+        <div class="card-section-title">📦 مخزن الضريبة الحالي</div>
+        <div class="stat-value" style="color:#15803d;font-size:1.8rem;font-weight:800;">
+          {{ tax_stock|default:0|floatformat:2 }} ريال
+        </div>
+        <div class="text-xs text-gray-500 mt-1">VAT المحصّل غير المورّد</div>
+      </div>
+    </div>
+
+    {# ===== توريد ضريبة جديد ===== #}
+    <div class="profile-section mt-6">
+      <details class="rounded-2xl bg-white shadow p-4" {% if remit_form.errors %}open{% endif %}>
+        <summary class="cursor-pointer font-bold text-base flex items-center gap-2">
+          ➕ توريد ضريبة جديد
+          <span class="text-xs text-gray-500 font-normal">إضافة عملية توريد VAT للمخزن</span>
+        </summary>
+
+        <form method="post" class="mt-4 grid grid-cols-1 md:grid-cols-5 gap-3">
+          {% csrf_token %}
+
+          {% if remit_form.non_field_errors %}
+            <div class="md:col-span-5">
+              <div class="p-3 rounded-xl bg-red-50 text-red-700 text-sm">
+                {{ remit_form.non_field_errors }}
+              </div>
+            </div>
+          {% endif %}
+
+          <div class="md:col-span-2">
+            <label class="block text-sm font-semibold mb-1">المبلغ</label>
+            {{ remit_form.amount }}
+            {% if remit_form.amount.errors %}
+              <div class="text-xs text-red-600 mt-1">{{ remit_form.amount.errors }}</div>
+            {% endif %}
+          </div>
+
+          <div>
+            <label class="block text-sm font-semibold mb-1">من تاريخ</label>
+            {{ remit_form.period_from }}
+            {% if remit_form.period_from.errors %}
+              <div class="text-xs text-red-600 mt-1">{{ remit_form.period_from.errors }}</div>
+            {% endif %}
+          </div>
+
+          <div>
+            <label class="block text-sm font-semibold mb-1">إلى تاريخ</label>
+            {{ remit_form.period_to }}
+            {% if remit_form.period_to.errors %}
+              <div class="text-xs text-red-600 mt-1">{{ remit_form.period_to.errors }}</div>
+            {% endif %}
+          </div>
+
+          <div>
+            <label class="block text-sm font-semibold mb-1">مرجع التوريد</label>
+            {{ remit_form.ref_code }}
+            {% if remit_form.ref_code.errors %}
+              <div class="text-xs text-red-600 mt-1">{{ remit_form.ref_code.errors }}</div>
+            {% endif %}
+          </div>
+
+          <div class="md:col-span-3">
+            <label class="block text-sm font-semibold mb-1">ملاحظة</label>
+            {{ remit_form.note }}
+            {% if remit_form.note.errors %}
+              <div class="text-xs text-red-600 mt-1">{{ remit_form.note.errors }}</div>
+            {% endif %}
+          </div>
+
+          <div class="md:col-span-2 flex items-center gap-2 mt-6">
+            {{ remit_form.sent_now }}
+            <label class="text-sm">{{ remit_form.sent_now.label }}</label>
+          </div>
+
+          <div class="md:col-span-5 flex justify-end mt-2">
+            <button type="submit" class="btn btn-primary btn-sm">
+              حفظ التوريد
+            </button>
+          </div>
+        </form>
+      </details>
+    </div>
+
+    {# ===== آخر التوريدات ===== #}
+    <div class="profile-section mt-6">
+      <div class="card-section-title">آخر توريدات الضريبة</div>
+
+      {% if last_remittances %}
+        <div class="overflow-x-auto rounded-2xl bg-white shadow mt-3">
+          <table class="min-w-full text-sm">
+            <thead>
+              <tr class="text-gray-600 border-b">
+                <th class="py-2 px-3 text-right">#</th>
+                <th class="py-2 px-3 text-right">المبلغ</th>
+                <th class="py-2 px-3 text-right">الفترة</th>
+                <th class="py-2 px-3 text-right">الحالة</th>
+                <th class="py-2 px-3 text-right">المرجع</th>
+                <th class="py-2 px-3 text-right">التاريخ</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for tr in last_remittances %}
+              <tr class="border-b hover:bg-gray-50">
+                <td class="py-2 px-3">#{{ tr.id }}</td>
+                <td class="py-2 px-3 font-semibold">{{ tr.amount|floatformat:2 }} ريال</td>
+                <td class="py-2 px-3">
+                  {% if tr.period_from %}{{ tr.period_from }}{% else %}—{% endif %}
+                  →
+                  {% if tr.period_to %}{{ tr.period_to }}{% else %}—{% endif %}
+                </td>
+                <td class="py-2 px-3">
+                  <span class="badge badge-default">{{ tr.get_status_display }}</span>
+                </td>
+                <td class="py-2 px-3">{{ tr.ref_code|default:"—" }}</td>
+                <td class="py-2 px-3">{{ tr.created_at|date:"Y-m-d" }}</td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      {% else %}
+        <p class="text-sm text-gray-500 mt-3">لا توجد توريدات مسجلة.</p>
+      {% endif %}
+    </div>
+
+    {# ===== جدول الضريبة لكل طلب/اتفاقية ===== #}
+    <div class="profile-section mt-6">
+      <div class="flex items-center justify-between">
+        <div class="card-section-title">تفاصيل الضريبة حسب الطلب</div>
+        <div class="text-xs text-gray-500">
+          * إجمالي العميل = P + VAT (لا يشمل عمولة المنصّة)
+        </div>
+      </div>
+
+      {% if rows %}
+        <div class="overflow-x-auto rounded-2xl bg-white shadow mt-3">
+          <table class="min-w-full text-sm">
+            <thead>
+              <tr class="text-gray-600 border-b">
+                <th class="py-2 px-3 text-right">الطلب</th>
+                <th class="py-2 px-3 text-right">الاتفاقية</th>
+                <th class="py-2 px-3 text-right">الموظف</th>
+                <th class="py-2 px-3 text-right">قيمة المشروع P</th>
+                <th class="py-2 px-3 text-right">عمولة المنصّة (تُخصم من الموظف)</th>
+                <th class="py-2 px-3 text-right">الوعاء الضريبي (P)</th>
+                <th class="py-2 px-3 text-right">VAT</th>
+                <th class="py-2 px-3 text-right">إجمالي العميل</th>
+                <th class="py-2 px-3 text-right">حالة السداد</th>
+                <th class="py-2 px-3 text-right">تاريخ السداد</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for r in rows %}
+              <tr class="border-b hover:bg-gray-50">
+                <td class="py-2 px-3">
+                  {% if r.request %}
+                    #{{ r.request.id }} — {{ r.request.title|default:"طلب" }}
+                  {% else %}
+                    —
+                  {% endif %}
+                </td>
+                <td class="py-2 px-3">#{{ r.agreement.id }}</td>
+                <td class="py-2 px-3">
+                  {% if r.employee %}{{ r.employee }}{% else %}—{% endif %}
+                </td>
+
+                {# P #}
+                <td class="py-2 px-3">{{ r.P|default:0|floatformat:2 }} ريال</td>
+
+                {# Fee (لا تدخل في إجمالي العميل) #}
+                <td class="py-2 px-3 text-gray-700">
+                  {{ r.platform_fee|default:0|floatformat:2 }} ريال
+                </td>
+
+                {# Taxable base = P فقط #}
+                <td class="py-2 px-3">
+                  {{ r.taxable|default:r.P|floatformat:2 }} ريال
+                </td>
+
+                {# VAT #}
+                <td class="py-2 px-3 font-semibold">
+                  {{ r.vat_amount|default:0|floatformat:2 }} ريال
+                </td>
+
+                {# Client total = P + VAT #}
+                <td class="py-2 px-3 font-semibold">
+                  {{ r.grand_total|default:0|floatformat:2 }} ريال
+                </td>
+
+                <td class="py-2 px-3">
+                  {% if r.is_paid %}
+                    <span class="badge badge-verified">مدفوعة</span>
+                  {% else %}
+                    <span class="badge badge-pending">غير مدفوعة</span>
+                  {% endif %}
+                </td>
+                <td class="py-2 px-3">
+                  {% if r.paid_at %}{{ r.paid_at|date:"Y-m-d" }}{% else %}—{% endif %}
+                </td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      {% else %}
+        <p class="text-sm text-gray-500 mt-3">لا توجد بيانات ضريبة للعرض.</p>
+      {% endif %}
+    </div>
+
+  </div>
+</section>
+{% endblock %}

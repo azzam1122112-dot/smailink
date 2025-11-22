@@ -8,7 +8,15 @@
 <div class="container mx-auto px-4 py-6" dir="rtl">
   <div class="mb-4">
     <h1 class="text-2xl font-extrabold">طلبات قيد التنفيذ</h1>
-    <p class="text-sm text-gray-600 mt-1">عدد الطلبات: {{ total_reqs|default:0 }} — إجمالي مبالغ الاتفاقيات: {{ total_amount|floatformat:2 }} — غير مدفوع من الفواتير: {{ unpaid_total|floatformat:2 }}</p>
+
+    {# ملخص أعلى الصفحة متوافق ماليًا #}
+    <p class="text-sm text-gray-600 mt-1">
+      عدد الطلبات: {{ total_reqs|default:0 }}
+      —
+      إجمالي ما على العميل (اتفاقيات + ضريبة): {{ total_amount|default:0|floatformat:2|intcomma }}
+      —
+      غير مدفوع من الفواتير (على العميل): {{ unpaid_total|default:0|floatformat:2|intcomma }}
+    </p>
   </div>
 
   <div class="overflow-x-auto rounded-2xl shadow bg-white">
@@ -18,37 +26,65 @@
           <th class="py-2 px-3 text-right">رقم الطلب</th>
           <th class="py-2 px-3 text-right">العميل</th>
           <th class="py-2 px-3 text-right">الموظف</th>
-          <th class="py-2 px-3 text-right">قيمة الاتفاقية</th>
-          <th class="py-2 px-3 text-right">غير مدفوع</th>
+          <th class="py-2 px-3 text-right">إجمالي العميل في الاتفاقية</th>
+          <th class="py-2 px-3 text-right">غير مدفوع (على العميل)</th>
           <th class="py-2 px-3"></th>
         </tr>
       </thead>
+
       <tbody>
         {% if requests %}
-        {% for r in requests %}
-        <tr class="border-b">
-          <td class="py-2 px-3">R{{ r.id }}</td>
-          <td class="py-2 px-3">
-            {% if r.client %}{{ r.client }}{% else %}<span class="text-gray-400">غير متاح</span>{% endif %}
-          </td>
-          <td class="py-2 px-3">
-            {% if r.assigned_employee %}{{ r.assigned_employee }}{% else %}<span class="text-gray-400">غير معيّن</span>{% endif %}
-          </td>
-          <td class="py-2 px-3">
-            {% if r.agreement %}{{ r.agreement.total_amount|floatformat:2 }}{% else %}<span class="text-gray-400">—</span>{% endif %}
-          </td>
-          <td class="py-2 px-3">
-            {% if r.agreement %}{{ r.agreement.invoices.unpaid.aggregate_sum|default:"—" }}{% else %}<span class="text-gray-400">—</span>{% endif %}
-          </td>
-          <td class="py-2 px-3">
-            <a href="{% url 'finance:collections_report' %}?q={{ r.id }}" class="btn btn-sm">تتبّع التحصيل</a>
-          </td>
-        </tr>
-        {% endfor %}
+          {% for r in requests %}
+          <tr class="border-b hover:bg-gray-50">
+            <td class="py-2 px-3 font-semibold">R{{ r.id }}</td>
+
+            <td class="py-2 px-3">
+              {% if r.client %}
+                {{ r.client }}
+              {% else %}
+                <span class="text-gray-400">غير متاح</span>
+              {% endif %}
+            </td>
+
+            <td class="py-2 px-3">
+              {% if r.assigned_employee %}
+                {{ r.assigned_employee }}
+              {% else %}
+                <span class="text-gray-400">غير معيّن</span>
+              {% endif %}
+            </td>
+
+            {# قيمة الاتفاقية للعميل = P + VAT فقط (بدون عمولة منصة) #}
+            <td class="py-2 px-3">
+              {% if r.agreement %}
+                {{ r.agreement.client_total_amount|default:r.agreement.total_amount|floatformat:2|intcomma }}
+              {% else %}
+                <span class="text-gray-400">—</span>
+              {% endif %}
+            </td>
+
+            {# غير مدفوع من الفواتير (على العميل) #}
+            <td class="py-2 px-3">
+              {% if r.agreement %}
+                {{ r.agreement.invoices.unpaid.aggregate_sum|default:0|floatformat:2|intcomma }}
+              {% else %}
+                <span class="text-gray-400">—</span>
+              {% endif %}
+            </td>
+
+            <td class="py-2 px-3">
+              <a href="{% url 'finance:collections_report' %}?q={{ r.id }}" class="btn btn-sm">
+                تتبّع التحصيل
+              </a>
+            </td>
+          </tr>
+          {% endfor %}
         {% else %}
-        <tr>
-          <td colspan="6" class="py-4 px-3 text-gray-500">لا توجد طلبات قيد التنفيذ.</td>
-        </tr>
+          <tr>
+            <td colspan="6" class="py-6 px-3 text-center text-gray-500">
+              لا توجد طلبات قيد التنفيذ.
+            </td>
+          </tr>
         {% endif %}
       </tbody>
     </table>

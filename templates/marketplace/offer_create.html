@@ -109,6 +109,7 @@
                    style="background: var(--dark-50); margin-top: 1rem;">
                 <div class="card-section-title">🧮 تفاصيل السعر</div>
                 <div class="price-grid">
+
                   <div class="price-item" title="صافي الموظف بعد خصم العمولة">
                     <span class="price-label">👤 صافي الموظف:</span>
                     <span class="price-value">
@@ -119,11 +120,11 @@
                       <span class="currency">ر.س</span>
                     </span>
                     <span class="field-hint" style="font-size: 0.85em; color: #0e7490; margin-right: 8px;">
-                      المبلغ الذي سيحصل عليه الموظف فعليًا
+                      المبلغ الذي سيحصل عليه الموظف فعليًا بعد خصم عمولة المنصّة
                     </span>
                   </div>
 
-                  <div class="price-item" title="قيمة عمولة المنصة من السعر المقترح">
+                  <div class="price-item" title="قيمة عمولة المنصة تُخصم من الموظف ولا يتحملها العميل">
                     <span class="price-label">
                       💸 عمولة المنصة
                       <span id="platformFeePercentDisplay">
@@ -136,6 +137,9 @@
                         {{ form.instance.platform_fee_amount|default_if_none:'—' }}
                       </span>
                       <span class="currency">ر.س</span>
+                    </span>
+                    <span class="field-hint" style="font-size: 0.85em; color: #6b7280; margin-right: 8px;">
+                      تُخصم من الموظف فقط
                     </span>
                   </div>
 
@@ -155,7 +159,7 @@
                     </span>
                   </div>
 
-                  <div class="price-item highlight" title="المبلغ النهائي الذي سيدفعه العميل (يشمل العمولة والضريبة)">
+                  <div class="price-item highlight" title="المبلغ النهائي الذي سيدفعه العميل (السعر + الضريبة فقط)">
                     <span class="price-label">💼 إجمالي العميل:</span>
                     <span class="price-value">
                       <span id="totalForClient"
@@ -165,9 +169,10 @@
                       <span class="currency">ر.س</span>
                     </span>
                     <span class="field-hint" style="font-size: 0.9em; color: #166534; margin-right: 8px;">
-                      يشمل عمولة المنصة والضريبة
+                      السعر المقترح + الضريبة فقط
                     </span>
                   </div>
+
                 </div>
               </div>
 
@@ -323,13 +328,15 @@
         return;
       }
 
-      // عمولة المنصة والضريبة حسب الاتفاق:
-      // صافي الموظف = P - عمولة المنصة
-      // الضريبة على المبلغ الأساسي فقط
+      // السياسة المعتمدة:
+      // عمولة المنصّة تُخصم من الموظف ولا يدفعها العميل.
+      // صافي الموظف = P - fee
+      // الضريبة على P فقط
+      // إجمالي العميل = P + VAT
       var fee = +(P * platformFeePercent).toFixed(2);
       var vat = +(P * vatPercent).toFixed(2);
       var net = +(P - fee).toFixed(2);
-      var total = +(P + fee + vat).toFixed(2);
+      var total = +(P + vat).toFixed(2);
 
       if (netForEmployee) netForEmployee.textContent = formatAmount(net);
       if (platformFee) platformFee.textContent = formatAmount(fee);

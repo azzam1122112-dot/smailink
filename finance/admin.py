@@ -1,5 +1,6 @@
 # finance/admin.py
 from __future__ import annotations
+from .models import Invoice, FinanceSettings, Payout, TaxRemittance
 
 from django.contrib import admin, messages
 from django.utils import timezone
@@ -294,3 +295,24 @@ class InvoiceAdmin(admin.ModelAdmin):
                 getattr(inv, "paid_ref", "") or "",
             ])
         return resp
+# ===========================
+#  TaxRemittance Admin
+# ===========================
+@admin.register(TaxRemittance)
+class TaxRemittanceAdmin(admin.ModelAdmin):
+    list_display = ("id", "amount", "status", "period_from", "period_to", "ref_code", "created_at", "sent_at")
+    list_filter = ("status", "created_at", "sent_at")
+    search_fields = ("ref_code", "note")
+    readonly_fields = ("created_at", "updated_at")
+    actions = ("mark_selected_sent",)
+
+    @admin.action(description="وسم التوريدات المختارة كـ «تم التوريد»")
+    def mark_selected_sent(self, request, queryset):
+        updated = 0
+        with transaction.atomic():
+            for tr in queryset.select_for_update():
+                if tr.status != TaxRemittance.Status.SENT:
+                    tr.mark_sent(ref=tr.ref_code or "")
+                    updated += 1
+        if updated:
+            self.message_user(request, f"تم وسم {updated} توريد/توريدات كـ «تم التوريد».", level=messages.SUCCESS)

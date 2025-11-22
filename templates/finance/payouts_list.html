@@ -1,388 +1,150 @@
-{# finance/templates/finance/payouts_list.html #}
 {% extends "base.html" %}
 {% load humanize %}
 
-{% block title %}أوامر صرف الموظفين{% endblock %}
+{% block title %}صرفيات الموظفين{% endblock %}
 
 {% block content %}
-<section class="page-section payouts-page">
-  <div class="container">
-    
-    {# ===== رأس الصفحة ===== #}
-    <div class="section-header" style="text-align: right; margin-bottom: 2rem;">
-      <div class="section-badge">
-        💳 أوامر صرف الموظفين
-      </div>
-      <h1 class="section-title">
-        أوامر صرف الموظفين
-      </h1>
-      <p class="section-description">
-        عرض وإدارة أوامر صرف مستحقات الموظفين
+<section class="page-section" dir="rtl">
+  <div class="container mx-auto px-4 py-6">
+
+    <div class="mb-6">
+      <div class="section-badge">👷 Payouts</div>
+      <h1 class="text-2xl md:text-3xl font-extrabold mt-2">صرفيات الموظفين</h1>
+      <p class="text-sm text-gray-600 mt-1">
+        متابعة أوامر الصرف حسب السياسة: الطلبات المكتملة فقط وصافي الموظف = P - عمولة المنصة.
       </p>
     </div>
 
-    {# ===== بطاقة المحتوى الرئيسي ===== #}
-    <div class="profile-section" style="text-align: center; padding: 3rem 2rem;">
-      <div class="placeholder-icon" style="font-size: 4rem; margin-bottom: 1.5rem; opacity: 0.4;">
-        💰
+    {# ===== KPIs ===== #}
+    <div class="stats-grid" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:1rem;">
+      <div class="profile-section">
+        <div class="card-section-title">📌 إجمالي الصرفيات</div>
+        <div class="stat-value">{{ totals.total|default:0|floatformat:2 }} ريال</div>
+        <div class="card-section-note">عدد الأوامر: {{ totals.count|default:0 }}</div>
       </div>
-      <h2 class="card-section-title" style="margin-bottom: 1rem; color: var(--dark-700);">
-        قائمة أوامر الصرف قيد التطوير
-      </h2>
-      <p class="card-section-note" style="font-size: 1rem; margin-bottom: 2rem; max-width: 600px; margin-left: auto; margin-right: auto;">
-        هذه الصفحة تحت التطوير وستعرض قائمة أوامر الصرف بعد ربطها مع البيانات. 
-        يمكن حاليًا إدارة أوامر الصرف من لوحة الإدارة.
-      </p>
-
-      {# ===== أزرار التنقل البديلة ===== #}
-      <div class="navigation-actions employee-actions" style="justify-content: center; gap: 1rem;">
-        <a href="{% url 'finance:employee_dues' %}" class="btn btn-primary">
-          👥 عرض مستحقات الموظفين
-        </a>
-        <a href="{% url 'finance:collections_report' %}" class="btn btn-secondary">
-          📊 تقرير التحصيل
-        </a>
-        <a href="{% url 'admin:finance_payout_changelist' %}" class="btn btn-outline">
-          ⚙️ الإدارة المتقدمة
-        </a>
+      <div class="profile-section" style="background:linear-gradient(135deg,#fef3c7 0%, #fff 100%);">
+        <div class="card-section-title">⏳ معلّقة</div>
+        <div class="stat-value">{{ totals.pending|default:0|floatformat:2 }} ريال</div>
+      </div>
+      <div class="profile-section" style="background:linear-gradient(135deg,#dcfce7 0%, #fff 100%);">
+        <div class="card-section-title">✅ تم صرفها</div>
+        <div class="stat-value">{{ totals.paid|default:0|floatformat:2 }} ريال</div>
+      </div>
+      <div class="profile-section" style="background:linear-gradient(135deg,#fee2e2 0%, #fff 100%);">
+        <div class="card-section-title">🚫 ملغاة</div>
+        <div class="stat-value">{{ totals.cancelled|default:0|floatformat:2 }} ريال</div>
       </div>
     </div>
 
-    {# ===== معلومات عن الميزة القادمة ===== #}
-    <div class="feature-preview" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 1.5rem; margin-top: 3rem;">
-      
-      <div class="profile-section">
-        <div class="card-section-title">📋 ما ستوفره هذه الصفحة</div>
-        <ul class="feature-list" style="margin-top: 1rem; padding-right: 1rem;">
-          <li class="feature-item">
-            <span class="feature-icon">✅</span>
-            <span>عرض جميع أوامر الصرف</span>
-          </li>
-          <li class="feature-item">
-            <span class="feature-icon">💰</span>
-            <span>متابعة حالات الصرف</span>
-          </li>
-          <li class="feature-item">
-            <span class="feature-icon">📊</span>
-            <span>إحصائيات الصرف الشهرية</span>
-          </li>
-          <li class="feature-item">
-            <span class="feature-icon">🔍</span>
-            <span>بحث وتصفية متقدمة</span>
-          </li>
-        </ul>
-      </div>
+    {# ===== فلاتر ===== #}
+    <div class="profile-section mt-6">
+      <div class="card-section-title">فلترة وبحث</div>
 
-      <div class="profile-section">
-        <div class="card-section-title">🔄 الإجراءات المتاحة</div>
-        <ul class="action-list" style="margin-top: 1rem; padding-right: 1rem;">
-          <li class="action-item">
-            <span class="action-icon">➕</span>
-            <span>إنشاء أوامر صرف جديدة</span>
-          </li>
-          <li class="action-item">
-            <span class="action-icon">📤</span>
-            <span>تصدير بيانات الصرف</span>
-          </li>
-          <li class="action-item">
-            <span class="action-icon">📧</span>
-            <span>إشعار الموظفين بالصرف</span>
-          </li>
-          <li class="action-item">
-            <span class="action-icon">✅</span>
-            <span>تأكيد استلام الصرف</span>
-          </li>
-        </ul>
-      </div>
+      <form method="get" class="mt-3" style="display:flex;flex-wrap:wrap;gap:.5rem;align-items:center;">
+        <select name="status" class="input input-sm w-40">
+          <option value="pending" {% if status_q == 'pending' %}selected{% endif %}>معلقة</option>
+          <option value="paid" {% if status_q == 'paid' %}selected{% endif %}>مدفوعة</option>
+          <option value="cancelled" {% if status_q == 'cancelled' %}selected{% endif %}>ملغاة</option>
+          <option value="all" {% if status_q == 'all' %}selected{% endif %}>الكل</option>
+        </select>
 
-      <div class="profile-section">
-        <div class="card-section-title">⏱️ الجدول الزمني</div>
-        <div class="timeline" style="margin-top: 1rem;">
-          <div class="timeline-item">
-            <div class="timeline-date">Q1 2024</div>
-            <div class="timeline-content">تصميم واجهة أوامر الصرف</div>
-          </div>
-          <div class="timeline-item">
-            <div class="timeline-date">Q2 2024</div>
-            <div class="timeline-content">ربط مع بيانات الفواتير</div>
-          </div>
-          <div class="timeline-item">
-            <div class="timeline-date">Q3 2024</div>
-            <div class="timeline-content">إضافة نظام الإشعارات</div>
-          </div>
-        </div>
-      </div>
+        <input name="q" value="{{ q }}" class="input input-sm flex-1 min-w-[200px]" placeholder="بحث برقم طلب/اتفاقية/موظف">
 
+        <select name="period" class="input input-sm w-40">
+          <option value="" {% if not period %}selected{% endif %}>آخر 30 يوم</option>
+          <option value="today" {% if period == 'today' %}selected{% endif %}>اليوم</option>
+          <option value="7d" {% if period == '7d' %}selected{% endif %}>آخر 7 أيام</option>
+          <option value="30d" {% if period == '30d' %}selected{% endif %}>آخر 30 يوم</option>
+          <option value="custom" {% if period == 'custom' %}selected{% endif %}>مخصص</option>
+        </select>
+
+        <input type="date" name="from" value="{{ from }}" class="input input-sm w-44">
+        <input type="date" name="to" value="{{ to }}" class="input input-sm w-44">
+
+        <button class="btn btn-primary btn-sm" type="submit">تطبيق</button>
+        <a href="{% url 'finance:payouts_list' %}" class="btn btn-outline btn-sm">إعادة ضبط</a>
+      </form>
     </div>
 
-    {# ===== إحصائيات سريعة ===== #}
-    <div class="quick-stats profile-section" style="background: var(--primary-50); margin-top: 2rem;">
-      <div class="card-section-title" style="color: var(--primary-700);">📈 إحصائيات سريعة</div>
-      <div class="stats-grid" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem; margin-top: 1rem;">
-        <div class="stat-item">
-          <div class="stat-label">إجمالي المستحقات</div>
-          <div class="stat-number">يتم التحميل...</div>
+    {# ===== جدول الصرفيات ===== #}
+    <div class="profile-section mt-6">
+      <div class="card-section-title">قائمة الصرفيات</div>
+
+      {% if payouts %}
+        <div class="overflow-x-auto rounded-2xl bg-white shadow mt-3">
+          <table class="min-w-full text-sm">
+            <thead>
+              <tr class="text-gray-600 border-b">
+                <th class="py-2 px-3 text-right">#</th>
+                <th class="py-2 px-3 text-right">الموظف</th>
+                <th class="py-2 px-3 text-right">الطلب</th>
+                <th class="py-2 px-3 text-right">الاتفاقية</th>
+                <th class="py-2 px-3 text-right">الصافي</th>
+                <th class="py-2 px-3 text-right">الحالة</th>
+                <th class="py-2 px-3 text-right">تاريخ الإنشاء</th>
+                <th class="py-2 px-3 text-right">تاريخ الصرف</th>
+                <th class="py-2 px-3 text-right">إجراءات</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for p in payouts %}
+                <tr class="border-b hover:bg-gray-50">
+                  <td class="py-2 px-3">#{{ p.pk }}</td>
+                  <td class="py-2 px-3">{{ p.employee }}</td>
+
+                  <td class="py-2 px-3">
+                    {% if p.agreement and p.agreement.request %}
+                      <a href="{% url 'marketplace:request_detail' p.agreement.request.pk %}">
+                        #{{ p.agreement.request.pk }}
+                      </a>
+                    {% else %}
+                      —
+                    {% endif %}
+                  </td>
+
+                  <td class="py-2 px-3">
+                    {% if p.agreement %}
+                      #{{ p.agreement.pk }}
+                    {% else %}
+                      —
+                    {% endif %}
+                  </td>
+
+                  <td class="py-2 px-3 font-semibold">{{ p.amount|floatformat:2 }} ريال</td>
+
+                  <td class="py-2 px-3">
+                    <span class="badge badge-default">{{ p.get_status_display }}</span>
+                  </td>
+
+                  <td class="py-2 px-3">{{ p.issued_at|date:"Y-m-d" }}</td>
+                  <td class="py-2 px-3">
+                    {% if p.paid_at %}{{ p.paid_at|date:"Y-m-d" }}{% else %}—{% endif %}
+                  </td>
+
+                  <td class="py-2 px-3">
+                    {% if p.status == 'pending' %}
+                      <form method="post" action="{% url 'finance:mark_payout_paid' p.pk %}">
+                        {% csrf_token %}
+                        <div style="display:flex;flex-wrap:wrap;gap:.25rem;align-items:center;">
+                          <input name="method" class="input input-sm w-28" placeholder="طريقة">
+                          <input name="ref_code" class="input input-sm w-36" placeholder="مرجع">
+                          <button class="btn btn-primary btn-sm" type="submit">وسم كمدفوع</button>
+                        </div>
+                      </form>
+                    {% else %}
+                      —
+                    {% endif %}
+                  </td>
+                </tr>
+              {% endfor %}
+            </tbody>
+          </table>
         </div>
-        <div class="stat-item">
-          <div class="stat-label">أوامر صرف هذا الشهر</div>
-          <div class="stat-number">يتم التحميل...</div>
-        </div>
-        <div class="stat-item">
-          <div class="stat-label">متوسط وقت الصرف</div>
-          <div class="stat-number">يتم التحميل...</div>
-        </div>
-        <div class="stat-item">
-          <div class="stat-label">معدل الرضا</div>
-          <div class="stat-number">يتم التحميل...</div>
-        </div>
-      </div>
+      {% else %}
+        <p class="text-sm text-gray-500 mt-3">لا توجد صرفيات للعرض.</p>
+      {% endif %}
     </div>
 
   </div>
 </section>
-{% endblock %}
-
-{% block extra_scripts %}
-  {{ block.super }}
-  <script>
-  (function () {
-    // تهيئة تأثيرات التمرير
-    if (typeof initScrollReveal === 'function') {
-      initScrollReveal();
-    }
-
-    // تأثيرات على الأزرار
-    document.querySelectorAll('.btn').forEach(button => {
-      button.addEventListener('click', function() {
-        if (typeof animateButtonClick === 'function') {
-          animateButtonClick(this);
-        }
-      });
-    });
-
-    // تأثيرات على عناصر القوائم
-    document.querySelectorAll('.feature-item, .action-item').forEach((item, index) => {
-      item.style.animationDelay = `${index * 0.1}s`;
-      item.classList.add('scroll-reveal');
-      
-      // تأثير hover
-      item.addEventListener('mouseenter', function() {
-        this.style.transform = 'translateX(-5px)';
-        this.style.background = 'var(--primary-50)';
-      });
-      
-      item.addEventListener('mouseleave', function() {
-        this.style.transform = 'translateX(0)';
-        this.style.background = '';
-      });
-    });
-
-    // تأثير على الأيقونة الرئيسية
-    const placeholderIcon = document.querySelector('.placeholder-icon');
-    if (placeholderIcon) {
-      setInterval(() => {
-        placeholderIcon.style.transform = 'scale(1.1)';
-        placeholderIcon.style.opacity = '0.6';
-        setTimeout(() => {
-          placeholderIcon.style.transform = 'scale(1)';
-          placeholderIcon.style.opacity = '0.4';
-        }, 500);
-      }, 3000);
-    }
-
-    // محاكاة تحميل الإحصائيات
-    setTimeout(() => {
-      const statNumbers = document.querySelectorAll('.stat-number');
-      statNumbers.forEach(stat => {
-        stat.textContent = 'قريبًا...';
-        stat.style.color = 'var(--primary-600)';
-      });
-    }, 2000);
-
-    // تأثيرات على الجدول الزمني
-    document.querySelectorAll('.timeline-item').forEach((item, index) => {
-      item.style.animationDelay = `${index * 0.3}s`;
-      item.classList.add('scroll-reveal');
-    });
-
-    // رسالة ترحيب باستخدام نظام التوست
-    setTimeout(() => {
-      if (typeof showToast === 'function') {
-        showToast('صفحة أوامر الصرف قيد التطوير - شكرًا لصبرك!', 'info');
-      }
-    }, 1000);
-
-  })();
-  </script>
-
-  <style>
-  .payouts-page .placeholder-icon {
-    transition: all 0.5s ease;
-  }
-
-  .payouts-page .navigation-actions {
-    display: flex;
-    flex-wrap: wrap;
-  }
-
-  .payouts-page .feature-preview {
-    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
-  }
-
-  .payouts-page .feature-list,
-  .payouts-page .action-list {
-    list-style: none;
-    padding: 0;
-    margin: 0;
-  }
-
-  .payouts-page .feature-item,
-  .payouts-page .action-item {
-    display: flex;
-    align-items: center;
-    gap: 0.75rem;
-    padding: 0.75rem;
-    margin-bottom: 0.5rem;
-    border-radius: var(--radius);
-    transition: all 0.3s ease;
-  }
-
-  .payouts-page .feature-icon,
-  .payouts-page .action-icon {
-    font-size: 1.1rem;
-    width: 1.5rem;
-    text-align: center;
-  }
-
-  .payouts-page .timeline {
-    position: relative;
-    padding-right: 1.5rem;
-  }
-
-  .payouts-page .timeline::before {
-    content: '';
-    position: absolute;
-    right: 0.5rem;
-    top: 0;
-    bottom: 0;
-    width: 2px;
-    background: var(--primary-200);
-  }
-
-  .payouts-page .timeline-item {
-    position: relative;
-    margin-bottom: 1.5rem;
-    padding-bottom: 1.5rem;
-    border-bottom: 1px solid var(--dark-100);
-  }
-
-  .payouts-page .timeline-item:last-child {
-    margin-bottom: 0;
-    padding-bottom: 0;
-    border-bottom: none;
-  }
-
-  .payouts-page .timeline-item::before {
-    content: '';
-    position: absolute;
-    right: -1.5rem;
-    top: 0.25rem;
-    width: 12px;
-    height: 12px;
-    border-radius: 50%;
-    background: var(--primary-500);
-    border: 2px solid var(--white);
-    box-shadow: 0 0 0 2px var(--primary-500);
-  }
-
-  .payouts-page .timeline-date {
-    font-weight: 600;
-    color: var(--primary-600);
-    font-size: 0.875rem;
-    margin-bottom: 0.25rem;
-  }
-
-  .payouts-page .timeline-content {
-    color: var(--dark-600);
-    font-size: 0.9rem;
-  }
-
-  .payouts-page .stats-grid {
-    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-  }
-
-  .payouts-page .stat-item {
-    text-align: center;
-    padding: 1rem;
-    background: var(--white);
-    border-radius: var(--radius-lg);
-    border: 1px solid var(--primary-200);
-  }
-
-  .payouts-page .stat-label {
-    font-size: 0.875rem;
-    color: var(--primary-600);
-    margin-bottom: 0.5rem;
-  }
-
-  .payouts-page .stat-number {
-    font-size: 1.25rem;
-    font-weight: 700;
-    color: var(--primary-700);
-  }
-
-  @media (max-width: 768px) {
-    .payouts-page .navigation-actions {
-      flex-direction: column;
-    }
-    
-    .payouts-page .navigation-actions .btn {
-      width: 100%;
-    }
-    
-    .payouts-page .feature-preview {
-      grid-template-columns: 1fr;
-    }
-    
-    .payouts-page .stats-grid {
-      grid-template-columns: repeat(2, 1fr);
-    }
-  }
-
-  @media (max-width: 480px) {
-    .payouts-page .stats-grid {
-      grid-template-columns: 1fr;
-    }
-    
-    .payouts-page .profile-section {
-      padding: 1.5rem;
-    }
-  }
-
-  /* تأثيرات الحركة */
-  @keyframes pulse {
-    0% { transform: scale(1); }
-    50% { transform: scale(1.05); }
-    100% { transform: scale(1); }
-  }
-
-  .payouts-page .placeholder-icon {
-    animation: pulse 3s ease-in-out infinite;
-  }
-
-  @keyframes fadeInUp {
-    from {
-      opacity: 0;
-      transform: translateY(20px);
-    }
-    to {
-      opacity: 1;
-      transform: translateY(0);
-    }
-  }
-
-  .payouts-page .scroll-reveal {
-    animation: fadeInUp 0.6s ease-out;
-  }
-  </style>
 {% endblock %}

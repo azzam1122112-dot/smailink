@@ -5,8 +5,6 @@
 
 {% block content %}
 
-{# ===== عرض إجمالي العميل للعرض المختار بشكل بارز أعلى الصفحة ===== #}
-
 <section class="page-section request-detail-page">
   <div class="container">
     <div class="request-detail-card profile-section">
@@ -230,12 +228,12 @@
                   — صافي الموظف:
                     <strong class="my-offer-net"
                             data-net="{{ my_offer.net_for_employee }}">
-                      {{ my_offer.net_for_employee }}
+                      {{ my_offer.net_for_employee|floatformat:2 }}
                     </strong> ر.س
-                  — العرض:
+                  — إجمالي العميل:
                     <strong class="my-offer-total"
                             data-total="{{ my_offer.client_total_amount|default_if_none:'' }}">
-                      {{ my_offer.client_total_amount|default_if_none:"—" }}
+                      {{ my_offer.client_total_amount|default_if_none:"—"|floatformat:2 }}
                     </strong> ر.س
                 </div>
               </div>
@@ -256,7 +254,7 @@
                 <div class="summary-box-label">مقدّمة من العميل</div>
                 <div class="summary-box-values">
                   <div>المدة: <strong>{{ req.estimated_duration_days|default:"—" }}</strong> يوم</div>
-                  <div>المبلغ: <strong>{{ req.estimated_price|default:"—" }}</strong>
+                  <div>المبلغ: <strong>{{ req.estimated_price|default:"—"|floatformat:2 }}</strong>
                     <span class="summary-unit">ريال</span>
                   </div>
                 </div>
@@ -290,12 +288,12 @@
 
                     <div style="font-size: 1.25em; font-weight: 800; color: #166534; background: #f0fdf4; padding: 10px 14px; border-radius: 999px; display: inline-flex; align-items: baseline; gap: 0.35rem; margin-top: 0.25rem;">
                       <span>العرض للعميل:</span>
-                      <span class="sel-total">
+                      <span class="sel-total"
+                            data-total="{{ selected_offer.client_total_amount|default_if_none:'' }}">
                         {{ selected_offer.client_total_amount|default_if_none:"—"|floatformat:2 }}
                       </span>
                       <span class="summary-unit">ريال</span>
                     </div>
-                   
                   </div>
                 </div>
               {% endif %}
@@ -307,9 +305,11 @@
                   <div class="summary-box-values">
                     <div>المدة: <strong>{{ req.agreement.duration_days }}</strong> يوم</div>
                     <div>
-                      المبلغ:
+                      الإجمالي للعميل:
                       <strong>
-                        {% if selected_offer_client_total %}
+                        {% if req.agreement.client_total_amount %}
+                          {{ req.agreement.client_total_amount|floatformat:2 }}
+                        {% elif selected_offer_client_total %}
                           {{ selected_offer_client_total|floatformat:2 }}
                         {% elif req.agreement.grand_total %}
                           {{ req.agreement.grand_total|floatformat:2 }}
@@ -533,10 +533,10 @@
                       <strong>{{ off.proposed_duration_days }}</strong> يوم
                     </span>
 
-                    {# إجمالي العميل فقط للعميل، يشمل كل شيء #}
+                    {# ✅ إجمالي العميل فقط (P + VAT) بدون عمولة #}
                     <span class="badge badge-primary" style="font-size: 1.1em; background: #f0fdf4; color: #166534; display: flex; flex-direction: column; align-items: flex-start;">
                       <span>
-العرض :
+                        العرض للعميل:
                         <strong class="off-total"
                                 data-total="{{ off.client_total_amount_cache|default_if_none:off.client_total_amount|default_if_none:'' }}">
                           {% if off.client_total_amount_cache or off.client_total_amount %}
@@ -547,12 +547,10 @@
                         </strong>
                         ريال
                       </span>
-                      <span class="field-hint" style="font-size: 0.85em; color: #166534; margin-top: 2px;">
-                      </span>
                     </span>
                   </div>
 
-                  {# صافي الموظف مخفي للحساب فقط #}
+                  {# قيمة السعر المقترح لإجراء fallback JS عند الحاجة #}
                   <span class="off-net"
                         data-net="{{ off.proposed_price }}"
                         style="display:none;"></span>
@@ -691,6 +689,7 @@
               <div class="milestones-list">
                 {% for ms in ag.milestones.all %}
                   <div id="ms-{{ ms.id }}" class="milestone-item profile-section" style="margin-bottom: 1.5rem; padding: 1.5rem;">
+
                     <div class="milestone-header" style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 1rem;">
                       <div class="milestone-main" style="flex: 1;">
                         <div class="milestone-title-row" style="display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.5rem;">
@@ -753,7 +752,6 @@
                     </div>
 
                     <div class="milestone-actions employee-actions">
-                      {# الموظف: تسليم/إعادة تسليم #}
                       {% if request.user.is_authenticated and request.user.id == req.assigned_employee_id %}
                         {% if not ms.invoice or not ms.invoice.is_paid %}
                           {% if not ms.is_approved and not ms.is_pending_review %}
@@ -787,7 +785,6 @@
                         {% endif %}
                       {% endif %}
 
-                      {# العميل: اعتماد/رفض — فقط أثناء المراجعة #}
                       {% if request.user.is_authenticated and request.user.id == req.client_id %}
                         {% if ms.is_pending_review %}
                           <form method="post"
@@ -804,7 +801,6 @@
                             ❌ رفض
                           </button>
 
-                          {# مودال الرفض #}
                           <div id="rej-{{ ms.id }}"
                                class="modal-overlay"
                                aria-hidden="true"
@@ -850,12 +846,10 @@
                             </div>
                           </div>
                         {% else %}
-                          <button class="btn btn-success btn-sm btn-disabled" disabled
-                                  title="لا يمكن الاعتماد الآن">
+                          <button class="btn btn-success btn-sm btn-disabled" disabled title="لا يمكن الاعتماد الآن">
                             ✅ اعتماد
                           </button>
-                          <button class="btn btn-danger btn-sm btn-disabled" disabled
-                                  title="لا يمكن الرفض الآن">
+                          <button class="btn btn-danger btn-sm btn-disabled" disabled title="لا يمكن الرفض الآن">
                             ❌ رفض
                           </button>
                         {% endif %}
@@ -954,8 +948,7 @@
   {{ block.super }}
   <script>
   (function () {
-    // نسب العمولة والضريبة
-    var platformFeePercentRaw = "{{ platform_fee_percent|default_if_none:'' }}";
+    // نحتاج للضريبة فقط كـ fallback في حال لم يصل إجمالي العميل من الباك-إند
     var vatPercentRaw = "{{ vat_percent|default_if_none:'' }}";
 
     function normalizePercent(raw) {
@@ -969,134 +962,91 @@
       return num;
     }
 
-    var platformFeePercent = normalizePercent(platformFeePercentRaw);
     var vatPercent = normalizePercent(vatPercentRaw);
 
-    function computeTotal(netVal) {
-      var net = +(netVal).toFixed(2);
-      var fee = +(net * platformFeePercent).toFixed(2);
-      var vat = +((net + fee) * vatPercent).toFixed(2);
-      var total = +(net + fee + vat).toFixed(2);
+    // ✅ سياسة العميل: ClientTotal = P + (P * VAT)
+    function computeClientTotal(priceVal) {
+      var P = +(priceVal).toFixed(2);
+      var vat = +(P * vatPercent).toFixed(2);
+      var total = +(P + vat).toFixed(2);
       return total;
     }
 
-    // تحديث إجمالي العميل لكل عرض
+    // تحديث إجمالي العميل لكل عرض إذا لم يأتِ من الباك-إند
     function updateOfferTotals() {
       var offerItems = document.querySelectorAll('.offer-item');
-      if (!offerItems || offerItems.length === 0) {
-        return;
-      }
+      if (!offerItems || offerItems.length === 0) return;
 
       offerItems.forEach(function (item) {
         var netEl = item.querySelector('.off-net');
         var totalEl = item.querySelector('.off-total');
-        if (!netEl || !totalEl) {
+        if (!netEl || !totalEl) return;
+
+        var totalRaw = totalEl.getAttribute('data-total');
+        if (totalRaw && String(totalRaw).trim() !== '') {
+          var t = parseFloat(totalRaw);
+          if (!isNaN(t)) totalEl.textContent = t.toFixed(2);
           return;
         }
 
         var netRaw = netEl.getAttribute('data-net') || netEl.textContent;
-        var netVal = parseFloat(netRaw);
-        if (isNaN(netVal) || netVal <= 0) {
-          return;
-        }
+        var priceVal = parseFloat(netRaw);
+        if (isNaN(priceVal) || priceVal <= 0) return;
 
-        var totalRaw = totalEl.getAttribute('data-total');
-        if (totalRaw && String(totalRaw).trim() !== '') {
-          totalEl.textContent = totalRaw;
-          return;
-        }
-
-        var total = computeTotal(netVal);
+        var total = computeClientTotal(priceVal);
         totalEl.textContent = total.toFixed(2);
       });
     }
 
-    // إجمالي العرض المختار في الملخص
     function updateSelectedOfferTotal() {
-      var netEl = document.querySelector('.sel-net');
       var totalEl = document.querySelector('.sel-total');
-      if (!netEl || !totalEl) {
-        return;
-      }
-
-      var netRaw = netEl.getAttribute('data-net') || netEl.textContent;
-      var netVal = parseFloat(netRaw);
-      if (isNaN(netVal) || netVal <= 0) {
-        return;
-      }
+      if (!totalEl) return;
 
       var totalRaw = totalEl.getAttribute('data-total');
       if (totalRaw && String(totalRaw).trim() !== '') {
-        totalEl.textContent = parseFloat(totalRaw).toFixed(2);
-        return;
+        var t = parseFloat(totalRaw);
+        if (!isNaN(t)) totalEl.textContent = t.toFixed(2);
       }
-
-      var total = computeTotal(netVal);
-      totalEl.textContent = total.toFixed(2);
     }
 
-    // إجمالي عرض الموظف نفسه
     function updateMyOfferTotal() {
-      var netEl = document.querySelector('.my-offer-net');
       var totalEl = document.querySelector('.my-offer-total');
-      if (!netEl || !totalEl) {
-        return;
-      }
-
-      var netRaw = netEl.getAttribute('data-net') || netEl.textContent;
-      var netVal = parseFloat(netRaw);
-      if (isNaN(netVal) || netVal <= 0) {
-        return;
-      }
+      if (!totalEl) return;
 
       var totalRaw = totalEl.getAttribute('data-total');
       if (totalRaw && String(totalRaw).trim() !== '') {
-        totalEl.textContent = totalRaw;
-        return;
+        var t = parseFloat(totalRaw);
+        if (!isNaN(t)) totalEl.textContent = t.toFixed(2);
       }
-
-      var total = computeTotal(netVal);
-      totalEl.textContent = total.toFixed(2);
     }
 
-    // تشغيل الحسابات بعد التحميل
     updateOfferTotals();
     updateSelectedOfferTotal();
     updateMyOfferTotal();
 
-    // إدارة مودال الرفض (فتح/إغلاق يدوي بدون hidden)
+    // مودال الرفض
     document.addEventListener('click', function (e) {
       var trigger = e.target.closest('[data-reject-modal]');
       if (trigger) {
         var modalId = trigger.getAttribute('data-reject-modal');
         var modal = document.querySelector(modalId);
-        if (modal) {
-          modal.style.display = 'flex';   // إظهار المودال
-          if (typeof showToast === 'function') {
-            showToast('تم فتح نافذة الرفض', 'info');
-          }
-        }
+        if (modal) modal.style.display = 'flex';
       }
 
       if (e.target.matches('[data-close-modal]') || e.target.classList.contains('modal-backdrop')) {
         var modalOverlay = e.target.closest('.modal-overlay');
-        if (modalOverlay) {
-          modalOverlay.style.display = 'none';  // إخفاء المودال
-        }
+        if (modalOverlay) modalOverlay.style.display = 'none';
       }
     });
 
-    // إغلاق المودال بالزر Escape
     document.addEventListener('keydown', function (e) {
       if (e.key === 'Escape') {
         var openModal = document.querySelector('.modal-overlay[style*="display: flex"]');
-        if (openModal) {
-          openModal.style.display = 'none';
-        }
+        if (openModal) openModal.style.display = 'none';
       }
     });
 
-    // تأثيرات لطيفة للبطاقات
+    // تأثيرات لطيفة
     var sections = document.querySelectorAll('.profile-section');
     sections.forEach(function (section, index) {
       section.style.animationDelay = (index * 0.05) + 's';

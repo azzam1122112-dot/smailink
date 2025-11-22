@@ -8,7 +8,7 @@ from django import forms
 from django.core.exceptions import ValidationError
 from django.utils import timezone
 
-from .models import FinanceSettings, Invoice, Payout
+from .models import FinanceSettings, Invoice, Payout, TaxRemittance
 
 
 # =======================
@@ -104,14 +104,27 @@ class InvoiceFilterForm(forms.Form):
     ملاحظة: الفيوهات الحالية تقرأ القيم من request.GET مباشرة (status/method/q/from/to).
     نوفّر حقول from_date/to_date لتسهيل القوالب، مع دالة cleaned_range() لإخراج YYYY-MM-DD.
     """
-    status = forms.ChoiceField(label="الحالة", choices=STATUS_FILTER_CHOICES, required=False, initial="all")
+    status = forms.ChoiceField(
+        label="الحالة",
+        choices=STATUS_FILTER_CHOICES,
+        required=False,
+        initial="all",
+    )
     method = forms.CharField(label="طريقة الدفع", required=False)
-    q = forms.CharField(label="بحث", required=False, help_text="ID للطلب/الاتفاقية أو مرجع")
+    q = forms.CharField(
+        label="بحث",
+        required=False,
+        help_text="ID للطلب/الاتفاقية أو مرجع",
+    )
     from_date = forms.DateField(
-        label="من تاريخ", required=False, widget=forms.DateInput(attrs={"type": "date"})
+        label="من تاريخ",
+        required=False,
+        widget=forms.DateInput(attrs={"type": "date"}),
     )
     to_date = forms.DateField(
-        label="إلى تاريخ", required=False, widget=forms.DateInput(attrs={"type": "date"})
+        label="إلى تاريخ",
+        required=False,
+        widget=forms.DateInput(attrs={"type": "date"}),
     )
 
     def __init__(self, *args, **kwargs):
@@ -140,12 +153,30 @@ class CollectionsReportFilterForm(forms.Form):
     فلتر تقرير التحصيل. يتوافق مع الفيو:
     period | status | method | q | from | to
     """
-    period = forms.ChoiceField(label="الفترة", choices=PERIOD_CHOICES, required=False, initial="30d")
-    status = forms.ChoiceField(label="الحالة", choices=STATUS_FILTER_CHOICES, required=False, initial="all")
+    period = forms.ChoiceField(
+        label="الفترة",
+        choices=PERIOD_CHOICES,
+        required=False,
+        initial="30d",
+    )
+    status = forms.ChoiceField(
+        label="الحالة",
+        choices=STATUS_FILTER_CHOICES,
+        required=False,
+        initial="all",
+    )
     method = forms.CharField(label="طريقة الدفع", required=False)
     q = forms.CharField(label="بحث", required=False)
-    from_date = forms.DateField(label="من تاريخ", required=False, widget=forms.DateInput(attrs={"type": "date"}))
-    to_date = forms.DateField(label="إلى تاريخ", required=False, widget=forms.DateInput(attrs={"type": "date"}))
+    from_date = forms.DateField(
+        label="من تاريخ",
+        required=False,
+        widget=forms.DateInput(attrs={"type": "date"}),
+    )
+    to_date = forms.DateField(
+        label="إلى تاريخ",
+        required=False,
+        widget=forms.DateInput(attrs={"type": "date"}),
+    )
 
     def clean(self):
         data = super().clean()
@@ -189,7 +220,9 @@ class InvoiceMarkPaidForm(forms.Form):
     ref_code = forms.CharField(label="مرجع العملية", required=False, max_length=100)
     paid_ref = forms.CharField(label="مرجع التحويل البنكي", required=False, max_length=64)
     paid_at = forms.DateTimeField(
-        label="تاريخ السداد", required=False, widget=forms.DateTimeInput(attrs={"type": "datetime-local"})
+        label="تاريخ السداد",
+        required=False,
+        widget=forms.DateTimeInput(attrs={"type": "datetime-local"}),
     )
 
     def apply(self, invoice: Invoice) -> Invoice:
@@ -221,6 +254,47 @@ class InvoiceMarkPaidForm(forms.Form):
 
 
 # =======================
+# توريد ضريبة (VAT Remittance)
+# =======================
+class TaxRemittanceForm(forms.ModelForm):
+    """
+    فورم بسيط لإنشاء سجل توريد ضريبي من لوحة الضرائب.
+    يسمح بإضافة مبلغ + فترة اختيارية + مرجع + ملاحظة.
+    """
+
+    sent_now = forms.BooleanField(
+        label="تم توريدها الآن",
+        required=False,
+        help_text="إن تم التحديد سيتم وسم التوريد كـ «تم التوريد» مباشرة.",
+    )
+
+    class Meta:
+        model = TaxRemittance
+        fields = ["amount", "period_from", "period_to", "ref_code", "note"]
+
+        widgets = {
+            "period_from": forms.DateInput(attrs={"type": "date"}),
+            "period_to": forms.DateInput(attrs={"type": "date"}),
+            "ref_code": forms.TextInput(attrs={"placeholder": "مثال: SADAD-12345"}),
+            "note": forms.TextInput(attrs={"placeholder": "اختياري"}),
+        }
+
+    def clean_amount(self):
+        v = _q2(self.cleaned_data.get("amount"))
+        if v <= Decimal("0"):
+            raise ValidationError("مبلغ التوريد يجب أن يكون أكبر من صفر.")
+        return v
+
+    def clean(self):
+        cleaned = super().clean()
+        d1 = cleaned.get("period_from")
+        d2 = cleaned.get("period_to")
+        if d1 and d2 and d2 < d1:
+            raise ValidationError("تاريخ «إلى» يجب أن يكون بعد «من».")
+        return cleaned
+
+
+# =======================
 # أوامر صرف الموظف (Payouts)
 # =======================
 class PayoutCreateForm(forms.ModelForm):
@@ -228,7 +302,12 @@ class PayoutCreateForm(forms.ModelForm):
     إنشاء أمر صرف لموظف. يمكن ربطه باتفاقية/فاتورة اختياريًا.
     المبلغ يمثل الصافي للموظف بعد عمولة المنصّة.
     """
-    amount = forms.DecimalField(label="المبلغ", decimal_places=2, max_digits=12, min_value=Decimal("0"))
+    amount = forms.DecimalField(
+        label="المبلغ",
+        decimal_places=2,
+        max_digits=12,
+        min_value=Decimal("0"),
+    )
 
     class Meta:
         model = Payout
@@ -259,7 +338,9 @@ class PayoutSetPaidForm(forms.Form):
     method = forms.CharField(label="طريقة الصرف", required=False, max_length=50)
     ref_code = forms.CharField(label="مرجع العملية", required=False, max_length=100)
     paid_at = forms.DateTimeField(
-        label="تاريخ الصرف", required=False, widget=forms.DateTimeInput(attrs={"type": "datetime-local"})
+        label="تاريخ الصرف",
+        required=False,
+        widget=forms.DateTimeInput(attrs={"type": "datetime-local"}),
     )
 
     def apply(self, payout: Payout) -> Payout:
@@ -281,3 +362,45 @@ class PayoutSetPaidForm(forms.Form):
             payout.paid_at = timezone.now()
 
         return payout
+
+# =======================
+# Refunds
+# =======================
+class RefundCreateForm(forms.ModelForm):
+    """
+    فورم بسيط لإنشاء مرتجع (كامل أو جزئي).
+    الـ invoice يمر من الـ view.
+    """
+
+    class Meta:
+        from .models import Refund
+        model = Refund
+        fields = ["amount", "reason"]
+
+    def __init__(self, *args, max_amount: Optional[Decimal] = None, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.max_amount = max_amount
+        self.fields["amount"].widget.attrs.update({
+            "class": "input input-sm w-40",
+            "placeholder": "0.00",
+            "step": "0.01",
+            "min": "0",
+        })
+        self.fields["reason"].widget.attrs.update({
+            "class": "input input-sm w-full mt-2",
+            "placeholder": "سبب الإرجاع (اختياري)",
+        })
+
+    def clean_amount(self):
+        v = self.cleaned_data.get("amount") or Decimal("0.00")
+        try:
+            v = Decimal(str(v)).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+        except Exception:
+            raise ValidationError("قيمة المبلغ غير صحيحة.")
+
+        if v <= 0:
+            raise ValidationError("المبلغ يجب أن يكون أكبر من صفر.")
+
+        if self.max_amount is not None and v > self.max_amount:
+            raise ValidationError(f"لا يمكن إرجاع أكثر من {self.max_amount} ريال.")
+        return v

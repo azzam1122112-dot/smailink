@@ -48,7 +48,7 @@
               <th>#</th>
               <th>الاتفاقية</th>
               <th>المرحلة</th>
-              <th>المجموع</th>
+              <th>إجمالي العميل</th>
               <th>الحالة</th>
               <th>الإصدار</th>
               <th>السداد</th>
@@ -80,9 +80,31 @@
                       {% endif %}
                     </td>
                   
+                    {# ===== المبالغ (حسب السياسة الجديدة) ===== #}
                     <td class="amount-info">
-                      <div class="amount-value">{{ item.breakdown.client_total|floatformat:2 }}</div>
-                      <div class="amount-currency">ر.س</div>
+                      {% if item.breakdown %}
+                        <div class="amount-value">
+                          {{ item.breakdown.client_total|floatformat:2 }}
+                        </div>
+                        <div class="amount-currency">ر.س</div>
+
+                        {# تفاصيل موجزة تحت الإجمالي (لا تُحمَّل على العميل) #}
+                        <div class="amount-subline">
+                          <span class="amount-chip">P: {{ item.breakdown.project_price|floatformat:2 }}</span>
+                          <span class="amount-chip">VAT: {{ item.breakdown.vat_amount|floatformat:2 }}</span>
+                          <span class="amount-chip muted">Fee خصم موظف: {{ item.breakdown.platform_fee_value|floatformat:2 }}</span>
+                        </div>
+                      {% else %}
+                        {# fallback آمن: إجمالي العميل المحسوب من الموديل #}
+                        <div class="amount-value">
+                          {% if item.inv.client_total_amount %}
+                            {{ item.inv.client_total_amount|floatformat:2 }}
+                          {% else %}
+                            {{ item.inv.amount|floatformat:2 }}
+                          {% endif %}
+                        </div>
+                        <div class="amount-currency">ر.س</div>
+                      {% endif %}
                     </td>
                   
                     <td class="status-info">
@@ -149,7 +171,6 @@
       </div>
     </div>
 
-
   </div>
 </section>
 {% endblock %}
@@ -185,7 +206,6 @@
           animateButtonClick(this);
         }
         
-        // إضافة تأثير على الزر النشط
         document.querySelectorAll('.filter-buttons .btn').forEach(btn => {
           btn.classList.remove('active');
         });
@@ -213,19 +233,6 @@
         }
       });
     });
-
-    // تحديث العداد الإحصائي (يمكن تطويره لاحقًا)
-    function updateStats() {
-      const paidCount = document.querySelectorAll('.badge-verified').length;
-      const unpaidCount = document.querySelectorAll('.badge-pending').length;
-      const cancelledCount = document.querySelectorAll('.badge-rejected').length;
-      
-      // يمكن تحديث العناصر الإحصائية هنا لاحقًا
-      console.log('الإحصائيات:', { paidCount, unpaidCount, cancelledCount });
-    }
-
-    // تهيئة الإحصائيات
-    updateStats();
 
   })();
   </script>
@@ -325,6 +332,31 @@
     color: var(--dark-500);
   }
 
+  .invoice-list-page .amount-subline {
+    margin-top: 6px;
+    display: flex;
+    gap: 6px;
+    flex-wrap: wrap;
+    direction: rtl;
+    text-align: right;
+  }
+
+  .invoice-list-page .amount-chip {
+    font-size: 12px;
+    padding: 2px 6px;
+    border-radius: 999px;
+    background: var(--dark-50);
+    color: var(--dark-700);
+    border: 1px solid var(--dark-200);
+    white-space: nowrap;
+  }
+
+  .invoice-list-page .amount-chip.muted {
+    background: transparent;
+    border-style: dashed;
+    color: var(--dark-500);
+  }
+
   .invoice-list-page .status-info {
     text-align: center;
   }
@@ -362,30 +394,6 @@
     opacity: 0.4;
   }
 
-  .invoice-list-page .stats-summary {
-    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-  }
-
-  .invoice-list-page .stat-item {
-    text-align: center;
-    padding: 1rem;
-    background: var(--white);
-    border-radius: var(--radius-lg);
-    border: 1px solid var(--dark-200);
-  }
-
-  .invoice-list-page .stat-label {
-    font-size: 0.875rem;
-    color: var(--dark-600);
-    margin-bottom: 0.5rem;
-  }
-
-  .invoice-list-page .stat-number {
-    font-size: 1.5rem;
-    font-weight: 700;
-    color: var(--primary-600);
-  }
-
   .invoice-list-page .text-muted {
     color: var(--dark-500);
     font-style: italic;
@@ -413,10 +421,6 @@
       padding: 0.75rem 0.5rem;
     }
     
-    .invoice-list-page .stats-summary {
-      grid-template-columns: repeat(2, 1fr);
-    }
-    
     .invoice-list-page .filter-buttons {
       flex-wrap: wrap;
       justify-content: center;
@@ -430,10 +434,6 @@
   }
 
   @media (max-width: 480px) {
-    .invoice-list-page .stats-summary {
-      grid-template-columns: 1fr;
-    }
-    
     .invoice-list-page .table-clean {
       min-width: 700px;
     }
@@ -443,16 +443,9 @@
     }
   }
 
-  /* تأثيرات الحركة */
   @keyframes fadeInRow {
-    from {
-      opacity: 0;
-      transform: translateY(10px);
-    }
-    to {
-      opacity: 1;
-      transform: translateY(0);
-    }
+    from { opacity: 0; transform: translateY(10px); }
+    to   { opacity: 1; transform: translateY(0); }
   }
 
   .invoice-list-page .invoice-row {

@@ -85,11 +85,12 @@ class PriceBreakdown:
     project_price: Decimal
     fee_percent: Decimal
     vat_rate: Decimal
-    platform_fee_value: Decimal
-    taxable_base: Decimal
-    vat_amount: Decimal
-    client_total: Decimal
-    tech_payout: Decimal
+
+    platform_fee_value: Decimal      # قيمة عمولة المنصّة (تُخصم من الموظف)
+    taxable_base: Decimal            # وعاء الضريبة (P فقط)
+    vat_amount: Decimal              # قيمة الضريبة
+    client_total: Decimal            # إجمالي العميل (P + VAT)
+    tech_payout: Decimal             # صافي الموظف (P - fee)
 
     def as_dict(self) -> dict[str, str]:
         return {
@@ -120,7 +121,6 @@ def _current_rates() -> Tuple[Decimal, Decimal]:
             vat = _normalize_percent(vat, "vat_rate")
             return fee, vat
         except Exception:
-            # في حال حدوث أي خطأ (مثل عدم وجود السجل بعد)
             pass
 
     # 2) fallback نادر جدًا (مثلاً أثناء الهجرات الأولى)
@@ -169,10 +169,8 @@ def resolve_fee_percent(
             fee = _to_decimal(by_category[category], "category_fee")
 
     except Exception:
-        # في حال تنسيق overrides غير صحيح، نتجاهل ونعود للـ default
         pass
 
-    # تطبيع وحدود
     fee = _normalize_percent(fee, "fee_percent")
     return fee
 
@@ -186,11 +184,17 @@ def compute_breakdown(
     payout_mode: Optional[str] = None,
 ) -> PriceBreakdown:
     """
+    السياسة المعتمدة (المتفق عليها):
+
+    - العميل لا يتحمل نسبة المنصّة.
+    - إجمالي العميل = P + (P × VAT)
+    - صافي الموظف = P - (P × F)
+
     منهجية الاحتساب:
       - platform_fee_value = P × F
-      - taxable_base = P + platform_fee_value
+      - taxable_base = P
       - vat_amount = taxable_base × V
-      - client_total = taxable_base + vat_amount
+      - client_total = taxable_base + vat_amount   (بدون إضافة fee)
       - tech_payout = P - platform_fee_value  (net_after_fee)
                     أو  tech_payout = P       (gross_to_tech)
     """
@@ -199,7 +203,6 @@ def compute_breakdown(
         raise ValueError("project_price لا يمكن أن يكون سالبًا.")
 
     if fee_percent is None or vat_rate is None:
-        # استحضار القيم الحالية عند الحاجة من FinanceSettings فقط
         default_fee, default_vat = _current_rates()
         F = _normalize_percent(fee_percent if fee_percent is not None else default_fee, "fee_percent")
         V = _normalize_percent(vat_rate if vat_rate is not None else default_vat, "vat_rate")
@@ -211,16 +214,21 @@ def compute_breakdown(
     if mode not in {"net_after_fee", "gross_to_tech"}:
         raise ValueError("payout_mode غير معروف.")
 
+    # عمولة المنصّة تُخصم من الموظف فقط
     platform_fee_value = _q(P * F)
-    taxable_base = _q(P)  # الضريبة فقط على قيمة المشروع
+
+    # الضريبة فقط على قيمة المشروع (P)
+    taxable_base = _q(P)
     vat_amount = _q(taxable_base * V)
-    client_total = _q(P + platform_fee_value + vat_amount)
+
+    # العميل لا يدفع العمولة
+    client_total = _q(taxable_base + vat_amount)
 
     tech_payout = _q(P - platform_fee_value) if mode == "net_after_fee" else _q(P)
 
     return PriceBreakdown(
         project_price=_q(P),
-        fee_percent=F,  # نُبقيها كنسبة (0..1)
+        fee_percent=F,
         vat_rate=V,
         platform_fee_value=platform_fee_value,
         taxable_base=taxable_base,
@@ -268,7 +276,7 @@ def breakdown_for_offer(offer) -> PriceBreakdown:
         category=category,
         campaign=campaign,
     )
-    # نقرأ VAT الحالي دومًا من FinanceSettings عبر _current_rates
+
     _, default_vat = _current_rates()
     return compute_breakdown(P, fee_percent=F, vat_rate=default_vat)
 
@@ -304,7 +312,12 @@ def _fmt_money(x: Decimal, currency: str | None = None, thousands_sep: str = ","
     return f"{s} {currency}" if currency else s
 
 
-def format_breakdown_for_display(bd: PriceBreakdown, *, currency: str | None = None, thousands_sep: str = ",") -> dict[str, str]:
+def format_breakdown_for_display(
+    bd: PriceBreakdown,
+    *,
+    currency: str | None = None,
+    thousands_sep: str = ","
+) -> dict[str, str]:
     return {
       "قيمة المشروع (P)": _fmt_money(bd.project_price, currency, thousands_sep),
       "نسبة المنصّة (F)": f"{(bd.fee_percent * 100).quantize(Decimal('0.01'))}%",

@@ -1,0 +1,123 @@
+{% extends "base.html" %}
+{% load humanize %}
+
+{% block title %}المبالغ المجمدة بالنزاعات{% endblock %}
+
+{% block content %}
+<section class="page-section" dir="rtl">
+  <div class="container mx-auto px-4 py-6">
+
+    <div class="mb-6">
+      <div class="section-badge">⚖️ Finance Disputes</div>
+      <h1 class="text-2xl md:text-3xl font-extrabold mt-2">المبالغ المجمدة بالنزاعات</h1>
+      <p class="text-sm text-gray-600 mt-1">
+        صافي الموظف المجمد = P - عمولة المنصة. والرد للعميل حسب إجمالي ما دفعه.
+      </p>
+    </div>
+
+    {# KPIs #}
+    <div class="stats-grid" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:1rem;">
+      <div class="profile-section" style="background:linear-gradient(135deg,#fee2e2 0%, #fff 100%);">
+        <div class="card-section-title">🚫 صافي الموظفين المجمد</div>
+        <div class="stat-value">{{ hold_employee_total|default:0|floatformat:2 }} ريال</div>
+      </div>
+      <div class="profile-section" style="background:linear-gradient(135deg,#fef3c7 0%, #fff 100%);">
+        <div class="card-section-title">💳 مبالغ العملاء القابلة للرد</div>
+        <div class="stat-value">{{ hold_client_total|default:0|floatformat:2 }} ريال</div>
+      </div>
+    </div>
+
+    {# جدول النزاعات #}
+    <div class="profile-section mt-6">
+      <div class="card-section-title">النزاعات النشطة</div>
+
+      {% if rows %}
+        <div class="overflow-x-auto rounded-2xl bg-white shadow mt-3">
+          <table class="min-w-full text-sm">
+            <thead>
+              <tr class="text-gray-600 border-b">
+                <th class="py-2 px-3 text-right">النزاع</th>
+                <th class="py-2 px-3 text-right">الطلب</th>
+                <th class="py-2 px-3 text-right">الموظف</th>
+                <th class="py-2 px-3 text-right">الفاتورة</th>
+                <th class="py-2 px-3 text-right">صافي الموظف المجمد</th>
+                <th class="py-2 px-3 text-right">مبلغ العميل</th>
+                <th class="py-2 px-3 text-right">الحالة</th>
+                <th class="py-2 px-3 text-right">إجراءات</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for r in rows %}
+                <tr class="border-b hover:bg-gray-50">
+                  <td class="py-2 px-3">
+                    #{{ r.dispute.pk }} — {{ r.dispute.title|default:"نزاع" }}
+                  </td>
+
+                  <td class="py-2 px-3">
+                    <a href="{% url 'marketplace:request_detail' r.request.pk %}">
+                      #{{ r.request.pk }}
+                    </a>
+                  </td>
+
+                  <td class="py-2 px-3">{{ r.agreement.employee }}</td>
+
+                  <td class="py-2 px-3">
+                    {% if r.invoice %}
+                      <a href="{% url 'finance:invoice_detail' r.invoice.pk %}">#{{ r.invoice.pk }}</a>
+                    {% else %}
+                      —
+                    {% endif %}
+                  </td>
+
+                  <td class="py-2 px-3 font-semibold">{{ r.employee_hold|floatformat:2 }} ريال</td>
+
+                  <td class="py-2 px-3">{{ r.client_hold|floatformat:2 }} ريال</td>
+
+                  <td class="py-2 px-3">
+                    {% if r.is_paid %}
+                      <span class="badge badge-verified">الفاتورة مدفوعة</span>
+                    {% else %}
+                      <span class="badge badge-pending">غير مدفوعة</span>
+                    {% endif %}
+                  </td>
+
+                  <td class="py-2 px-3">
+                    {% if r.is_paid %}
+                      <div style="display:flex;flex-wrap:wrap;gap:.25rem;align-items:center;">
+
+                        {# Release #}
+                        {% if r.payout_latest %}
+                          <span class="badge badge-default">Payout موجود</span>
+                        {% else %}
+                          <form method="post" action="{% url 'finance:dispute_release' r.dispute.pk %}">
+                            {% csrf_token %}
+                            <button class="btn btn-primary btn-sm" type="submit">Release للموظف</button>
+                          </form>
+                        {% endif %}
+
+                        {# Refund #}
+                        <form method="post" action="{% url 'finance:dispute_refund' r.dispute.pk %}">
+                          {% csrf_token %}
+                          <input name="amount" class="input input-sm w-28" placeholder="مبلغ الرد" value="{{ r.client_hold|floatformat:2 }}">
+                          <button class="btn btn-outline btn-sm" type="submit">Refund للعميل</button>
+                        </form>
+
+                      </div>
+                    {% else %}
+                      —
+                    {% endif %}
+                  </td>
+
+                </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      {% else %}
+        <p class="text-sm text-gray-500 mt-3">لا توجد نزاعات نشطة حالياً.</p>
+      {% endif %}
+    </div>
+
+  </div>
+</section>
+{% endblock %}

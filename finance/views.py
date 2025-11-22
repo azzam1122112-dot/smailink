@@ -1,5 +1,8 @@
 # finance/views.py
 from __future__ import annotations
+from django.utils.dateparse import parse_date
+from typing import Dict, List, Optional, Set
+from django.db.models import QuerySet
 
 import csv
 import hashlib
@@ -8,6 +11,7 @@ import logging
 from datetime import date, timedelta
 from decimal import Decimal, ROUND_HALF_UP, InvalidOperation
 from typing import Dict, List, Optional, Tuple
+from django.db.models import Prefetch
 
 from django.conf import settings
 from django.contrib import messages
@@ -23,26 +27,33 @@ from django.views.decorators.http import require_GET, require_POST, require_http
 from agreements.models import Agreement
 from marketplace.models import Request
 
-from .forms import FinanceSettingsForm
-from .models import FinanceSettings, Invoice
+from .forms import FinanceSettingsForm, TaxRemittanceForm, RefundCreateForm
+from .models import FinanceSettings, Invoice, TaxRemittance, Payout, Refund
 from .permissions import is_finance
 from .utils import get_finance_cfg, invalidate_finance_cfg_cache
 
 logger = logging.getLogger(__name__)
 
 # ===========================
+# Ledger (دفتر الخزينة) — استيراد آمن
+# ===========================
+try:
+    from finance.models import LedgerEntry  # الموديل الجديد
+except Exception:  # fallback آمن لو الموديل لم يُدمج بعد
+    LedgerEntry = None
+
+
+# ===========================
 # تسعير — استيراد آمن مع Backoff
 # ===========================
-# تفضيل: finance.services.pricing.breakdown_for_agreement
-# بديل احتياطي: finance.pricing.breakdown_for_agreement
 try:
     from finance.services.pricing import breakdown_for_agreement  # النوع المفضل
 except Exception:
     try:
-        # احتياطي إذا كانت وحدة التسعير داخل نفس التطبيق
         from .pricing import breakdown_for_agreement  # type: ignore
     except Exception:
-        breakdown_for_agreement = None  # سيتم توليد بديل مبسّط بالأسفل
+        breakdown_for_agreement = None
+
 
 # ===========================
 # إعدادات عامة قابلة للتهيئة
@@ -51,6 +62,7 @@ BANK_NAME = getattr(settings, "BANK_NAME", "SAUDI BANK")
 BANK_ACCOUNT_NAME = getattr(settings, "BANK_ACCOUNT_NAME", "SamiLink LLC")
 BANK_IBAN = getattr(settings, "BANK_IBAN", "SA00 0000 0000 0000 0000 0000")
 PAYMENT_WEBHOOK_SECRET = getattr(settings, "PAYMENT_WEBHOOK_SECRET", None)
+
 
 # ===========================
 # أدوات مساعدة عامة
@@ -97,7 +109,6 @@ def _agreement_completed_value() -> str:
 def _set_agreement_completed_safe(ag: Agreement) -> bool:
     """
     وسم الاتفاقية كمكتملة بشكل آمن مع احترام الحقول والاختيارات.
-    (قد تُستخدم لاحقًا في سيناريوهات خاصة، لكن لم نَعُد نُكمل الطلب عند السداد فقط.)
     """
     try:
         if not hasattr(ag, "status"):
@@ -150,10 +161,7 @@ def _writable_attr(obj, name: str) -> bool:
 
 
 def _invoice_has_milestone_fk() -> bool:
-    """
-    هل نموذج Invoice يحتوي على حقل milestone؟
-    نستخدمه لتفادي الأخطاء في المشاريع التي حُذفت فيها علاقة المراحل.
-    """
+    """هل نموذج Invoice يحتوي على حقل milestone؟"""
     try:
         for f in Invoice._meta.get_fields():
             if getattr(f, "name", None) == "milestone":
@@ -166,20 +174,71 @@ def _invoice_has_milestone_fk() -> bool:
 def _mark_agreement_started_and_sync(ag: Agreement) -> None:
     """
     عند سداد فاتورة الاتفاقية:
-    - نُحدد أن الاتفاقية قد بدأت (mark_started).
-    - نترك sync_request_state يتكفل بتحويل حالة الطلب إلى (in_progress / completed) حسب المراحل.
+    - mark_started
+    - sync_request_state
     """
     try:
         if hasattr(ag, "mark_started"):
             ag.mark_started(save=True)
         if hasattr(ag, "sync_request_state"):
-            # save_request=True ليتم تحديث حالة الطلب وفق منطق الاتفاقية
             ag.sync_request_state(save_request=True)
     except Exception:
         logger.exception(
             "failed to mark agreement started and sync request state (agreement_id=%s)",
             getattr(ag, "id", None),
         )
+
+
+def _agreement_P(ag: Agreement) -> Decimal:
+    """قيمة المشروع الأساسية P."""
+    return _as_decimal(getattr(ag, "p_amount", None) or getattr(ag, "total_amount", 0))
+
+
+# ===========================
+# Ledger helpers (رصيد الخزينة)
+# ===========================
+def _treasury_balance() -> Decimal:
+    """رصيد الخزينة = مجموع الدخول - مجموع الخروج."""
+    if LedgerEntry is None:
+        return Decimal("0.00")
+    agg = LedgerEntry.objects.aggregate(
+        ins=Sum("amount", filter=Q(direction=LedgerEntry.Direction.IN_)),
+        outs=Sum("amount", filter=Q(direction=LedgerEntry.Direction.OUT)),
+    )
+    ins = agg["ins"] or Decimal("0.00")
+    outs = agg["outs"] or Decimal("0.00")
+    return _q2(ins - outs)
+
+
+def _log_ledger_once(*, entry_type: str, direction: str, amount: Decimal,
+                     invoice=None, payout=None, refund=None, tax_remittance=None,
+                     user=None, note: str = "") -> None:
+    """تسجيل قيد خزينة مرة واحدة (idempotent)."""
+    if LedgerEntry is None:
+        return
+
+    qs = LedgerEntry.objects.filter(
+        entry_type=entry_type,
+        direction=direction,
+        invoice=invoice if invoice else None,
+        payout=payout if payout else None,
+        refund=refund if refund else None,
+        tax_remittance=tax_remittance if tax_remittance else None,
+    )
+    if qs.exists():
+        return
+
+    LedgerEntry.objects.create(
+        entry_type=entry_type,
+        direction=direction,
+        amount=_q2(amount),
+        invoice=invoice,
+        payout=payout,
+        refund=refund,
+        tax_remittance=tax_remittance,
+        created_by=user,
+        note=note[:255] if note else "",
+    )
 
 
 # ===========================
@@ -218,35 +277,42 @@ def _period_bounds(request: HttpRequest) -> Tuple[Optional[date], Optional[date]
 # ===========================
 def _fallback_agreement_totals(ag: Agreement) -> Dict[str, Decimal]:
     """
-    بديل مبسّط إذا لم تتوفر وحدة التسعير:
-    P من agreement.total_amount، النِّسب من FinanceSettings.current_rates().
-    VAT على (P + عمولة المنصة).
+    سياسة جديدة:
+    - العميل يدفع: P + VAT
+    - عمولة المنصّة تُخصم من الموظف
+    - مستحق الموظف = P - platform_fee
     """
-    P = _as_decimal(getattr(ag, "total_amount", 0))
+    P = _agreement_P(ag)
     fee, vat = FinanceSettings.current_rates()
-    fee_val = _q2(P * fee)
-    vat_val = _q2(P * vat)  # الضريبة فقط على قيمة المشروع
-    grand = _q2(P + fee_val + vat_val)
+
+    platform_fee = _q2(P * fee)
+    vat_amount = _q2(P * vat)
+
+    client_total = _q2(P + vat_amount)
+    net_for_employee = _q2(P - platform_fee)
+
     return {
         "P": _q2(P),
         "fee_percent": fee * Decimal("100"),
-        "platform_fee": fee_val,
-        "taxable": P,  # الأساس الخاضع للضريبة هو قيمة المشروع فقط
+        "platform_fee": platform_fee,
+        "taxable": P,
         "vat_percent": vat * Decimal("100"),
-        "vat_amount": vat_val,
-        "grand_total": grand,
+        "vat_amount": vat_amount,
+        "grand_total": client_total,
+        "net_for_employee": net_for_employee,
     }
 
 
 def compute_agreement_totals(ag: Agreement) -> Dict[str, Decimal]:
     """
-    يعتمد أولاً على finance.services.pricing.breakdown_for_agreement (إن وُجد)،
-    وإلا يسقط إلى بديل مبسّط آمن.
-    يرجع: P, fee_percent(٪), platform_fee, taxable, vat_percent(٪), vat_amount, grand_total.
+    يرجع:
+    P, platform_fee, vat_amount,
+    grand_total (P + VAT),
+    net_for_employee (P - platform_fee)
     """
     if callable(breakdown_for_agreement):
         try:
-            bd = breakdown_for_agreement(ag)  # يجب أن يعيد كائنًا بخصائص أدناه
+            bd = breakdown_for_agreement(ag)
             return {
                 "P": _q2(bd.project_price),
                 "fee_percent": _q2(bd.fee_percent * Decimal("100")),
@@ -255,19 +321,17 @@ def compute_agreement_totals(ag: Agreement) -> Dict[str, Decimal]:
                 "vat_percent": _q2(bd.vat_rate * Decimal("100")),
                 "vat_amount": _q2(bd.vat_amount),
                 "grand_total": _q2(bd.client_total),
+                "net_for_employee": _q2(bd.net_for_employee),
             }
         except Exception:
             logger.exception("pricing.breakdown_for_agreement failed — using fallback")
     return _fallback_agreement_totals(ag)
 
 
-def _build_invoice_summary(qs, paid_val: str, unpaid_val: str) -> Dict[str, Decimal]:
-    """
-    ملخص تفصيلي لمجموعة فواتير:
-    - مجموع مدفوعات العميل (client_total/paid/unpaid/refunded)
-    - مجموع عمولة المنصة والضريبة
-    - مجموع مستحقات الموظف (employee_total/paid/unpaid/cancelled)
-    يُعتمد على compute_agreement_totals حتى لو لم تُخزَّن القيم في الفاتورة.
+def _build_invoice_summary(qs: QuerySet, paid_val: str, unpaid_val: str) -> Dict[str, Decimal]:
+    """ملخص تفصيلي لمجموعة فواتير وفق السياسة الجديدة.
+    - client_total مبني على إجمالي العميل الحقيقي (P + VAT) من الفاتورة.
+    - employee/net/fee/vat تُؤخذ من الفاتورة إن توفرت، وإلا fallback لحساب الاتفاقية.
     """
     cancelled_val = getattr(getattr(Invoice, "Status", None), "CANCELLED", "cancelled")
     refunded_val = getattr(getattr(Invoice, "Status", None), "REFUNDED", "refunded")
@@ -292,56 +356,99 @@ def _build_invoice_summary(qs, paid_val: str, unpaid_val: str) -> Dict[str, Deci
         if not ag:
             continue
 
-        try:
-            totals = compute_agreement_totals(ag)
-        except Exception:
-            logger.exception(
-                "failed to compute agreement totals in summary (agreement_id=%s)",
-                getattr(ag, "id", None),
-            )
-            continue
+        # =========================
+        # 1) إجمالي العميل الحقيقي
+        # =========================
+        client_total_from_inv = None
 
-        P = _as_decimal(totals.get("P", 0))
-        fee = _as_decimal(totals.get("platform_fee", 0))
-        vat = _as_decimal(totals.get("vat_amount", 0))
-        client_total = _as_decimal(totals.get("grand_total", 0))
+        # لو الـQS عامل annotate(client_total=...)
+        if hasattr(inv, "client_total"):
+            client_total_from_inv = getattr(inv, "client_total", None)
 
+        # أو لو عندنا الحقل الحقيقي على الفاتورة
+        if client_total_from_inv is None:
+            client_total_from_inv = getattr(inv, "client_total_amount", None)
+
+        if client_total_from_inv is None:
+            # fallback أخير: amount (P) فقط
+            client_total_from_inv = getattr(inv, "amount", 0)
+
+        client_total = _as_decimal(client_total_from_inv)
+
+        # ==========================================
+        # 2) عمولة المنصة و VAT وصافي الموظف
+        # ==========================================
+        fee = None
+        vat = None
+        net_emp = None
+
+        # خذ من الفاتورة مباشرة إن وجدت
+        fee_raw = getattr(inv, "platform_fee_amount", None)
+        vat_raw = getattr(inv, "vat_amount", None)
+        net_raw = getattr(inv, "net_for_employee", None) or getattr(inv, "tech_payout", None)
+
+        if fee_raw is not None:
+            fee = _as_decimal(fee_raw)
+        if vat_raw is not None:
+            vat = _as_decimal(vat_raw)
+        if net_raw is not None:
+            net_emp = _as_decimal(net_raw)
+
+        # fallback لحساب الاتفاقية إذا نقص شيء
+        if fee is None or vat is None or net_emp is None:
+            try:
+                totals = compute_agreement_totals(ag)
+            except Exception:
+                logger.exception(
+                    "failed to compute agreement totals in summary (agreement_id=%s)",
+                    getattr(ag, "id", None),
+                )
+                totals = {}
+
+            P = _as_decimal(totals.get("P", getattr(inv, "amount", 0) or 0))
+            fee = fee if fee is not None else _as_decimal(totals.get("platform_fee", 0))
+            vat = vat if vat is not None else _as_decimal(totals.get("vat_amount", 0))
+
+            if net_emp is None:
+                net_emp = _as_decimal(totals.get("net_for_employee", P - fee))
+
+        if net_emp < 0:
+            net_emp = Decimal("0.00")
+
+        # =========================
+        # 3) تراكم الملخص
+        # =========================
         summary["count"] += Decimal("1")
         summary["client_total"] += client_total
         summary["platform_fee_total"] += fee
         summary["vat_total"] += vat
-        summary["employee_total"] += P
+        summary["employee_total"] += net_emp
 
         status = (getattr(inv, "status", "") or "").lower()
         if status == (paid_val or "").lower():
             summary["client_paid"] += client_total
-            summary["employee_paid"] += P
+            summary["employee_paid"] += net_emp
         elif status == (unpaid_val or "").lower():
             summary["client_unpaid"] += client_total
-            summary["employee_unpaid"] += P
+            summary["employee_unpaid"] += net_emp
         elif status in {(cancelled_val or "").lower(), (refunded_val or "").lower()}:
             summary["client_refunded"] += client_total
-            summary["employee_cancelled"] += P
+            summary["employee_cancelled"] += net_emp
 
-    # كاختيار يمكنك إرجاع القيم مكّوَنة على خانتين
+    # Quantize
     for key in list(summary.keys()):
-        if key in {"count"}:
+        if key == "count":
             continue
         summary[key] = _q2(summary[key])
 
     return summary
-
 
 # ===========================
 # يضمن/ينشئ فاتورة واحدة لإجمالي الاتفاقية
 # ===========================
 @transaction.atomic
 def _ensure_single_invoice_with_amount(ag: Agreement, *, amount: Decimal) -> Invoice:
-    """
-    يضمن وجود فاتورة واحدة فقط للاتفاقية وبالمبلغ الصحيح.
-    Idempotent + select_for_update لمنع السباق.
-    لا يعتمد على وجود علاقة milestone في Invoice.
-    """
+    """يضمن وجود فاتورة واحدة فقط للاتفاقية وبالمبلغ الصحيح."""
     unpaid_val = getattr(getattr(Invoice, "Status", None), "UNPAID", "unpaid")
     paid_val = getattr(getattr(Invoice, "Status", None), "PAID", "paid")
 
@@ -356,14 +463,12 @@ def _ensure_single_invoice_with_amount(ag: Agreement, *, amount: Decimal) -> Inv
     new_amount = _q2(amount)
 
     if inv:
-        # لا نُعدل المدفوعة؛ فقط نتأكد أن غير المدفوعة بقيمة صحيحة
         if getattr(inv, "status", None) != paid_val and (
             not inv.amount or inv.amount != new_amount
         ):
             inv.amount = new_amount
             updates = ["amount"]
 
-            # مزامنة total_amount مع نفس القيمة (فاتورة دفعة واحدة)
             if hasattr(inv, "total_amount"):
                 inv.total_amount = new_amount
                 updates.append("total_amount")
@@ -379,7 +484,6 @@ def _ensure_single_invoice_with_amount(ag: Agreement, *, amount: Decimal) -> Inv
             inv.save(update_fields=updates)
         return inv
 
-    # إنشاء لأول مرة
     fields = {
         "agreement": ag,
         "amount": new_amount,
@@ -388,7 +492,6 @@ def _ensure_single_invoice_with_amount(ag: Agreement, *, amount: Decimal) -> Inv
         "method": "bank",
         "ref_code": getattr(ag, "ref_code", "") or f"AG{ag.id}-DEP",
     }
-    # لو يوجد حقل total_amount في النموذج، عبيه بنفس القيمة
     if hasattr(Invoice, "total_amount"):
         fields["total_amount"] = new_amount
 
@@ -406,61 +509,84 @@ def finance_home(request: HttpRequest):
         messages.error(request, "غير مصرح بعرض لوحة المالية.")
         return redirect("website:home")
 
+    from finance.utils import calculate_financials_from_net
+
     paid_val = getattr(getattr(Invoice, "Status", None), "PAID", "paid")
     unpaid_val = getattr(getattr(Invoice, "Status", None), "UNPAID", "unpaid")
 
-    # طلبات قيد التنفيذ
     inprog_val = getattr(getattr(Request, "Status", None), "IN_PROGRESS", "in_progress")
+    disputed_val = getattr(getattr(Request, "Status", None), "DISPUTED", "disputed")
+
     inprog = Request.objects.filter(status=inprog_val)
 
-    # إجمالي مبالغ الاتفاقيات للطلبات قيد التنفيذ
     total_agreements_amount = (
-        Agreement.objects.filter(request__in=inprog).aggregate(s=Sum("total_amount"))["s"]
+        Agreement.objects.filter(request__in=inprog)
+        .aggregate(s=Sum("total_amount"))["s"]
         or Decimal("0.00")
     )
 
+    invs = Invoice.objects.all().select_related("agreement", "agreement__request")
 
-    # مجاميع الفواتير (باستخدام دالة الحساب الموحدة)
-    from finance.utils import calculate_financials_from_net
-    invs = Invoice.objects.all().select_related("agreement")
     def _sum_breakdown(qs, key):
+        """
+        تجميع breakdown مع منع تكرار الاتفاقية.
+        ترجع Decimal خام (بدون _q2) عشان ما يصير خلط حسابي.
+        """
         total = Decimal("0.00")
+        seen = set()
+
         for inv in qs:
-            if inv.agreement:
-                net_amount = inv.agreement.p_amount
+            ag = getattr(inv, "agreement", None)
+            if ag:
+                if ag.id in seen:
+                    continue
+                seen.add(ag.id)
+                net_amount = _agreement_P(ag)  # P
             else:
-                net_amount = inv.amount
-            platform_fee_percent = inv.platform_fee_percent if inv.platform_fee_percent else None
-            vat_rate = inv.vat_percent if inv.vat_percent else None
+                net_amount = inv.amount  # fallback
+
+            platform_fee_percent = getattr(inv, "platform_fee_percent", None) or None
+            vat_rate = getattr(inv, "vat_percent", None) or None
+
             breakdown = calculate_financials_from_net(
                 net_amount,
                 platform_fee_percent=platform_fee_percent,
                 vat_rate=vat_rate,
             )
             total += breakdown.get(key, Decimal("0.00"))
+
         return total
 
-    paid_total_amount = _sum_breakdown(invs.filter(status=paid_val), "client_total")
-    unpaid_total_amount = _sum_breakdown(invs.filter(status=unpaid_val), "client_total")
-    fee_all = _sum_breakdown(invs, "platform_fee")
-    fee_paid = _sum_breakdown(invs.filter(status=paid_val), "platform_fee")
-    vat_all = _sum_breakdown(invs, "vat_amount")
-    vat_paid = _sum_breakdown(invs.filter(status=paid_val), "vat_amount")
-    # صافي الموظف
-    employee_paid_net = _sum_breakdown(invs.filter(status=paid_val), "net_for_employee")
-    employee_unpaid_net = _sum_breakdown(invs.filter(status=unpaid_val), "net_for_employee")
-    disputed_val = getattr(getattr(Request, "Status", None), "DISPUTED", "disputed")
-    employee_held_dispute = _sum_breakdown(invs.filter(agreement__request__status=disputed_val), "net_for_employee")
+    # ===== إجماليات الفواتير =====
+    paid_invs = invs.filter(status=paid_val)
+    unpaid_invs = invs.filter(status=unpaid_val)
 
-    # آخر فواتير تحتاج تأكيد (غير مدفوعة + لديها مرجع تحويل)
+    paid_total_amount_raw = _sum_breakdown(paid_invs, "client_total")   # هذا هو إجمالي العميل (P + VAT)
+    unpaid_total_amount_raw = _sum_breakdown(unpaid_invs, "client_total")
+
+    fee_all_raw = _sum_breakdown(invs, "platform_fee")
+    fee_paid_raw = _sum_breakdown(paid_invs, "platform_fee")
+
+    vat_all_raw = _sum_breakdown(invs, "vat_amount")
+    vat_paid_raw = _sum_breakdown(paid_invs, "vat_amount")            # VAT المحصّلة من العملاء
+
+    employee_paid_net_raw = _sum_breakdown(paid_invs, "net_for_employee")
+    employee_unpaid_net_raw = _sum_breakdown(unpaid_invs, "net_for_employee")
+
+    # إجمالي صافي الموظفين المتجمّد بسبب النزاع
+    employee_held_dispute_raw = _sum_breakdown(
+        invs.filter(agreement__request__status=disputed_val),
+        "net_for_employee",
+    )
+
+    # ===== فواتير لديها مرجع تحويل بنكي بانتظار التأكيد =====
     pending_bank_confirms = (
-        invs.filter(status=unpaid_val)
+        unpaid_invs
         .exclude(paid_ref__isnull=True)
         .exclude(paid_ref__exact="")
         .select_related("agreement", "agreement__request")[:10]
     )
 
-    # رابط إعدادات آمن (لمنع NoReverseMatch)
     settings_url = _first_existing_url(
         [
             "finance:settings",
@@ -472,19 +598,255 @@ def finance_home(request: HttpRequest):
         ]
     )
 
+    # ===== أوامر الصرف =====
+    payouts_unpaid = Payout.objects.filter(status=Payout.Status.PENDING)
+    payouts_paid = Payout.objects.filter(status=Payout.Status.PAID)
+
+    payouts_paid_total_raw = (
+        payouts_paid.aggregate(s=Sum("amount"))["s"] or Decimal("0.00")
+    )
+    payouts_unpaid_total_raw = (
+        payouts_unpaid.aggregate(s=Sum("amount"))["s"] or Decimal("0.00")
+    )
+
+    # ===== مرتجعات العملاء =====
+    refunds_sent_total_raw = (
+        Refund.objects
+        .filter(status=Refund.Status.SENT)
+        .aggregate(s=Sum("amount"))["s"] or Decimal("0.00")
+    )
+    refunds_pending_total_raw = (
+        Refund.objects
+        .filter(status=Refund.Status.PENDING)
+        .aggregate(s=Sum("amount"))["s"] or Decimal("0.00")
+    )
+
+    # ===== VAT Remittance (تم توريدها) =====
+    remitted_total_raw = (
+        TaxRemittance.objects
+        .filter(status=TaxRemittance.Status.SENT)
+        .aggregate(s=Sum("amount"))["s"] or Decimal("0.00")
+    )
+
+    # ==========================================================
+    # محافظ/أرصدة الخزينة (الحساب الصحيح)
+    # ==========================================================
+
+    # 1) VAT Payable = VAT محصّلة − VAT مورّدة
+    vat_payable_raw = vat_paid_raw - remitted_total_raw
+    if vat_payable_raw < 0:
+        vat_payable_raw = Decimal("0.00")
+
+    # 2) Customer Liability (ما تبقّى من أموال العملاء داخل المنصّة)
+    # هي فعليًا: إجمالي ما دفعوه − ما رُدّ لهم − ما صُرف للموظفين
+    customer_liability_raw = paid_total_amount_raw - refunds_sent_total_raw - payouts_paid_total_raw
+    if customer_liability_raw < 0:
+        customer_liability_raw = Decimal("0.00")
+
+    # 3) CURRENT Treasury balance (الرصيد النقدي الحقيقي في الخزينة)
+    # ✅ لا نضيف VAT مرة ثانية ولا نضيف عمولة المنصّة
+    computed_treasury_raw = (
+        paid_total_amount_raw
+        - payouts_paid_total_raw
+        - refunds_sent_total_raw
+        - remitted_total_raw
+    )
+    if computed_treasury_raw < 0:
+        computed_treasury_raw = Decimal("0.00")
+
+    # لو عندك Ledger شغّال فعلاً وتسجيلاته صحيحة، تقدر تعرضه للمقارنة
+    ledger_treasury_raw = _treasury_balance()
+    if ledger_treasury_raw is None:
+        ledger_treasury_raw = Decimal("0.00")
+
+    # نزاعات (Backoff)
+    try:
+        from disputes.models import Dispute
+    except Exception:
+        Dispute = None
+
+    disputes_active = []
+    if Dispute is not None:
+        disputes_active = (
+            Dispute.objects.filter(status__in=[Dispute.Status.OPEN, Dispute.Status.IN_REVIEW])
+            .select_related("request")
+        )
+        for dispute in disputes_active:
+            inv = (
+                Invoice.objects.filter(agreement__request=dispute.request)
+                .order_by("-issued_at")
+                .first()
+            )
+            dispute.invoice = inv
+
     ctx = {
         "inprogress_count": inprog.count(),
-        "total_agreements_amount": total_agreements_amount,
-        "paid_sum": paid_total_amount,
-        "unpaid_sum": unpaid_total_amount,
-        "platform_fee_total": fee_all,
-        "vat_total": vat_all,
-        "disputed_total": employee_held_dispute,
-        "employee_dues_total": employee_paid_net,
+        "total_agreements_amount": _q2(total_agreements_amount),
+
+        # إجماليات الفواتير
+        "paid_sum": _q2(paid_total_amount_raw),
+        "unpaid_sum": _q2(unpaid_total_amount_raw),
+        "platform_fee_total": _q2(fee_all_raw),
+        "platform_fee_paid": _q2(fee_paid_raw),
+        "vat_total": _q2(vat_all_raw),
+        "vat_paid": _q2(vat_paid_raw),
+
+        # صافي الموظفين
+        "employee_paid_net": _q2(employee_paid_net_raw),
+        "employee_unpaid_net": _q2(employee_unpaid_net_raw),
+        "disputed_total": _q2(employee_held_dispute_raw),
+
+        # أوامر الصرف
+        "employee_dues_total": _q2(payouts_paid_total_raw),
+        "employee_unpaid_total": _q2(payouts_unpaid_total_raw),
+        "payouts_unpaid": payouts_unpaid,
+        "payouts_paid": payouts_paid,
+
+        # تحويلات بانتظار التأكيد
         "pending_bank_confirms": pending_bank_confirms,
-        "settings_url": settings_url,  # استخدمه بالقالب بدل {% url 'finance:settings' %}
+
+        # نزاعات
+        "disputes_active": disputes_active,
+
+        # روابط
+        "settings_url": settings_url,
+
+        # أرصدة الخزينة
+        "treasury_balance": _q2(computed_treasury_raw),   # ✅ هذا هو الرصيد الصحيح
+        "computed_treasury_balance": _q2(computed_treasury_raw),
+        "ledger_treasury_balance": _q2(ledger_treasury_raw),  # للعرض أو التدقيق
+
+        "vat_payable": _q2(vat_payable_raw),
+        "customer_liability": _q2(customer_liability_raw),
+        "refunds_sent_total": _q2(refunds_sent_total_raw),
+        "refunds_pending_total": _q2(refunds_pending_total_raw),
+        "remitted_total": _q2(remitted_total_raw),
     }
+
     return render(request, "finance/home.html", ctx)
+
+
+# ===========================
+# لوحة الضرائب VAT (GET/POST)
+# ===========================
+@login_required
+@require_http_methods(["GET", "POST"])
+def tax_dashboard(request: HttpRequest):
+    if not _is_finance(request.user):
+        messages.error(request, "غير مصرح بهذه الصفحة.")
+        return redirect("website:home")
+
+    if request.method == "POST":
+        remit_form = TaxRemittanceForm(request.POST)
+        if remit_form.is_valid():
+            with transaction.atomic():
+                tr = remit_form.save(commit=False)
+                if remit_form.cleaned_data.get("sent_now"):
+                    tr.status = TaxRemittance.Status.SENT
+                    tr.sent_at = timezone.now()
+                tr.save()
+
+                # ===== Ledger OUT: VAT Remittance =====
+                _log_ledger_once(
+                    entry_type=getattr(LedgerEntry.Type, "VAT_REMITTANCE", "vat_remittance") if LedgerEntry else "vat_remittance",
+                    direction=getattr(LedgerEntry.Direction, "OUT", "out") if LedgerEntry else "out",
+                    amount=tr.amount,
+                    tax_remittance=tr,
+                    user=request.user,
+                    note=f"توريد ضريبة #{tr.pk}"
+                )
+
+            messages.success(request, "تم إضافة توريد الضريبة بنجاح.")
+            return redirect("finance:tax_dashboard")
+        else:
+            messages.error(request, "تعذر حفظ التوريد. يرجى مراجعة الحقول.")
+    else:
+        remit_form = TaxRemittanceForm()
+
+    PAID_VAL = getattr(getattr(Invoice, "Status", None), "PAID", "paid")
+    CANCEL_VAL = getattr(getattr(Invoice, "Status", None), "CANCELLED", "cancelled")
+
+    invoices = (
+        Invoice.objects
+        .exclude(status=CANCEL_VAL)
+        .select_related("agreement", "agreement__request", "agreement__employee")
+        .order_by("-issued_at", "-id")
+    )
+
+    seen_agreements = set()
+    vat_collected = Decimal("0.00")
+    vat_pending = Decimal("0.00")
+    rows = []
+
+    for inv in invoices:
+        ag = getattr(inv, "agreement", None)
+        if not ag or ag.id in seen_agreements:
+            continue
+        seen_agreements.add(ag.id)
+
+        try:
+            totals = compute_agreement_totals(ag)
+        except Exception:
+            logger.exception("compute_agreement_totals failed in tax_dashboard")
+            continue
+
+        vat_amount = _as_decimal(totals.get("vat_amount", 0))
+        taxable = _as_decimal(totals.get("taxable", 0))
+        grand_total = _as_decimal(totals.get("grand_total", 0))
+        P = _as_decimal(totals.get("P", 0))
+        fee = _as_decimal(totals.get("platform_fee", 0))
+
+        is_paid = (getattr(inv, "status", "") == PAID_VAL)
+
+        if is_paid:
+            vat_collected += vat_amount
+        else:
+            vat_pending += vat_amount
+
+        req = getattr(ag, "request", None)
+        rows.append({
+            "invoice": inv,
+            "agreement": ag,
+            "request": req,
+            "employee": getattr(ag, "employee", None),
+            "is_paid": is_paid,
+            "P": _q2(P),
+            "platform_fee": _q2(fee),
+            "taxable": _q2(taxable),
+            "vat_amount": _q2(vat_amount),
+            "grand_total": _q2(grand_total),
+            "issued_at": getattr(inv, "issued_at", None),
+            "paid_at": getattr(inv, "paid_at", None),
+        })
+
+    vat_collected = _q2(vat_collected)
+    vat_pending = _q2(vat_pending)
+
+    remitted_total = (
+        TaxRemittance.objects
+        .filter(status=TaxRemittance.Status.SENT)
+        .aggregate(s=Sum("amount"))["s"]
+        or Decimal("0.00")
+    )
+    remitted_total = _q2(remitted_total)
+
+    tax_stock = vat_collected - remitted_total
+    if tax_stock < 0:
+        tax_stock = Decimal("0.00")
+    tax_stock = _q2(tax_stock)
+
+    last_remittances = TaxRemittance.objects.all().order_by("-created_at")[:5]
+
+    ctx = {
+        "rows": rows,
+        "vat_collected": vat_collected,
+        "vat_pending": vat_pending,
+        "remitted_total": remitted_total,
+        "tax_stock": tax_stock,
+        "last_remittances": last_remittances,
+        "remit_form": remit_form,
+    }
+    return render(request, "finance/tax_dashboard.html", ctx)
 
 
 @login_required
@@ -531,11 +893,6 @@ def inprogress_requests(request: HttpRequest):
 # ===========================
 @login_required
 def checkout_agreement(request: HttpRequest, agreement_id: int):
-    """
-    شاشة الدفع: تُظهر P + (P×F) + VAT وتُولّد/تثبت فاتورة الإيداع الوحيدة للاتفاقية.
-    يسمح للمالك (العميل) أو المالية/الإدارة.
-    لا تُغيّر حالة الطلب هنا؛ حالة الطلب تُصبح (in_progress) بعد سداد الفاتورة.
-    """
     ag = get_object_or_404(
         Agreement.objects.select_related("request", "employee", "request__client"),
         pk=agreement_id,
@@ -547,11 +904,11 @@ def checkout_agreement(request: HttpRequest, agreement_id: int):
         messages.error(request, "غير مصرح لك بفتح صفحة الدفع لهذه الاتفاقية.")
         return redirect("website:home")
 
-    # استخدم خصائص الاتفاقية مباشرة
-    inv = _ensure_single_invoice_with_amount(ag, amount=ag.grand_total)
-
-    # تمرير breakdown الموحد
     breakdown = compute_agreement_totals(ag)
+    grand_total = _as_decimal(breakdown.get("grand_total", getattr(ag, "total_amount", 0)))
+
+    inv = _ensure_single_invoice_with_amount(ag, amount=grand_total)
+
     ctx = {
         "agreement": ag,
         "invoice": inv,
@@ -571,9 +928,6 @@ def checkout_agreement(request: HttpRequest, agreement_id: int):
 @require_POST
 @transaction.atomic
 def confirm_bank_transfer(request: HttpRequest, invoice_id: int):
-    """
-    العميل يُسجّل مرجع التحويل فقط. الوسم كمدفوع يتم من المالية بعد التحقق.
-    """
     inv = get_object_or_404(
         Invoice.objects.select_for_update().select_related("agreement", "agreement__request"),
         pk=invoice_id,
@@ -599,18 +953,18 @@ def confirm_bank_transfer(request: HttpRequest, invoice_id: int):
         inv.updated_at = timezone.now()
         updates.append("updated_at")
 
-
     if updates:
         inv.save(update_fields=updates)
 
-    # إشعار المالية (يمكن تطويره لاحقاً ليكون إشعار داخلي أو بريد)
-    logger.info(f"[FINANCE] حوالة جديدة بحاجة للمتابعة: Invoice #{inv.pk} - Agreement #{inv.agreement_id} - Ref: {paid_ref}")
+    logger.info(
+        "[FINANCE] حوالة جديدة بحاجة للمتابعة: Invoice #%s - Agreement #%s - Ref: %s",
+        inv.pk, inv.agreement_id, paid_ref
+    )
 
     messages.success(
         request,
         "تم تسجيل بيانات الحوالة بنجاح. سيتم مراجعة الحوالة من المالية وتحويل الطلب إلى قيد التنفيذ بعد التأكيد."
     )
-    # إعادة العميل إلى صفحة تفاصيل الطلب
     return redirect("marketplace:request_detail", pk=inv.agreement.request_id)
 
 
@@ -633,23 +987,27 @@ def mark_invoice_paid(request: HttpRequest, pk: int):
 
     PAID_VAL = getattr(getattr(Invoice, "Status", None), "PAID", "paid")
 
-    # إعادة احتساب الإجماليات احتياطيًا
     try:
         if hasattr(inv, "recompute_totals"):
             inv.recompute_totals()
     except Exception:
         logger.exception("mark_invoice_paid: failed to recompute totals for inv=%s", inv.pk)
 
-    # منع وسم فاتورة إجماليها 0
     try:
-        total = Decimal(getattr(inv, "total_amount", 0) or inv.amount or 0)
-        if total <= Decimal("0.00"):
+        client_total = getattr(inv, "client_total_amount", None)
+        if client_total is None:
+            client_total = getattr(inv, "total_amount", None)
+        if client_total is None:
+            client_total = inv.amount
+        client_total = Decimal(client_total or 0)
+        if client_total <= Decimal("0.00"):
             messages.error(request, "لا يمكن وسم فاتورة إجماليها 0 كمدفوعة.")
             return redirect(request.META.get("HTTP_REFERER", "/"))
     except Exception:
-        logger.exception("mark_invoice_paid: total_amount check failed for inv=%s", inv.pk)
+        logger.exception("mark_invoice_paid: client_total check failed for inv=%s", inv.pk)
+        messages.error(request, "تعذّر التحقق من إجمالي الفاتورة.")
+        return redirect(request.META.get("HTTP_REFERER", "/"))
 
-    # مدفوعة مسبقًا؟
     if (getattr(inv, "status", None) or "").lower() == (PAID_VAL or "").lower():
         messages.info(request, "الفاتورة مدفوعة مسبقًا.")
         return redirect(request.META.get("HTTP_REFERER", "/"))
@@ -658,18 +1016,18 @@ def mark_invoice_paid(request: HttpRequest, pk: int):
         now = timezone.now()
         updates: List[str] = []
 
-        # الحالة والتواريخ
         if _writable_attr(inv, "status"):
             inv.status = PAID_VAL
             updates.append("status")
+
         if _writable_attr(inv, "paid_at") and not getattr(inv, "paid_at", None):
             inv.paid_at = now
             updates.append("paid_at")
+
         if _writable_attr(inv, "updated_at"):
             inv.updated_at = now
             updates.append("updated_at")
 
-        # مدخلات اختيارية من الفورم
         method = (request.POST.get("method") or "").strip()
         refcode = (request.POST.get("ref_code") or "").strip()
         paidref = (request.POST.get("paid_ref") or "").strip()
@@ -677,9 +1035,11 @@ def mark_invoice_paid(request: HttpRequest, pk: int):
         if method and _writable_attr(inv, "method"):
             inv.method = method[:50]
             updates.append("method")
+
         if refcode and _writable_attr(inv, "ref_code"):
             inv.ref_code = refcode[:100]
             updates.append("ref_code")
+
         if paidref and _writable_attr(inv, "paid_ref"):
             inv.paid_ref = paidref[:64]
             updates.append("paid_ref")
@@ -687,15 +1047,22 @@ def mark_invoice_paid(request: HttpRequest, pk: int):
         if updates:
             inv.save(update_fields=updates)
 
-        # عند سداد الفاتورة:
-        # - نعتبر الاتفاقية بدأت
-        # - sync_request_state تتكفل بتحويل حالة الطلب إلى in_progress
         if ag:
             _mark_agreement_started_and_sync(ag)
 
+        # ===== Ledger IN: client payment =====
+        _log_ledger_once(
+            entry_type=getattr(LedgerEntry.Type, "CLIENT_PAYMENT", "client_payment") if LedgerEntry else "client_payment",
+            direction=getattr(LedgerEntry.Direction, "IN_", "in") if LedgerEntry else "in",
+            amount=client_total,
+            invoice=inv,
+            user=request.user,
+            note=f"تحصيل فاتورة #{inv.pk}",
+        )
+
         messages.success(
             request,
-            "تم وسم الفاتورة كمدفوعة، وسيتم بدء تنفيذ الطلب وفق حالة الاتفاقية.",
+            "تم وسم الفاتورة كمدفوعة بنجاح وتسجيل حركة التحصيل في الخزينة.",
         )
         return redirect(request.META.get("HTTP_REFERER", "/"))
 
@@ -705,9 +1072,7 @@ def mark_invoice_paid(request: HttpRequest, pk: int):
         if getattr(settings, "DEBUG", False):
             messages.error(request, f"تعذّر حفظ الدفع: {type(e).__name__} — {e}")
         else:
-            messages.error(
-                request, "حدث خطأ غير متوقع أثناء تحديث الدفع. لم يتم حفظ أي تغييرات."
-            )
+            messages.error(request, "حدث خطأ غير متوقع أثناء تحديث الدفع. لم يتم حفظ أي تغييرات.")
         return redirect(request.META.get("HTTP_REFERER", "/"))
 
 
@@ -720,15 +1085,22 @@ def invoice_detail(request: HttpRequest, pk: int):
         Invoice.objects.select_related("agreement", "agreement__request"),
         pk=pk,
     )
-    # breakdown المالي الموحد (من مبلغ الاتفاقية أو الفاتورة)
-    if inv.agreement:
-        net_amount = inv.agreement.p_amount
-    else:
-        net_amount = inv.amount
 
-    # جلب النسب من الفاتورة إذا كانت موجودة، وإلا من الإعدادات
-    platform_fee_percent = inv.platform_fee_percent if inv.platform_fee_percent else None
-    vat_rate = inv.vat_percent if inv.vat_percent else None
+    u = request.user
+    ag = getattr(inv, "agreement", None)
+    req = getattr(ag, "request", None) if ag else None
+
+    is_owner = req and getattr(req, "client_id", None) == u.id
+    is_employee = ag and getattr(ag, "employee_id", None) == u.id
+
+    if not (_is_finance(u) or is_owner or is_employee):
+        messages.error(request, "غير مصرح لك بعرض هذه الفاتورة.")
+        return redirect("website:home")
+
+    net_amount = _agreement_P(inv.agreement) if inv.agreement else inv.amount
+
+    platform_fee_percent = getattr(inv, "platform_fee_percent", None) or None
+    vat_rate = getattr(inv, "vat_percent", None) or None
 
     from finance.utils import calculate_financials_from_net
     breakdown = calculate_financials_from_net(
@@ -750,7 +1122,19 @@ def invoice_detail(request: HttpRequest, pk: int):
 
 @login_required
 def invoice_list(request: HttpRequest):
-    qs = Invoice.objects.all().select_related("agreement")
+    u = request.user
+    qs = Invoice.objects.all().select_related("agreement", "agreement__request")
+
+    if not _is_finance(u):
+        role = getattr(u, "role", "")
+        if role == "client":
+            qs = qs.filter(agreement__request__client_id=u.id)
+        elif role == "employee":
+            qs = qs.filter(agreement__employee_id=u.id)
+        else:
+            messages.error(request, "غير مصرح بعرض الفواتير.")
+            return redirect("website:home")
+
     status = (request.GET.get("status") or "").strip().lower()
     PAID_VAL = getattr(getattr(Invoice, "Status", None), "PAID", "paid")
     UNPAID_VAL = getattr(getattr(Invoice, "Status", None), "UNPAID", "unpaid")
@@ -763,28 +1147,22 @@ def invoice_list(request: HttpRequest):
     from finance.utils import calculate_financials_from_net
     invoices_with_breakdown = []
     for inv in qs:
-        if inv.agreement:
-            net_amount = inv.agreement.p_amount
-        else:
-            net_amount = inv.amount
-        platform_fee_percent = inv.platform_fee_percent if inv.platform_fee_percent else None
-        vat_rate = inv.vat_percent if inv.vat_percent else None
+        net_amount = _agreement_P(inv.agreement) if inv.agreement else inv.amount
+        platform_fee_percent = getattr(inv, "platform_fee_percent", None) or None
+        vat_rate = getattr(inv, "vat_percent", None) or None
         breakdown = calculate_financials_from_net(
             net_amount,
             platform_fee_percent=platform_fee_percent,
             vat_rate=vat_rate,
         )
-        invoices_with_breakdown.append({
-            "inv": inv,
-            "breakdown": breakdown,
-        })
+        invoices_with_breakdown.append({"inv": inv, "breakdown": breakdown})
 
     ctx = {"invoices": invoices_with_breakdown, "object_list": qs}
     return render(request, "finance/invoice_list.html", ctx)
 
 
 # ===========================
-# تأكيد تحويلات العملاء (مرجع التحويل)
+# تأكيد تحويلات العملاء
 # ===========================
 @login_required
 @require_GET
@@ -806,23 +1184,17 @@ def confirm_transfers(request: HttpRequest):
 
 
 # ===========================
-# فواتير اتفاقية محددة (دفعة واحدة)
+# فواتير اتفاقية محددة
 # ===========================
 @login_required
 @transaction.atomic
 def agreement_invoices(request: HttpRequest, agreement_id: int):
-    """
-    يضمن وجود فاتورة واحدة فقط للاتفاقية ويعرضها ضمن نفس قالب القائمة.
-    لا يُنشئ فواتير للمراحل.
-    """
     if not _is_finance(request.user):
         messages.error(request, "غير مصرح بعرض هذه الصفحة.")
         return redirect("website:home")
 
     ag = get_object_or_404(
-        Agreement.objects.select_related("request", "employee").prefetch_related(
-            "invoices"
-        ),
+        Agreement.objects.select_related("request", "employee").prefetch_related("invoices"),
         pk=agreement_id,
     )
 
@@ -830,9 +1202,7 @@ def agreement_invoices(request: HttpRequest, agreement_id: int):
     inv = _ensure_single_invoice_with_amount(ag, amount=totals["grand_total"])
 
     paid_val = getattr(getattr(Invoice, "Status", None), "PAID", "paid")
-    is_paid = (getattr(inv, "status", None) == paid_val) or bool(
-        getattr(inv, "is_paid", False)
-    )
+    is_paid = (getattr(inv, "status", None) == paid_val) or bool(getattr(inv, "is_paid", False))
     summary = {
         "total": inv.amount,
         "unpaid": inv.amount if not is_paid else None,
@@ -852,16 +1222,26 @@ def agreement_invoices(request: HttpRequest, agreement_id: int):
 # ===========================
 # صفحات العميل: مدفوعاتي
 # ===========================
+from django.contrib import messages
+from django.contrib.auth.decorators import login_required
+from django.db.models import Sum, Q, F, DecimalField, Value
+from django.db.models.functions import Coalesce
+from django.http import HttpRequest, HttpResponse
+from django.shortcuts import redirect, render
+from django.views.decorators.http import require_GET
+
+# باقي الاستيرادات عندك مثل Invoice, _is_finance, _build_invoice_summary ...
+
 @login_required
 @require_GET
-def client_payments(request: HttpRequest):
+def client_payments(request: HttpRequest) -> HttpResponse:
     user = request.user
     role = getattr(user, "role", "")
     if role != "client" and not _is_finance(user):
         messages.error(request, "هذه الصفحة مخصّصة للعميل.")
         return redirect("website:home")
 
-    status_q = (request.GET.get("status") or "").strip().lower()  # unpaid/paid/all
+    status_q = (request.GET.get("status") or "").strip().lower()
     method_q = (request.GET.get("method") or "").strip()
     q = (request.GET.get("q") or "").strip()
     date_from = (request.GET.get("from") or "").strip()
@@ -870,11 +1250,28 @@ def client_payments(request: HttpRequest):
     paid_val = getattr(getattr(Invoice, "Status", None), "PAID", "paid")
     unpaid_val = getattr(getattr(Invoice, "Status", None), "UNPAID", "unpaid")
 
+    # Decimal 0 ثابت لمنع mixed types
+    dec0 = Value(
+        Decimal("0.00"),
+        output_field=DecimalField(max_digits=12, decimal_places=2)
+    )
+
     invs = (
-        Invoice.objects.select_related("agreement", "agreement__request")
+        Invoice.objects
+        .select_related("agreement", "agreement__request")
         .filter(agreement__request__client_id=user.id)
+        .annotate(
+            # إجمالي العميل الحقيقي (P + VAT) محسوب من الحقول
+            client_total_calc=Coalesce(
+                F("amount") + (F("amount") * F("vat_percent")),
+                F("amount"),
+                dec0,
+                output_field=DecimalField(max_digits=12, decimal_places=2),
+            )
+        )
         .order_by("-issued_at", "-id")
     )
+
     if status_q == "unpaid":
         invs = invs.filter(status=unpaid_val)
     elif status_q == "paid":
@@ -889,16 +1286,20 @@ def client_payments(request: HttpRequest):
             | Q(agreement__id__icontains=q)
             | Q(ref_code__icontains=q)
         )
+
     if date_from:
         invs = invs.filter(issued_at__date__gte=date_from)
     if date_to:
         invs = invs.filter(issued_at__date__lte=date_to)
 
-    totals = invs.aggregate(
-        total=Sum("amount"),
-        unpaid=Sum("amount", filter=Q(status=unpaid_val)),
-        paid=Sum("amount", filter=Q(status=paid_val)),
-    )
+    # حساب الإجماليات من جميع فواتير العميل بغض النظر عن الفلاتر
+    all_invoices = Invoice.objects.filter(agreement__request__client_id=user.id)
+    totals = {
+        'total': all_invoices.aggregate(total=Coalesce(Sum('amount'), dec0))['total'],
+        'paid': all_invoices.filter(status=paid_val).aggregate(paid=Coalesce(Sum('amount'), dec0))['paid'],
+        'unpaid': all_invoices.filter(status=unpaid_val).aggregate(unpaid=Coalesce(Sum('amount'), dec0))['unpaid'],
+    }
+
     methods = (
         Invoice.objects.filter(agreement__request__client_id=user.id)
         .exclude(method__isnull=True)
@@ -908,7 +1309,6 @@ def client_payments(request: HttpRequest):
         .order_by("method")
     )
 
-    # ملخص تفصيلي للعميل: ما دفعه وما المتبقي وما تم ردّه
     summary = _build_invoice_summary(invs, paid_val=paid_val, unpaid_val=unpaid_val)
 
     return render(
@@ -916,8 +1316,8 @@ def client_payments(request: HttpRequest):
         "finance/client_payments.html",
         {
             "invoices": invs,
-            "totals": totals,  # تجميع خام على amount
-            "summary": summary,  # ملخص P / platform / VAT / client totals
+            "totals": totals,
+            "summary": summary,
             "status_q": status_q,
             "q": q,
             "date_from": date_from,
@@ -927,15 +1327,37 @@ def client_payments(request: HttpRequest):
         },
     )
 
-
 # ===========================
 # صفحات الموظف: مستحقاتي
 # ===========================
+def _get_request_completed_at(req: Optional[Request]) -> Optional[timezone.datetime]:
+    """
+    محاولة ذكية للحصول على وقت اكتمال الطلب.
+    نعتمد على completed_at/finished_at/completed_on إن وُجدت،
+    وإلا fallback إلى updated_at بشرط أن الحالة مكتملة.
+    """
+    if not req:
+        return None
+
+    # حقول محتملة في مشروعك
+    for field in ("completed_at", "finished_at", "completed_on"):
+        val = getattr(req, field, None)
+        if val:
+            return val
+
+    status_val = str(getattr(req, "status", getattr(req, "state", "")) or "")
+    completed_req_val = getattr(getattr(Request, "Status", None), "COMPLETED", "completed")
+    if status_val == completed_req_val:
+        return getattr(req, "updated_at", None)
+
+    return None
+
+
 @login_required
-@require_GET
-def employee_dues(request: HttpRequest):
+def employee_dues(request: HttpRequest) -> HttpResponse:
     user = request.user
     role = getattr(user, "role", "")
+
     if role != "employee" and not _is_finance(user):
         messages.error(request, "هذه الصفحة مخصّصة للموظف.")
         return redirect("website:home")
@@ -949,11 +1371,20 @@ def employee_dues(request: HttpRequest):
     paid_val = getattr(getattr(Invoice, "Status", None), "PAID", "paid")
     unpaid_val = getattr(getattr(Invoice, "Status", None), "UNPAID", "unpaid")
 
+    completed_req_val = getattr(getattr(Request, "Status", None), "COMPLETED", "completed")
+    disputed_req_val = getattr(getattr(Request, "Status", None), "DISPUTED", "disputed")
+
+    safety_days = 3
+    safety_delta = timedelta(days=safety_days)
+    now = timezone.now()
+
     invs = (
-        Invoice.objects.select_related("agreement", "agreement__request")
+        Invoice.objects
+        .select_related("agreement", "agreement__request")
         .filter(agreement__employee_id=user.id)
         .order_by("-issued_at", "-id")
     )
+
     if status_q == "unpaid":
         invs = invs.filter(status=unpaid_val)
     elif status_q == "paid":
@@ -968,16 +1399,14 @@ def employee_dues(request: HttpRequest):
             | Q(agreement__id__icontains=q)
             | Q(ref_code__icontains=q)
         )
+
     if date_from:
         invs = invs.filter(issued_at__date__gte=date_from)
+
     if date_to:
         invs = invs.filter(issued_at__date__lte=date_to)
 
-    totals = invs.aggregate(
-        total=Sum("amount"),
-        unpaid=Sum("amount", filter=Q(status=unpaid_val)),
-        paid=Sum("amount", filter=Q(status=paid_val)),
-    )
+    # طرق الدفع للفلتر
     methods = (
         Invoice.objects.filter(agreement__employee_id=user.id)
         .exclude(method__isnull=True)
@@ -987,22 +1416,422 @@ def employee_dues(request: HttpRequest):
         .order_by("method")
     )
 
-    # ملخص مستحقات الموظف: P (مجموع المشاريع) + ما تم صرفه وما المتبقي (حسب حالة الفواتير)
-    summary = _build_invoice_summary(invs, paid_val=paid_val, unpaid_val=unpaid_val)
+    # ===== payouts map (حالة صرف الموظف) =====
+    agreement_ids = list(invs.values_list("agreement_id", flat=True).distinct())
+
+    existing_payouts = (
+        Payout.objects
+        .filter(agreement_id__in=agreement_ids)
+        .exclude(status=Payout.Status.CANCELLED)
+        .select_related("agreement", "agreement__request")
+        .order_by("-id")
+    )
+    payout_by_agreement: Dict[int, Payout] = {
+        p.agreement_id: p for p in existing_payouts if p.agreement_id
+    }
+
+    # ===== breakdown per agreement (مرة واحدة) =====
+    agreements_map: Dict[int, Agreement] = {
+        ag.id: ag for ag in Agreement.objects.select_related("request").filter(id__in=agreement_ids)
+    }
+
+    breakdown_by_agreement: Dict[int, dict] = {}
+    for ag_id, ag in agreements_map.items():
+        try:
+            breakdown_by_agreement[ag_id] = compute_agreement_totals(ag)
+        except Exception:
+            logger.exception("employee_dues: compute_agreement_totals failed ag=%s", ag_id)
+            breakdown_by_agreement[ag_id] = {}
+
+    rows: List[dict] = []
+
+    # totals (صافي الموظف) — نحسبها لكل اتفاقية مرة واحدة لتجنب التكرار
+    seen_agreements: Set[int] = set()
+    net_total = Decimal("0.00")
+
+    for inv in invs:
+        ag = getattr(inv, "agreement", None)
+        if not ag:
+            continue
+
+        req_obj = getattr(ag, "request", None)
+
+        bd = breakdown_by_agreement.get(ag.id, {}) or {}
+        P = _as_decimal(bd.get("P", inv.amount or 0))
+        fee = _as_decimal(bd.get("platform_fee", 0))
+        net_emp = _as_decimal(bd.get("net_for_employee", P - fee))
+        if net_emp < 0:
+            net_emp = Decimal("0.00")
+
+        if ag.id not in seen_agreements:
+            net_total += net_emp
+            seen_agreements.add(ag.id)
+
+        # تجميد النزاع
+        held_reason = ""
+        eligible_now = False
+        ready_at = None
+
+        req_status = str(getattr(req_obj, "status", getattr(req_obj, "state", "")) or "")
+        if req_status == disputed_req_val:
+            held_reason = "نزاع نشط — المستحق مجمّد"
+
+        completed_at = _get_request_completed_at(req_obj)
+        if completed_at:
+            ready_at = completed_at + safety_delta
+            if not held_reason and req_status == completed_req_val:
+                eligible_now = now >= ready_at
+        else:
+            if not held_reason and req_status == completed_req_val:
+                held_reason = "لم يُسجّل وقت اكتمال الطلب بعد"
+
+        payout = payout_by_agreement.get(ag.id)
+
+        rows.append({
+            "invoice": inv,
+            "agreement": ag,
+            "request": req_obj,
+
+            "P": _q2(P),
+            "fee": _q2(fee),
+            "net_for_employee": _q2(net_emp),
+
+            "payout": payout,
+            "invoice_status": str(getattr(inv, "status", "") or ""),
+            "held_reason": held_reason,
+            "ready_at": ready_at,
+            "eligible_now": eligible_now,
+        })
+
+    # totals based on payouts
+    paid_payout_val = getattr(getattr(Payout, "Status", None), "PAID", "paid")
+    pending_payout_val = getattr(getattr(Payout, "Status", None), "PENDING", "pending")
+
+    net_paid = Decimal("0.00")
+    net_pending = Decimal("0.00")
+
+    for p in existing_payouts:
+        amt = _as_decimal(getattr(p, "amount", 0))
+        st = str(getattr(p, "status", "") or "")
+        if st == paid_payout_val:
+            net_paid += amt
+        elif st == pending_payout_val:
+            net_pending += amt
+
+    net_unpaid = net_total - net_paid
+    if net_unpaid < 0:
+        net_unpaid = Decimal("0.00")
+
+    totals = {
+        "net_total": _q2(net_total),
+        "net_paid": _q2(net_paid),
+        "net_pending": _q2(net_pending),
+        "net_unpaid": _q2(net_unpaid),
+    }
 
     return render(
         request,
         "finance/employee_dues.html",
         {
-            "invoices": invs,
+            "rows": rows,
             "totals": totals,
-            "summary": summary,
             "status_q": status_q,
             "q": q,
             "date_from": date_from,
             "date_to": date_to,
             "method_q": method_q,
             "methods": methods,
+            "safety_days": safety_days,
+            "now": now,
+        },
+    )
+
+# ===========================
+# مستحقات الموظفين (لوحة المالية)
+# ===========================
+@login_required
+@require_http_methods(["GET", "POST"])
+def employee_dues_admin(request: HttpRequest) -> HttpResponse:
+    # ===== صلاحية المالية =====
+    if not _is_finance(request.user):
+        messages.error(request, "غير مصرح بهذه الصفحة.")
+        return redirect("website:home")
+
+    paid_val = getattr(getattr(Invoice, "Status", None), "PAID", "paid")
+    cancel_payout_val = getattr(getattr(Payout, "Status", None), "CANCELLED", "cancelled")
+    completed_req_val = getattr(getattr(Request, "Status", None), "COMPLETED", "completed")
+    disputed_req_val = getattr(getattr(Request, "Status", None), "DISPUTED", "disputed")
+
+    safety_days = 3
+    safety_delta = timedelta(days=safety_days)
+    now = timezone.now()
+
+    # ===== فواتير مدفوعة (نحتاجها فقط للتأكد أن المبلغ دخل الخزينة + للربط) =====
+    paid_invoices_qs = (
+        Invoice.objects
+        .filter(status=paid_val)
+        .only("id", "agreement_id", "paid_at", "issued_at", "amount", "status")
+        .order_by("-paid_at", "-issued_at", "-id")
+    )
+
+    # ===== نجلب الاتفاقيات التي:
+    # 1) طلبها مكتمل
+    # 2) ولها فواتير مدفوعة
+    agreements_qs = (
+        Agreement.objects
+        .select_related("request", "employee", "request__client")
+        .filter(request__status=completed_req_val)
+        .filter(invoices__status=paid_val)
+        .distinct()
+        .prefetch_related(
+            Prefetch("invoices", queryset=paid_invoices_qs, to_attr="paid_invoices")
+        )
+        .order_by("-updated_at", "-id")
+    )
+
+    # ===== أوامر الصرف الموجودة (لمنع التكرار) =====
+    existing_payouts = (
+        Payout.objects
+        .filter(agreement__in=agreements_qs)
+        .exclude(status=cancel_payout_val)
+        .select_related("agreement", "invoice")
+    )
+    payout_by_agreement: Dict[int, Payout] = {
+        p.agreement_id: p for p in existing_payouts if p.agreement_id
+    }
+
+    rows: List[dict] = []
+
+    # (اختياري) إجماليات داخلية قد تحتاجها لاحقًا
+    totals_by_employee: Dict[Optional[int], Decimal] = {}
+    eligible_total_by_employee: Dict[Optional[int], Decimal] = {}
+
+    for ag in agreements_qs:
+        req_obj = getattr(ag, "request", None)
+
+        # ===== تجميد بسبب نزاع =====
+        held_reason = ""
+        if req_obj and getattr(req_obj, "status", "") == disputed_req_val:
+            held_reason = "نزاع نشط — المبلغ مجمّد"
+
+        # ===== أحدث فاتورة مدفوعة للربط والتوثيق =====
+        paid_invoices = getattr(ag, "paid_invoices", []) or []
+        invoice_to_link = paid_invoices[0] if paid_invoices else None
+        last_paid_at = None
+        if invoice_to_link:
+            last_paid_at = invoice_to_link.paid_at or invoice_to_link.issued_at
+
+        # ===== مرجع نافذة الأمان: اكتمال المشروع =====
+        completed_at = None
+        if req_obj:
+            completed_at = (
+                getattr(req_obj, "completed_at", None) or
+                getattr(req_obj, "closed_at", None) or
+                getattr(req_obj, "finished_at", None)
+            )
+
+        # fallback في حال عدم وجود حقل اكتمال صريح
+        base_ready_at = completed_at or getattr(req_obj, "updated_at", None)
+
+        ready_at = None
+        eligible_now = False
+
+        if not invoice_to_link:
+            # لا صرف أبدًا بدون فاتورة مدفوعة
+            ready_at = None
+            eligible_now = False
+            if not held_reason:
+                held_reason = "لا توجد فاتورة مدفوعة مرتبطة"
+        elif not base_ready_at:
+            ready_at = None
+            eligible_now = False
+            if not held_reason:
+                held_reason = "لا يوجد تاريخ اكتمال صالح للطلب"
+        else:
+            ready_at = base_ready_at + safety_delta
+            if not held_reason:
+                eligible_now = now >= ready_at
+
+        # ===== Breakdown المعتمد لصافي الموظف =====
+        try:
+            bd = compute_agreement_totals(ag)
+        except Exception:
+            logger.exception("employee_dues_admin: compute_agreement_totals failed ag=%s", ag.id)
+            continue
+
+        P = _as_decimal(bd.get("P", 0))
+        fee = _as_decimal(bd.get("platform_fee", 0))
+        net_emp = _as_decimal(bd.get("net_for_employee", P - fee))
+        if net_emp < 0:
+            net_emp = Decimal("0.00")
+
+        emp = getattr(ag, "employee", None)
+        emp_id = getattr(emp, "id", None)
+
+        totals_by_employee.setdefault(emp_id, Decimal("0.00"))
+        totals_by_employee[emp_id] += net_emp
+
+        if eligible_now and ag.id not in payout_by_agreement:
+            eligible_total_by_employee.setdefault(emp_id, Decimal("0.00"))
+            eligible_total_by_employee[emp_id] += net_emp
+        else:
+            eligible_total_by_employee.setdefault(emp_id, Decimal("0.00"))
+
+        rows.append({
+            "agreement": ag,
+            "request": req_obj,
+            "employee": emp,
+
+            "P": _q2(P),
+            "fee": _q2(fee),
+            "net_for_employee": _q2(net_emp),
+
+            "payout": payout_by_agreement.get(ag.id),
+
+            # حقول الاستحقاق
+            "last_paid_at": last_paid_at,      # للعرض فقط
+            "completed_at": completed_at,      # للعرض فقط
+            "ready_at": ready_at,
+            "eligible_now": eligible_now,
+            "held_reason": held_reason,
+
+            # ربط الفاتورة المقترحة لأمر الصرف
+            "invoice_to_link": invoice_to_link,
+        })
+
+    # Quantize totals (اختياري)
+    for k in list(totals_by_employee.keys()):
+        totals_by_employee[k] = _q2(totals_by_employee[k])
+    for k in list(eligible_total_by_employee.keys()):
+        eligible_total_by_employee[k] = _q2(eligible_total_by_employee[k])
+
+    # =================== إنشاء أمر صرف =================== #
+    if request.method == "POST":
+        ag_id_raw = (request.POST.get("agreement_id") or "").strip()
+        try:
+            ag_id = int(ag_id_raw)
+        except Exception:
+            ag_id = None
+
+        if not ag_id:
+            messages.error(request, "معرّف الاتفاقية غير صحيح.")
+            return redirect("finance:employee_dues_admin")
+
+        ag = agreements_qs.filter(id=ag_id).first()
+        if not ag:
+            messages.error(request, "الاتفاقية غير مستحقة أو غير موجودة.")
+            return redirect("finance:employee_dues_admin")
+
+        if ag.id in payout_by_agreement:
+            p = payout_by_agreement[ag.id]
+            messages.info(request, f"يوجد أمر صرف مسبق لهذه الاتفاقية (#{p.id}).")
+            return redirect("finance:employee_dues_admin")
+
+        try:
+            with transaction.atomic():
+                ag_locked = (
+                    Agreement.objects
+                    .select_for_update()
+                    .select_related("request", "employee")
+                    .prefetch_related(
+                        Prefetch("invoices", queryset=paid_invoices_qs, to_attr="paid_invoices")
+                    )
+                    .get(pk=ag.id)
+                )
+
+                req_locked = getattr(ag_locked, "request", None)
+
+                # يجب أن يبقى الطلب مكتملًا
+                if not req_locked or getattr(req_locked, "status", "") != completed_req_val:
+                    messages.error(request, "لا يمكن الصرف: الطلب غير مكتمل.")
+                    return redirect("finance:employee_dues_admin")
+
+                # نزاع = تجميد
+                if getattr(req_locked, "status", "") == disputed_req_val:
+                    messages.error(request, "لا يمكن الصرف: يوجد نزاع نشط على الطلب.")
+                    return redirect("finance:employee_dues_admin")
+
+                paid_invoices = getattr(ag_locked, "paid_invoices", []) or []
+                if not paid_invoices:
+                    messages.error(request, "لا يمكن الصرف: لا توجد فاتورة مدفوعة.")
+                    return redirect("finance:employee_dues_admin")
+
+                invoice_to_link = paid_invoices[0]
+
+                completed_at = (
+                    getattr(req_locked, "completed_at", None) or
+                    getattr(req_locked, "closed_at", None) or
+                    getattr(req_locked, "finished_at", None) or
+                    getattr(req_locked, "updated_at", None)
+                )
+                if not completed_at:
+                    messages.error(request, "لا يمكن الصرف: تاريخ اكتمال الطلب غير متوفر.")
+                    return redirect("finance:employee_dues_admin")
+
+                ready_at = completed_at + safety_delta
+                if timezone.now() < ready_at:
+                    messages.error(
+                        request,
+                        f"غير مؤهل للصرف بعد. متاح في {ready_at:%Y-%m-%d %H:%M}."
+                    )
+                    return redirect("finance:employee_dues_admin")
+
+                # حساب الصافي
+                bd = compute_agreement_totals(ag_locked)
+                P = _as_decimal(bd.get("P", 0))
+                fee = _as_decimal(bd.get("platform_fee", 0))
+                net_emp = _as_decimal(bd.get("net_for_employee", P - fee))
+                if net_emp < 0:
+                    net_emp = Decimal("0.00")
+
+                payout = Payout.objects.create(
+                    employee=ag_locked.employee,
+                    agreement=ag_locked,
+                    invoice=invoice_to_link,  # ✅ ربط مباشر بالفاتورة المدفوعة
+                    amount=_q2(net_emp),
+                    status=Payout.Status.PENDING,
+                    note=f"مستحقات بعد اكتمال R{ag_locked.request_id} (Invoice #{invoice_to_link.id})",
+                )
+
+                # إشعار للموظف عند صرف مستحقاته
+                try:
+                    from notifications.utils import create_notification
+                    employee = getattr(ag_locked, "employee", None)
+                    req = getattr(ag_locked, "request", None)
+                    if employee:
+                        create_notification(
+                            recipient=employee,
+                            title=f"تم إنشاء أمر صرف لمستحقاتك للطلب #{req.pk if req else ag_locked.request_id}",
+                            body=f"تم إنشاء أمر صرف بقيمة {payout.amount} ر.س للاتفاقية المرتبطة بالطلب '{req.title if req else ''}'. يمكنك متابعة حالة الصرف في حسابك.",
+                            url=payout.invoice.get_absolute_url() if hasattr(payout.invoice, "get_absolute_url") else None,
+                            actor=req.client if req and hasattr(req, "client") else None,
+                            target=payout,
+                        )
+                except Exception:
+                    pass
+
+            messages.success(request, f"تم إنشاء أمر صرف جديد #{payout.id}.")
+        except Agreement.DoesNotExist:
+            messages.error(request, "الاتفاقية غير موجودة.")
+        except Exception:
+            logger.exception("employee_dues_admin: create payout failed for ag=%s", ag_id)
+            messages.error(request, "حدث خطأ أثناء إنشاء أمر الصرف.")
+
+        return redirect("finance:employee_dues_admin")
+
+    return render(
+        request,
+        "finance/employee_dues_admin.html",
+        {
+            "rows": rows,
+            "completed_req_val": completed_req_val,
+            "paid_val": paid_val,
+            "safety_days": safety_days,
+            "now": now,
+
+            # اختياري (لا يضر القالب الحالي)
+            "totals_by_employee": totals_by_employee,
+            "eligible_totals_by_employee": eligible_total_by_employee,
         },
     )
 
@@ -1017,7 +1846,7 @@ def collections_report(request: HttpRequest):
         messages.error(request, "غير مصرح بعرض هذا التقرير.")
         return redirect("website:home")
 
-    status_q = (request.GET.get("status") or "").strip().lower()  # unpaid/paid/all
+    status_q = (request.GET.get("status") or "").strip().lower()
     method_q = (request.GET.get("method") or "").strip()
     q = (request.GET.get("q") or "").strip()
     d1, d2 = _period_bounds(request)
@@ -1027,7 +1856,6 @@ def collections_report(request: HttpRequest):
 
     invs = Invoice.objects.select_related("agreement", "agreement__request").all()
 
-    # نطاق زمني يعتمد paid_at إن كانت مدفوعة وإلا issued_at
     if d1:
         invs = invs.filter(
             Q(paid_at__date__gte=d1) | Q(paid_at__isnull=True, issued_at__date__gte=d1)
@@ -1067,7 +1895,9 @@ def collections_report(request: HttpRequest):
         .order_by("method")
     )
     by_method = (
-        invs.values("method").annotate(cnt=Count("id"), amt=Sum("amount")).order_by("method")
+        invs.values("method")
+        .annotate(cnt=Count("id"), amt=Sum("amount"))
+        .order_by("method")
     )
 
     summary = _build_invoice_summary(invs, paid_val=paid_val, unpaid_val=unpaid_val)
@@ -1096,7 +1926,6 @@ def collections_report(request: HttpRequest):
 @login_required
 @require_GET
 def export_invoices_csv(request: HttpRequest):
-    """تصدير CSV حسب مرشحات تقرير التحصيل (مالية فقط)."""
     if not _is_finance(request.user):
         messages.error(request, "غير مصرح بالتصدير.")
         return redirect("website:home")
@@ -1110,6 +1939,7 @@ def export_invoices_csv(request: HttpRequest):
     unpaid_val = getattr(getattr(Invoice, "Status", None), "UNPAID", "unpaid")
 
     invs = Invoice.objects.select_related("agreement", "agreement__request").all()
+
     if d1:
         invs = invs.filter(
             Q(paid_at__date__gte=d1) | Q(paid_at__isnull=True, issued_at__date__gte=d1)
@@ -1118,18 +1948,22 @@ def export_invoices_csv(request: HttpRequest):
         invs = invs.filter(
             Q(paid_at__date__lte=d2) | Q(paid_at__isnull=True, issued_at__date__lte=d2)
         )
+
     if status_q == "unpaid":
         invs = invs.filter(status=unpaid_val)
     elif status_q == "paid":
         invs = invs.filter(status=paid_val)
+
     if method_q:
         invs = invs.filter(method__iexact=method_q)
+
     if q:
         invs = invs.filter(
             Q(agreement__request__id__icontains=q)
             | Q(agreement__id__icontains=q)
             | Q(ref_code__icontains=q)
         )
+
     invs = invs.order_by("-paid_at", "-issued_at", "-id")
 
     resp = HttpResponse(content_type="text/csv; charset=utf-8")
@@ -1149,6 +1983,7 @@ def export_invoices_csv(request: HttpRequest):
             "RefCode",
         ]
     )
+
     for inv in invs:
         try:
             milestone_title = ""
@@ -1186,16 +2021,11 @@ def export_invoices_csv(request: HttpRequest):
 # ===========================
 @require_POST
 def payment_callback(request: HttpRequest):
-    """Placeholder لعودة المتصفح من بوابة الدفع (غير مستخدم حاليًا)."""
     return HttpResponse(status=204)
 
 
 @require_POST
 def payment_webhook(request: HttpRequest):
-    """
-    Webhook مع توقيع HMAC-SHA256(body, PAYMENT_WEBHOOK_SECRET).
-    يتوقع JSON: {"invoice_id": 123, "status": "paid", "reference": "..."}
-    """
     try:
         if not PAYMENT_WEBHOOK_SECRET:
             return HttpResponse(status=204)
@@ -1209,8 +2039,10 @@ def payment_webhook(request: HttpRequest):
             return HttpResponse("invalid signature", status=401)
 
         import json
-
         payload = json.loads(raw.decode("utf-8"))
+        if "invoice_id" not in payload:
+            return HttpResponse("missing invoice_id", status=400)
+
         inv_id = int(payload.get("invoice_id"))
         status = (payload.get("status") or "").lower()
         reference = (payload.get("reference") or "")[:64]
@@ -1218,7 +2050,6 @@ def payment_webhook(request: HttpRequest):
         if status != "paid":
             return HttpResponse(status=204)
 
-        # تنفيذ داخلي آمن دون المرور بـ login_required
         PAID_VAL = getattr(getattr(Invoice, "Status", None), "PAID", "paid")
         with transaction.atomic():
             inv = (
@@ -1227,7 +2058,6 @@ def payment_webhook(request: HttpRequest):
                 .get(pk=inv_id)
             )
 
-            # وسم الفاتورة
             updates: List[str] = []
             inv.status = PAID_VAL
             updates.append("status")
@@ -1242,10 +2072,20 @@ def payment_webhook(request: HttpRequest):
                 updates.append("updated_at")
             inv.save(update_fields=updates)
 
-            # عند السداد من بوابة الدفع: بدء الاتفاقية وتحديث حالة الطلب
             ag = getattr(inv, "agreement", None)
             if ag:
                 _mark_agreement_started_and_sync(ag)
+
+            # Ledger IN
+            client_total = getattr(inv, "client_total_amount", None) or getattr(inv, "total_amount", None) or inv.amount
+            _log_ledger_once(
+                entry_type=getattr(LedgerEntry.Type, "CLIENT_PAYMENT", "client_payment") if LedgerEntry else "client_payment",
+                direction=getattr(LedgerEntry.Direction, "IN_", "in") if LedgerEntry else "in",
+                amount=_as_decimal(client_total),
+                invoice=inv,
+                user=request.user,
+                note=f"تحصيل Webhook فاتورة #{inv.pk}",
+            )
 
         return HttpResponse(status=204)
 
@@ -1255,20 +2095,334 @@ def payment_webhook(request: HttpRequest):
 
 
 # ===========================
-# صرفيات (Placeholder لواجهة قادمة)
+# صرفيات — قائمة
 # ===========================
 @login_required
 @require_GET
 def payouts_list(request: HttpRequest):
-    """
-    صفحة صرفيات/تحويلات الموظفين (Placeholder مؤقت).
-    لاحقًا يمكن ربطها بنموذج Payout وعرض صافي المستحقات المدفوعة والمتبقية
-    بالاعتماد على ملخصات employee_paid / employee_unpaid.
-    """
     if not _is_finance(request.user):
         messages.error(request, "غير مصرح بهذه الصفحة.")
         return redirect("website:home")
-    return render(request, "finance/payouts_list.html", {})
+
+    status_q = (request.GET.get("status") or "pending").strip().lower()
+    q = (request.GET.get("q") or "").strip()
+    d1, d2 = _period_bounds(request)
+
+    qs = (
+        Payout.objects
+        .select_related("employee", "agreement", "agreement__request")
+        .order_by("-issued_at", "-id")
+    )
+
+    if d1:
+        qs = qs.filter(issued_at__date__gte=d1)
+    if d2:
+        qs = qs.filter(issued_at__date__lte=d2)
+
+    if q:
+        qs = qs.filter(
+            Q(employee__name__icontains=q)
+            | Q(employee__phone__icontains=q)
+            | Q(agreement__id__icontains=q)
+            | Q(agreement__request__id__icontains=q)
+            | Q(agreement__request__title__icontains=q)
+        )
+
+    if status_q in ("pending", "paid", "cancelled"):
+        qs = qs.filter(status=status_q)
+
+    totals = qs.aggregate(
+        total=Sum("amount"),
+        pending=Sum("amount", filter=Q(status=Payout.Status.PENDING)),
+        paid=Sum("amount", filter=Q(status=Payout.Status.PAID)),
+        cancelled=Sum("amount", filter=Q(status=Payout.Status.CANCELLED)),
+        count=Count("id"),
+    )
+
+    ctx = {
+        "payouts": qs,
+        "totals": totals,
+        "status_q": status_q,
+        "q": q,
+        "period": request.GET.get("period") or "",
+        "from": request.GET.get("from") or "",
+        "to": request.GET.get("to") or "",
+        "d1": d1,
+        "d2": d2,
+    }
+    return render(request, "finance/payouts_list.html", ctx)
+
+
+# ===========================
+# وسم أمر الصرف كمدفوع
+# ===========================
+@login_required
+@require_POST
+@transaction.atomic
+def mark_payout_paid(request: HttpRequest, pk: int):
+    if not _is_finance(request.user):
+        messages.error(request, "غير مصرح بهذا الإجراء.")
+        return redirect("website:home")
+
+    payout = get_object_or_404(
+        Payout.objects.select_for_update().select_related("agreement", "agreement__request"),
+        pk=pk,
+    )
+
+    if payout.status == Payout.Status.PAID:
+        messages.info(request, "أمر الصرف مدفوع مسبقًا.")
+        return redirect("finance:payouts_list")
+
+    req = None
+    ag = getattr(payout, "agreement", None)
+    if ag:
+        req = getattr(ag, "request", None)
+
+    disputed_val = getattr(getattr(Request, "Status", None), "DISPUTED", "disputed")
+    if req and (getattr(req, "status", "") == disputed_val):
+        messages.error(request, "لا يمكن الصرف لأن الطلب في حالة نزاع.")
+        return redirect("finance:payouts_list")
+
+    method = (request.POST.get("method") or "").strip()
+    ref_code = (request.POST.get("ref_code") or "").strip()
+    note = (request.POST.get("note") or "").strip()
+
+    try:
+        payout.mark_paid(method=method, ref=ref_code)
+        if note:
+            payout.note = note[:255]
+            payout.save(update_fields=["note", "updated_at"])
+
+        # ===== Ledger OUT: employee payout =====
+        _log_ledger_once(
+            entry_type=getattr(LedgerEntry.Type, "EMPLOYEE_PAYOUT", "employee_payout") if LedgerEntry else "employee_payout",
+            direction=getattr(LedgerEntry.Direction, "OUT", "out") if LedgerEntry else "out",
+            amount=payout.amount,
+            payout=payout,
+            invoice=getattr(payout, "invoice", None),
+            user=request.user,
+            note=f"صرف مستحقات Payout #{payout.pk}",
+        )
+
+        messages.success(request, "تم وسم أمر الصرف كمدفوع وتسجيل الحركة في الخزينة.")
+        return redirect("finance:payouts_list")
+    except Exception as e:
+        logger.exception("mark_payout_paid failed: %s", e)
+        transaction.set_rollback(True)
+        messages.error(request, "تعذر تحديث أمر الصرف. حاول مرة أخرى.")
+        return redirect("finance:payouts_list")
+
+
+# ===========================
+# Refunds Dashboard
+# ===========================
+@login_required
+@require_GET
+def refunds_dashboard(request: HttpRequest):
+    if not _is_finance(request.user):
+        messages.error(request, "غير مصرح بهذه الصفحة.")
+        return redirect("website:home")
+
+    PAID_VAL = getattr(getattr(Invoice, "Status", None), "PAID", "paid")
+    CANCEL_INV = getattr(getattr(Invoice, "Status", None), "CANCELLED", "cancelled")
+
+    cancelled_vals = []
+    try:
+        st = getattr(Request, "Status", None)
+        if st:
+            for name in ["CANCELLED", "ADMIN_CANCELLED", "CANCELLED_BY_ADMIN"]:
+                v = getattr(st, name, None)
+                if v:
+                    cancelled_vals.append(v)
+    except Exception:
+        pass
+    if not cancelled_vals:
+        cancelled_vals = ["cancelled"]
+
+    cancelled_set = {str(v).lower() for v in cancelled_vals}
+
+    invoices = (
+        Invoice.objects
+        .exclude(status=CANCEL_INV)
+        .filter(status=PAID_VAL)
+        .select_related("agreement", "agreement__request", "agreement__employee", "agreement__request__client")
+        .order_by("-paid_at", "-issued_at", "-id")
+    )
+
+    refunds = (
+        Refund.objects
+        .select_related("invoice", "invoice__agreement", "invoice__agreement__request")
+        .order_by("-created_at", "-id")
+    )
+
+    refunded_total = refunds.filter(status=Refund.Status.SENT).aggregate(s=Sum("amount"))["s"] or Decimal("0.00")
+    pending_total = refunds.filter(status=Refund.Status.PENDING).aggregate(s=Sum("amount"))["s"] or Decimal("0.00")
+
+    eligible_rows = []
+    refundable_total = Decimal("0.00")
+
+    for inv in invoices:
+        ag = getattr(inv, "agreement", None)
+        if not ag:
+            continue
+        req = getattr(ag, "request", None)
+        if not req:
+            continue
+
+        is_cancelled = (str(getattr(req, "status", "")).lower() in cancelled_set)
+        if not is_cancelled:
+            continue
+
+        try:
+            bd = compute_agreement_totals(ag)
+            gross = _as_decimal(bd.get("grand_total", getattr(inv, "total_amount", None) or inv.amount))
+        except Exception:
+            gross = _as_decimal(getattr(inv, "total_amount", None) or inv.amount)
+
+        refunded_so_far = (
+            Refund.objects
+            .filter(invoice=inv)
+            .exclude(status=Refund.Status.CANCELLED)
+            .aggregate(s=Sum("amount"))["s"]
+            or Decimal("0.00")
+        )
+
+        refundable_left = gross - refunded_so_far
+        if refundable_left <= 0:
+            refundable_left = Decimal("0.00")
+
+        refundable_total += refundable_left
+
+        eligible_rows.append({
+            "invoice": inv,
+            "agreement": ag,
+            "request": req,
+            "gross": _q2(gross),
+            "refunded_so_far": _q2(refunded_so_far),
+            "refundable_left": _q2(refundable_left),
+        })
+
+    ctx = {
+        "refunds": refunds,
+        "eligible_rows": eligible_rows,
+        "refunded_total": _q2(refunded_total),
+        "pending_total": _q2(pending_total),
+        "refundable_total": _q2(refundable_total),
+    }
+    return render(request, "finance/refunds_dashboard.html", ctx)
+
+
+# ===========================
+# Create Refund (POST)
+# ===========================
+@login_required
+@require_POST
+@transaction.atomic
+def refund_create(request: HttpRequest, invoice_id: int):
+    if not _is_finance(request.user):
+        messages.error(request, "غير مصرح بهذا الإجراء.")
+        return redirect("website:home")
+
+    inv = get_object_or_404(
+        Invoice.objects.select_for_update().select_related("agreement", "agreement__request"),
+        pk=invoice_id
+    )
+
+    PAID_VAL = getattr(getattr(Invoice, "Status", None), "PAID", "paid")
+    if (getattr(inv, "status", "") or "").lower() != (PAID_VAL or "").lower():
+        messages.error(request, "لا يمكن إنشاء مرتجع لفاتورة غير مدفوعة.")
+        return redirect("finance:refunds_dashboard")
+
+    ag = getattr(inv, "agreement", None)
+    req = getattr(ag, "request", None) if ag else None
+
+    try:
+        bd = compute_agreement_totals(ag) if ag else {}
+        gross = _as_decimal(bd.get("grand_total", getattr(inv, "total_amount", None) or inv.amount))
+    except Exception:
+        gross = _as_decimal(getattr(inv, "total_amount", None) or inv.amount)
+
+    refunded_so_far = (
+        Refund.objects
+        .filter(invoice=inv)
+        .exclude(status=Refund.Status.CANCELLED)
+        .aggregate(s=Sum("amount"))["s"]
+        or Decimal("0.00")
+    )
+
+    refundable_left = gross - refunded_so_far
+    if refundable_left <= 0:
+        messages.info(request, "تم إرجاع كامل المبلغ مسبقًا لهذه الفاتورة.")
+        return redirect("finance:refunds_dashboard")
+
+    form = RefundCreateForm(request.POST, max_amount=_q2(refundable_left))
+    if not form.is_valid():
+        messages.error(request, "تحقق من قيمة المبلغ.")
+        return redirect("finance:refunds_dashboard")
+
+    refund: Refund = form.save(commit=False)
+    refund.invoice = inv
+    refund.request = req
+    refund.created_by = request.user
+    refund.status = Refund.Status.PENDING
+    refund.save()
+
+    messages.success(request, f"تم إنشاء مرتجع جديد #{refund.id} بقيمة {refund.amount} ريال.")
+    return redirect("finance:refunds_dashboard")
+
+
+# ===========================
+# Mark Refund Sent / Cancel
+# ===========================
+@login_required
+@require_POST
+@transaction.atomic
+def refund_mark_sent(request: HttpRequest, pk: int):
+    if not _is_finance(request.user):
+        messages.error(request, "غير مصرح.")
+        return redirect("website:home")
+
+    refund = get_object_or_404(Refund.objects.select_for_update().select_related("invoice"), pk=pk)
+    if refund.status != Refund.Status.PENDING:
+        messages.info(request, "لا يمكن وسم هذا المرتجع لأنه ليس بانتظار التنفيذ.")
+        return redirect("finance:refunds_dashboard")
+
+    method = (request.POST.get("method") or "").strip()
+    ref_code = (request.POST.get("ref_code") or "").strip()
+
+    refund.mark_sent(method=method, ref=ref_code)
+
+    # ===== Ledger OUT: client refund =====
+    _log_ledger_once(
+        entry_type=getattr(LedgerEntry.Type, "CLIENT_REFUND", "client_refund") if LedgerEntry else "client_refund",
+        direction=getattr(LedgerEntry.Direction, "OUT", "out") if LedgerEntry else "out",
+        amount=refund.amount,
+        refund=refund,
+        invoice=refund.invoice,
+        user=request.user,
+        note=f"Refund للعميل #{refund.pk}",
+    )
+
+    messages.success(request, "تم وسم المرتجع كتم الإرجاع وتسجيل الحركة في الخزينة.")
+    return redirect("finance:refunds_dashboard")
+
+
+@login_required
+@require_POST
+def refund_cancel(request: HttpRequest, pk: int):
+    if not _is_finance(request.user):
+        messages.error(request, "غير مصرح.")
+        return redirect("website:home")
+
+    refund = get_object_or_404(Refund.objects.select_related("invoice"), pk=pk)
+    if refund.status == Refund.Status.SENT:
+        messages.error(request, "لا يمكن إلغاء مرتجع تم تنفيذه.")
+        return redirect("finance:refunds_dashboard")
+
+    reason = (request.POST.get("reason") or "").strip()
+    refund.cancel(reason=reason)
+    messages.success(request, "تم إلغاء المرتجع.")
+    return redirect("finance:refunds_dashboard")
 
 
 # ===========================
@@ -1277,11 +2431,6 @@ def payouts_list(request: HttpRequest):
 @login_required
 @require_http_methods(["GET", "POST"])
 def settings_view(request: HttpRequest):
-    """
-    صفحة إعدادات المالية (نسبة عمولة المنصة + VAT) كنِسب بين 0..1.
-    - تتعامل مع GET/POST على نفس المسار /finance/settings/
-    - يوجد alias اسمه finance:settings_save للأكواد/القوالب القديمة.
-    """
     if not _is_finance(request.user):
         messages.error(request, "غير مصرح بالوصول إلى إعدادات المالية.")
         return redirect("website:home")
@@ -1291,7 +2440,6 @@ def settings_view(request: HttpRequest):
         form = FinanceSettingsForm(request.POST, instance=cfg)
         if form.is_valid():
             form.save()
-            # امسح الكاش كي تعتمد القيم مباشرة
             invalidate_finance_cfg_cache()
             messages.success(request, "تم حفظ إعدادات المالية بنجاح.")
             return redirect("finance:settings")
@@ -1300,7 +2448,6 @@ def settings_view(request: HttpRequest):
     else:
         form = FinanceSettingsForm(instance=cfg)
 
-    # للعرض فقط: قراءة القيم الحالية من الكاش بعد آخر حفظ
     cached = get_finance_cfg(force=False)
 
     return render(
@@ -1308,7 +2455,239 @@ def settings_view(request: HttpRequest):
         "finance/settings.html",
         {
             "form": form,
-            "cached_fee": cached.platform_fee_percent,  # 0..1
-            "cached_vat": cached.vat_rate,  # 0..1
+            "cached_fee": cached.platform_fee_percent,
+            "cached_vat": cached.vat_rate,
         },
     )
+
+
+# ===========================
+# لوحة المبالغ المجمدة بالنزاعات
+# ===========================
+try:
+    from disputes.models import Dispute
+except Exception:
+    Dispute = None  # Backoff
+
+RefundModel = Refund
+
+
+@login_required
+@require_GET
+def disputes_dashboard(request: HttpRequest):
+    if not _is_finance(request.user):
+        messages.error(request, "غير مصرح بهذه الصفحة.")
+        return redirect("website:home")
+
+    if Dispute is None:
+        messages.error(request, "تطبيق النزاعات غير متاح حاليًا.")
+        return redirect("finance:finance_home")
+
+    OPEN = getattr(getattr(Dispute, "Status", None), "OPEN", "open")
+    IN_REVIEW = getattr(getattr(Dispute, "Status", None), "IN_REVIEW", "in_review")
+    ACTIVE_SET = [OPEN, IN_REVIEW]
+
+    PAID_VAL = getattr(getattr(Invoice, "Status", None), "PAID", "paid")
+    CANCEL_VAL = getattr(getattr(Invoice, "Status", None), "CANCELLED", "cancelled")
+    REFUNDED_VAL = getattr(getattr(Invoice, "Status", None), "REFUNDED", "refunded")
+
+    disputes = (
+        Dispute.objects.filter(status__in=ACTIVE_SET)
+        .select_related("request")
+        .order_by("-created_at", "-id")
+    )
+
+    rows = []
+    hold_employee_total = Decimal("0.00")
+    hold_client_total = Decimal("0.00")
+
+    for d in disputes:
+        req = getattr(d, "request", None)
+        if not req:
+            continue
+
+        ag = Agreement.objects.filter(request=req).order_by("-id").first()
+        inv = (
+            Invoice.objects.filter(agreement__request=req)
+            .exclude(status__in=[CANCEL_VAL, REFUNDED_VAL])
+            .order_by("-issued_at", "-id")
+            .first()
+        )
+
+        if not ag or not inv:
+            continue
+
+        totals = compute_agreement_totals(ag)
+        P = _as_decimal(totals.get("P", 0))
+        fee = _as_decimal(totals.get("platform_fee", 0))
+        grand = _as_decimal(totals.get("grand_total", 0))
+
+        employee_hold = _q2(P - fee)
+        if employee_hold < 0:
+            employee_hold = Decimal("0.00")
+
+        is_invoice_paid = (getattr(inv, "status", "") == PAID_VAL)
+        client_hold = grand if is_invoice_paid else Decimal("0.00")
+
+        payout_latest = (
+            Payout.objects.filter(agreement=ag)
+            .order_by("-issued_at", "-id")
+            .first()
+        )
+
+        refund_latest = (
+            RefundModel.objects.filter(request=req)
+            .order_by("-issued_at", "-id")
+            .first()
+        ) if RefundModel else None
+
+        hold_employee_total += employee_hold
+        hold_client_total += client_hold
+
+        rows.append({
+            "dispute": d,
+            "request": req,
+            "agreement": ag,
+            "invoice": inv,
+            "is_paid": is_invoice_paid,
+            "employee_hold": employee_hold,
+            "client_hold": client_hold,
+            "payout_latest": payout_latest,
+            "refund_latest": refund_latest,
+        })
+
+    ctx = {
+        "rows": rows,
+        "hold_employee_total": _q2(hold_employee_total),
+        "hold_client_total": _q2(hold_client_total),
+    }
+    return render(request, "finance/disputes_dashboard.html", ctx)
+
+
+@login_required
+@require_POST
+@transaction.atomic
+def dispute_release(request: HttpRequest, dispute_id: int):
+    if not _is_finance(request.user):
+        messages.error(request, "غير مصرح بهذا الإجراء.")
+        return redirect("website:home")
+
+    if Dispute is None:
+        messages.error(request, "تطبيق النزاعات غير متاح.")
+        return redirect("finance:disputes_dashboard")
+
+    d = get_object_or_404(
+        Dispute.objects.select_for_update().select_related("request"),
+        pk=dispute_id,
+    )
+    req = d.request
+    ag = Agreement.objects.filter(request=req).order_by("-id").first()
+    inv = Invoice.objects.filter(agreement__request=req).order_by("-issued_at", "-id").first()
+
+    if not ag or not inv:
+        messages.error(request, "لا توجد اتفاقية/فاتورة مرتبطة.")
+        return redirect("finance:disputes_dashboard")
+
+    PAID_VAL = getattr(getattr(Invoice, "Status", None), "PAID", "paid")
+    if getattr(inv, "status", "") != PAID_VAL:
+        messages.error(request, "لا يمكن الصرف قبل سداد الفاتورة.")
+        return redirect("finance:disputes_dashboard")
+
+    already = Payout.objects.filter(
+        agreement=ag,
+        status__in=[Payout.Status.PENDING, Payout.Status.PAID]
+    ).exists()
+    if already:
+        messages.info(request, "تم إنشاء أمر صرف لهذا النزاع مسبقًا.")
+        return redirect("finance:disputes_dashboard")
+
+    totals = compute_agreement_totals(ag)
+    P = _as_decimal(totals.get("P", 0))
+    fee = _as_decimal(totals.get("platform_fee", 0))
+    net = _q2(P - fee)
+    if net < 0:
+        net = Decimal("0.00")
+
+    Payout.objects.create(
+        employee=ag.employee,
+        agreement=ag,
+        invoice=inv,
+        amount=net,
+        status=Payout.Status.PENDING,
+        note=f"Release من نزاع #{d.pk}",
+    )
+
+    RESOLVED = getattr(getattr(Dispute, "Status", None), "RESOLVED", None)
+    if RESOLVED:
+        d.status = RESOLVED
+        d.save(update_fields=["status"])
+
+    messages.success(request, "تم إنشاء أمر صرف صافي الموظف بعد فك التجميد.")
+    return redirect("finance:disputes_dashboard")
+
+
+@login_required
+@require_POST
+@transaction.atomic
+def dispute_refund(request: HttpRequest, dispute_id: int):
+    if not _is_finance(request.user):
+        messages.error(request, "غير مصرح بهذا الإجراء.")
+        return redirect("website:home")
+
+    if Dispute is None:
+        messages.error(request, "تطبيق النزاعات غير متاح.")
+        return redirect("finance:disputes_dashboard")
+
+    d = get_object_or_404(
+        Dispute.objects.select_for_update().select_related("request"),
+        pk=dispute_id,
+    )
+    req = d.request
+    ag = Agreement.objects.filter(request=req).order_by("-id").first()
+    inv = Invoice.objects.filter(agreement__request=req).order_by("-issued_at", "-id").first()
+
+    if not ag or not inv:
+        messages.error(request, "لا توجد اتفاقية/فاتورة مرتبطة.")
+        return redirect("finance:disputes_dashboard")
+
+    PAID_VAL = getattr(getattr(Invoice, "Status", None), "PAID", "paid")
+    if getattr(inv, "status", "") != PAID_VAL:
+        messages.error(request, "لا يمكن رد مبلغ قبل سداد الفاتورة.")
+        return redirect("finance:disputes_dashboard")
+
+    totals = compute_agreement_totals(ag)
+    grand = _as_decimal(totals.get("grand_total", 0))
+    amount = _as_decimal(request.POST.get("amount") or grand)
+    amount = _q2(amount)
+
+    if amount <= 0:
+        messages.error(request, "مبلغ الرد يجب أن يكون أكبر من صفر.")
+        return redirect("finance:disputes_dashboard")
+
+    if amount > grand:
+        messages.error(request, "مبلغ الرد لا يمكن أن يتجاوز إجمالي العميل.")
+        return redirect("finance:disputes_dashboard")
+
+    Payout.objects.filter(
+        agreement=ag,
+        status=Payout.Status.PENDING
+    ).update(status=Payout.Status.CANCELLED, note="تم الإلغاء بسبب Refund نزاع")
+
+    refund_fields = {
+        "request": req,
+        "invoice": inv,
+        "amount": amount,
+        "status": Refund.Status.PENDING,
+        "reason": f"Refund من نزاع #{d.pk}",
+    }
+    model_field_names = {f.name for f in RefundModel._meta.get_fields()}
+    safe_fields = {k: v for k, v in refund_fields.items() if k in model_field_names}
+    RefundModel.objects.create(**safe_fields)
+
+    RESOLVED = getattr(getattr(Dispute, "Status", None), "RESOLVED", None)
+    if RESOLVED:
+        d.status = RESOLVED
+        d.save(update_fields=["status"])
+
+    messages.success(request, "تم إنشاء طلب Refund للعميل وفك التجميد.")
+    return redirect("finance:disputes_dashboard")

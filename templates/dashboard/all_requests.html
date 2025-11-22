@@ -1,0 +1,66 @@
+{% extends "dashboard/base_admin.html" %}
+{% block title %}جميع الطلبات{% endblock %}
+{% block content %}
+<div class="profile-section">
+  <h2 class="section-title">جميع الطلبات</h2>
+  <form method="get" style="margin-bottom: 1rem;">
+    <input type="text" name="q" value="{{ q }}" placeholder="بحث بالعنوان..." class="input" style="width: 300px;">
+    <button class="btn btn-primary" type="submit">بحث</button>
+  </form>
+  <div class="table-wrapper">
+    <table class="table table-clean">
+      <thead>
+        <tr>
+          <th>#</th>
+          <th>العنوان</th>
+          <th>العميل</th>
+          <th>الحالة</th>
+          <th>التاريخ</th>
+          <th>عرض</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for r in page_obj %}
+        <tr>
+          <td class="text-muted">#{{ r.id }}</td>
+          <td>{{ r.title|default:"—" }}</td>
+          <td>
+            {% if r.client %}
+              {% if r.client.name %}{{ r.client.name }}
+              {% elif r.client.phone %}{{ r.client.phone }}
+              {% elif r.client.email %}{{ r.client.email }}
+              {% else %}{{ r.client }}{% endif %}
+            {% else %}—{% endif %}
+          </td>
+          <td>
+            {% if r.status %}<span class="badge badge-default">{{ r.status }}</span>
+            {% elif r.state %}<span class="badge badge-default">{{ r.state }}</span>
+            {% else %}<span class="badge badge-default">غير محدد</span>{% endif %}
+          </td>
+          <td class="text-muted">
+            {% if r.created_at %}{{ r.created_at|date:"Y-m-d H:i" }}
+            {% else %}{{ r.id }}{% endif %}
+          </td>
+          <td>
+            <a href="{% url 'marketplace:request_detail' r.id %}" class="btn btn-sm btn-outline" title="عرض الطلب">
+              <span style="font-size:1.2em;vertical-align:middle;">👁️</span>
+            </a>
+          </td>
+        </tr>
+        {% empty %}
+        <tr><td colspan="5" class="text-center text-muted" style="padding: 2rem;">لا توجد طلبات</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  <div style="margin-top: 1rem;">
+    {% if page_obj.has_previous %}
+      <a href="?q={{ q }}&page={{ page_obj.previous_page_number }}" class="btn btn-outline">السابق</a>
+    {% endif %}
+    <span>صفحة {{ page_obj.number }} من {{ page_obj.paginator.num_pages }}</span>
+    {% if page_obj.has_next %}
+      <a href="?q={{ q }}&page={{ page_obj.next_page_number }}" class="btn btn-outline">التالي</a>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}

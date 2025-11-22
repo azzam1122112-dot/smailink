@@ -1,0 +1,190 @@
+{% extends "base.html" %}
+{% load humanize %}
+
+{% block title %}مرتجعات العملاء{% endblock %}
+
+{% block content %}
+<section class="page-section" dir="rtl">
+  <div class="container mx-auto px-4 py-6">
+
+    <div class="mb-6">
+      <div class="section-badge">↩️ Refunds</div>
+      <h1 class="text-2xl md:text-3xl font-extrabold mt-2">مرتجعات العملاء</h1>
+      <p class="text-sm text-gray-600 mt-1">
+        إرجاع كامل أو جزئي لفواتير مدفوعة لطلبات ملغاة بقرار إداري.
+      </p>
+    </div>
+
+    {# ===== KPIs ===== #}
+    <div class="stats-grid" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:1rem;">
+      <div class="profile-section">
+        <div class="card-section-title">📌 إجمالي قابل للإرجاع</div>
+        <div class="stat-value">{{ refundable_total|floatformat:2 }} ريال</div>
+      </div>
+      <div class="profile-section">
+        <div class="card-section-title">✅ تم إرجاعه</div>
+        <div class="stat-value">{{ refunded_total|floatformat:2 }} ريال</div>
+      </div>
+      <div class="profile-section">
+        <div class="card-section-title">⏳ بانتظار التنفيذ</div>
+        <div class="stat-value">{{ pending_total|floatformat:2 }} ريال</div>
+      </div>
+    </div>
+
+    {# ===== فواتير مؤهلة للمرتجع ===== #}
+    <div class="profile-section mt-6">
+      <div class="card-section-title">فواتير مؤهلة للإرجاع</div>
+
+      {% if eligible_rows %}
+        <div class="overflow-x-auto rounded-2xl bg-white shadow mt-3">
+          <table class="min-w-full text-sm">
+            <thead>
+              <tr class="text-gray-600 border-b">
+                <th class="py-2 px-3 text-right">الطلب</th>
+                <th class="py-2 px-3 text-right">الاتفاقية</th>
+                <th class="py-2 px-3 text-right">الفاتورة</th>
+                <th class="py-2 px-3 text-right">إجمالي العميل</th>
+                <th class="py-2 px-3 text-right">تم إرجاعه</th>
+                <th class="py-2 px-3 text-right">المتبقي</th>
+                <th class="py-2 px-3 text-right">إرجاع</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for r in eligible_rows %}
+                {# 
+                  ملاحظة مالية:
+                  إجمالي العميل يجب أن يكون = P + VAT(P)
+                  لذلك نعتمد على:
+                  - r.client_total إن كانت مرسلة من الـ view (مفضلة)
+                  - أو r.invoice.client_total_amount (property)
+                #}
+                {% with client_total=r.client_total|default:r.invoice.client_total_amount %}
+                <tr class="border-b hover:bg-gray-50">
+                  <td class="py-2 px-3">
+                    <a href="{% url 'marketplace:request_detail' r.request.pk %}">
+                      #{{ r.request.pk }} — {{ r.request.title|default:"طلب" }}
+                    </a>
+                  </td>
+                  <td class="py-2 px-3">
+                    {% if r.agreement %}
+                      #{{ r.agreement.pk }}
+                    {% else %}
+                      —
+                    {% endif %}
+                  </td>
+                  <td class="py-2 px-3">#{{ r.invoice.pk }}</td>
+
+                  {# إجمالي العميل (بدون عمولة المنصّة) #}
+                  <td class="py-2 px-3 font-semibold">
+                    {{ client_total|floatformat:2 }} ريال
+                  </td>
+
+                  <td class="py-2 px-3">
+                    {{ r.refunded_so_far|floatformat:2 }} ريال
+                  </td>
+                  <td class="py-2 px-3 font-semibold">
+                    {{ r.refundable_left|floatformat:2 }} ريال
+                  </td>
+
+                  <td class="py-2 px-3">
+                    {% if r.refundable_left > 0 %}
+                      <div style="display:flex;flex-direction:column;gap:.5rem;">
+                        {# إرجاع كامل #}
+                        <form method="post" action="{% url 'finance:refund_create' r.invoice.pk %}">
+                          {% csrf_token %}
+                          <input type="hidden" name="amount" value="{{ r.refundable_left }}">
+                          <button class="btn btn-outline btn-sm" type="submit">إرجاع كامل</button>
+                        </form>
+
+                        {# إرجاع جزئي #}
+                        <form method="post" action="{% url 'finance:refund_create' r.invoice.pk %}">
+                          {% csrf_token %}
+                          <input class="input input-sm w-32" name="amount" placeholder="مبلغ جزئي" step="0.01">
+                          <input class="input input-sm w-full mt-1" name="reason" placeholder="سبب الإرجاع (اختياري)">
+                          <button class="btn btn-primary btn-sm mt-1" type="submit">إرجاع جزئي</button>
+                        </form>
+                      </div>
+                    {% else %}
+                      <span class="badge badge-verified">مُرجع بالكامل</span>
+                    {% endif %}
+                  </td>
+                </tr>
+                {% endwith %}
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      {% else %}
+        <p class="text-sm text-gray-500 mt-3">لا توجد فواتير مؤهلة للإرجاع حالياً.</p>
+      {% endif %}
+    </div>
+
+    {# ===== سجل المرتجعات ===== #}
+    <div class="profile-section mt-6">
+      <div class="card-section-title">سجل المرتجعات</div>
+
+      {% if refunds %}
+        <div class="overflow-x-auto rounded-2xl bg-white shadow mt-3">
+          <table class="min-w-full text-sm">
+            <thead>
+              <tr class="text-gray-600 border-b">
+                <th class="py-2 px-3 text-right">#</th>
+                <th class="py-2 px-3 text-right">الفاتورة</th>
+                <th class="py-2 px-3 text-right">الطلب</th>
+                <th class="py-2 px-3 text-right">المبلغ</th>
+                <th class="py-2 px-3 text-right">الحالة</th>
+                <th class="py-2 px-3 text-right">التاريخ</th>
+                <th class="py-2 px-3 text-right">إجراءات</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for rf in refunds %}
+                <tr class="border-b hover:bg-gray-50">
+                  <td class="py-2 px-3">#{{ rf.pk }}</td>
+                  <td class="py-2 px-3">#{{ rf.invoice_id }}</td>
+                  <td class="py-2 px-3">
+                    {% if rf.request %}
+                      <a href="{% url 'marketplace:request_detail' rf.request.pk %}">#{{ rf.request.pk }}</a>
+                    {% else %}
+                      —
+                    {% endif %}
+                  </td>
+                  <td class="py-2 px-3 font-semibold">{{ rf.amount|floatformat:2 }} ريال</td>
+                  <td class="py-2 px-3">
+                    <span class="badge badge-default">{{ rf.get_status_display }}</span>
+                  </td>
+                  <td class="py-2 px-3">{{ rf.created_at|date:"Y-m-d" }}</td>
+
+                  <td class="py-2 px-3">
+                    {% if rf.status == 'pending' %}
+                      <div style="display:flex;gap:.5rem;flex-wrap:wrap;">
+                        <form method="post" action="{% url 'finance:refund_mark_sent' rf.pk %}">
+                          {% csrf_token %}
+                          <input class="input input-sm w-24" name="method" placeholder="طريقة">
+                          <input class="input input-sm w-32" name="ref_code" placeholder="مرجع">
+                          <button class="btn btn-primary btn-sm" type="submit">وسم كتم الإرجاع</button>
+                        </form>
+
+                        <form method="post" action="{% url 'finance:refund_cancel' rf.pk %}">
+                          {% csrf_token %}
+                          <input class="input input-sm w-40" name="reason" placeholder="سبب الإلغاء">
+                          <button class="btn btn-outline btn-sm" type="submit">إلغاء</button>
+                        </form>
+                      </div>
+                    {% else %}
+                      —
+                    {% endif %}
+                  </td>
+                </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      {% else %}
+        <p class="text-sm text-gray-500 mt-3">لا توجد مرتجعات مسجلة.</p>
+      {% endif %}
+    </div>
+
+  </div>
+</section>
+{% endblock %}

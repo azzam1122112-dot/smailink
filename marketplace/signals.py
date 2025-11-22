@@ -47,3 +47,35 @@ def handle_offer_selection(sender, instance: Offer, created: bool, **kwargs):
 
     # لا تمرّر حقول غير موجودة إطلاقًا
     req.save(update_fields=update_fields)
+
+    # إشعار للعميل بوصول عرض جديد
+    try:
+        from notifications.utils import create_notification
+        client = getattr(req, "client", None)
+        if client:
+            create_notification(
+                recipient=client,
+                title=f"تم اختيار عرض جديد لطلبك #{req.pk}",
+                body=f"تم اختيار عرض الموظف {off.employee} لطلبك '{req.title}'. يمكنك مراجعة التفاصيل والموافقة على الاتفاقية.",
+                url=req.get_absolute_url(),
+                actor=off.employee,
+                target=off,
+            )
+    except Exception:
+        pass
+
+    # إشعار للموظف عند اختيار عرضه
+    try:
+        from notifications.utils import create_notification
+        employee = getattr(off, "employee", None)
+        if employee:
+            create_notification(
+                recipient=employee,
+                title=f"تم اختيار عرضك للطلب #{req.pk}",
+                body=f"قام العميل {getattr(req, 'client', '')} باختيار عرضك للطلب '{req.title}'. يمكنك متابعة الاتفاقية والمشروع.",
+                url=req.get_absolute_url(),
+                actor=getattr(req, "client", None),
+                target=off,
+            )
+    except Exception:
+        pass

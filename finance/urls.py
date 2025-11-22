@@ -83,6 +83,43 @@ urlpatterns = [
     path("payment/callback/", views.payment_callback, name="payment_callback"),
     path("payment/webhook/", views.payment_webhook, name="payment_webhook"),
 
+    path("tax/", views.tax_dashboard, name="tax_dashboard"),
+    path("vat/", RedirectView.as_view(pattern_name="finance:tax_dashboard", permanent=False), name="vat_dashboard"),  # alias
+
+    # لوحة مستحقات الموظفين للمالية
+    path("employee/dues-admin/", views.employee_dues_admin, name="employee_dues_admin"),
+
+# ======================
+# Refunds / مرتجعات العملاء
+# ======================
+    path("refunds/", views.refunds_dashboard, name="refunds_dashboard"),
+    path("refunds/create/<int:invoice_id>/", views.refund_create, name="refund_create"),
+    path("refunds/<int:pk>/mark-sent/", views.refund_mark_sent, name="refund_mark_sent"),
+    path("refunds/<int:pk>/cancel/", views.refund_cancel, name="refund_cancel"),
+
+    # Aliases توافق خلفي (اختياري)
+    path("client/refunds/", RedirectView.as_view(pattern_name="finance:refunds_dashboard", permanent=False), name="client_refunds"),
+
+
+   # ======================
+# نزاعات ومبالغ مجمدة
+# ======================
+    path("disputes/", views.disputes_dashboard, name="disputes_dashboard"),
+    path("disputes/<int:dispute_id>/release/", views.dispute_release, name="dispute_release"),
+    path("disputes/<int:dispute_id>/refund/", views.dispute_refund, name="dispute_refund"),
+
+# ======================
+# صرفيات الموظفين
+# ======================
+    path("payouts/", views.payouts_list, name="payouts_list"),
+    path("payouts/<int:pk>/mark-paid/", views.mark_payout_paid, name="mark_payout_paid"),
+
+
+    # Aliases مساعدة (لو تحب اسم أقصر في القوالب)
+    path("dues-admin/", RedirectView.as_view(
+        pattern_name="finance:employee_dues_admin", permanent=False
+    ), name="dues_admin"),
+
     # ======================
     # صرفيات الموظفين (Placeholder)
     # ======================

@@ -5,90 +5,581 @@
 {% block title %}مدفوعاتي{% endblock %}
 
 {% block content %}
-<div class="container mx-auto px-4 py-6" dir="rtl">
-  <div class="flex flex-col md:flex-row md:items-end md:justify-between gap-3 mb-4">
-    <div>
-      <h1 class="text-2xl font-extrabold">مدفوعاتي</h1>
-      <p class="text-sm text-gray-600 mt-1">تصفية حسب الحالة أو الطريقة أو الفترة.</p>
+<section class="page-section client-payments-page">
+  <div class="container">
+
+    {# ===== رأس الصفحة ===== #}
+    <div class="section-header" style="text-align: right; margin-bottom: 2rem;">
+      <div class="section-badge">
+        💳 مدفوعاتي
+      </div>
+      <h1 class="section-title">
+        مدفوعاتي
+      </h1>
+      <p class="section-description">
+        هذه الصفحة تعرض فواتيرك ومدفوعاتك حسب الحالة والطريقة والفترة.
+        <span style="color: var(--dark-500); font-size: 0.875rem; display: block; margin-top: 0.5rem;">
+          إجمالي العميل = قيمة الخدمة P + VAT فقط (ولا يشمل عمولة المنصّة)
+        </span>
+      </p>
     </div>
 
-    <form method="get" class="bg-white p-3 rounded-2xl shadow">
-      <div class="grid grid-cols-2 md:grid-cols-6 gap-2">
-        <div>
-          <label class="text-xs text-gray-500">الحالة</label>
-          <select name="status" class="w-full border rounded-lg px-3 py-2">
-            <option value="" {% if not status_q %}selected{% endif %}>الكل</option>
-            <option value="unpaid" {% if status_q == "unpaid" %}selected{% endif %}>غير مدفوعة</option>
-            <option value="paid" {% if status_q == "paid" %}selected{% endif %}>مدفوعة</option>
-          </select>
+    {# ===== الفلاتر ===== #}
+    <div class="profile-section" style="margin-bottom: 2rem;">
+      <form method="get" class="filter-form">
+        <div class="form-grid-6" style="display: grid; grid-template-columns: repeat(6, 1fr); gap: 1rem;">
+          <div class="form-field">
+            <label class="form-label">📊 الحالة</label>
+            <select name="status" class="input">
+              <option value="" {% if not status_q %}selected{% endif %}>الكل</option>
+              <option value="unpaid" {% if status_q == "unpaid" %}selected{% endif %}>غير مدفوعة</option>
+              <option value="paid" {% if status_q == "paid" %}selected{% endif %}>مدفوعة</option>
+            </select>
+          </div>
+
+          <div class="form-field">
+            <label class="form-label">🔄 الطريقة</label>
+            <select name="method" class="input">
+              <option value="" {% if not method_q %}selected{% endif %}>الكل</option>
+              {% for m in methods %}
+                <option value="{{ m }}" {% if method_q == m %}selected{% endif %}>{{ m }}</option>
+              {% endfor %}
+            </select>
+          </div>
+
+          <div class="form-field">
+            <label class="form-label">📅 من</label>
+            <input type="date" name="from" value="{{ date_from }}" class="input">
+          </div>
+
+          <div class="form-field">
+            <label class="form-label">📅 إلى</label>
+            <input type="date" name="to" value="{{ date_to }}" class="input">
+          </div>
+
+          <div class="form-field" style="grid-column: span 2;">
+            <label class="form-label">🔍 بحث</label>
+            <input type="text" name="q" value="{{ q }}" class="input"
+                   placeholder="رقم طلب / اتفاقية / مرجع">
+          </div>
         </div>
-        <div>
-          <label class="text-xs text-gray-500">الطريقة</label>
-          <select name="method" class="w-full border rounded-lg px-3 py-2">
-            <option value="" {% if not method_q %}selected{% endif %}>الكل</option>
-            {% for m in methods %}
-            <option value="{{ m }}" {% if method_q == m %}selected{% endif %}>{{ m }}</option>
+
+        <div class="form-actions" style="margin-top: 1rem; display: flex; gap: 0.5rem;">
+          <button class="btn btn-primary btn-sm">
+            🔍 تطبيق الفلاتر
+          </button>
+          <a href="." class="btn btn-outline btn-sm">
+            🔄 إعادة ضبط
+          </a>
+        </div>
+      </form>
+    </div>
+
+    {# ===== إجماليات سريعة ===== #}
+    <div class="stats-grid" style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 1.5rem; margin-bottom: 2rem;">
+      <div class="profile-section text-center">
+        <div class="card-section-title">💰 الإجمالي</div>
+        <div class="stat-value" style="font-size: 1.75rem; font-weight: 800; color: var(--primary-600); margin: 0.5rem 0;">
+          {{ totals.total|default:0|floatformat:2 }} ر.س
+        </div>
+        <div class="card-section-note">مجموع جميع الفواتير</div>
+      </div>
+
+      <div class="profile-section text-center" style="background: linear-gradient(135deg, var(--primary-50) 0%, var(--white) 100%);">
+        <div class="card-section-title">✅ مدفوع</div>
+        <div class="stat-value" style="font-size: 1.75rem; font-weight: 800; color: var(--primary-600); margin: 0.5rem 0;">
+          {{ totals.paid|default:0|floatformat:2 }} ر.س
+        </div>
+        <div class="card-section-note">المبالغ المسددة</div>
+      </div>
+
+      <div class="profile-section text-center" style="background: linear-gradient(135deg, var(--secondary-50) 0%, var(--white) 100%);">
+        <div class="card-section-title">⏳ غير مدفوع</div>
+        <div class="stat-value" style="font-size: 1.75rem; font-weight: 800; color: var(--secondary-600); margin: 0.5rem 0;">
+          {{ totals.unpaid|default:0|floatformat:2 }} ر.س
+        </div>
+        <div class="card-section-note">المبالغ المستحقة</div>
+      </div>
+    </div>
+
+    <div class="profile-section" style="background: var(--dark-50); margin-bottom: 1rem; padding: 1rem;">
+      <div class="card-section-note" style="text-align: center; margin: 0;">
+        💡 الأرقام أعلاه تطابق "إجمالي العميل الحقيقي" المعروض بالجدول
+      </div>
+    </div>
+
+    {# ===== الجدول ===== #}
+    <div class="profile-section">
+      <div class="table-header" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
+        <div class="card-section-title">🧾 الفواتير والمدفوعات</div>
+        <div class="table-count badge badge-default">
+          {{ invoices|length }} فاتورة
+        </div>
+      </div>
+
+      <div class="table-wrapper">
+        <table class="table table-clean">
+          <thead>
+            <tr>
+              <th>#</th>
+              <th>الاتفاقية / الطلب</th>
+              <th>إجمالي العميل</th>
+              <th>الحالة</th>
+              <th>الإصدار</th>
+              <th>السداد</th>
+              <th>تفاصيل</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for inv in invoices %}
+              <tr class="scroll-reveal">
+                <td class="text-muted">#{{ inv.id }}</td>
+
+                <td>
+                  <div class="table-cell-main">
+                    <div class="table-cell-title">
+                      A{{ inv.agreement_id }}
+                      {% if inv.agreement and inv.agreement.request_id %}
+                        / R{{ inv.agreement.request_id }}
+                      {% endif %}
+                    </div>
+                    {% if inv.agreement and inv.agreement.request and inv.agreement.request.title %}
+                      <div class="table-cell-subtitle">
+                        {{ inv.agreement.request.title }}
+                      </div>
+                    {% endif %}
+                  </div>
+                </td>
+
+                {# عرض فقط المبالغ المدفوعة فعلياً للعميل #}
+                <td>
+                  {% if inv.status == 'paid' %}
+                    <span class="value-strong" style="color: var(--primary-600); font-weight: 700;">
+                      {{ inv.amount|floatformat:2 }} ر.س
+                    </span>
+                  {% else %}
+                    <span class="text-muted">—</span>
+                  {% endif %}
+                </td>
+
+                <td>
+                  {% if inv.status == 'paid' %}
+                    <span class="badge badge-verified">✅ مدفوعة</span>
+                  {% elif inv.status == 'unpaid' %}
+                    <span class="badge badge-pending">⏳ غير مدفوعة</span>
+                  {% else %}
+                    <span class="badge badge-default">{{ inv.get_status_display|default:inv.status }}</span>
+                  {% endif %}
+                </td>
+
+                <td class="text-muted">
+                  {% if inv.issued_at %}
+                    {{ inv.issued_at|date:"Y-m-d" }}
+                  {% else %}
+                    —
+                  {% endif %}
+                </td>
+
+                <td class="text-muted">
+                  {% if inv.paid_at %}
+                    {{ inv.paid_at|date:"Y-m-d" }}
+                  {% else %}
+                    —
+                  {% endif %}
+                </td>
+
+                <td>
+                  <a href="{% url 'finance:invoice_detail' inv.id %}" class="btn btn-outline btn-sm">
+                    👁️ عرض
+                  </a>
+                </td>
+              </tr>
+            {% empty %}
+              <tr>
+                <td colspan="7" class="text-center text-muted" style="padding: 3rem;">
+                  <div class="empty-state">
+                    <div class="empty-icon" style="font-size: 3rem; margin-bottom: 1rem; opacity: 0.5;">💸</div>
+                    <h3 class="card-section-title" style="margin-bottom: 0.5rem;">لا توجد فواتير</h3>
+                    <p class="card-section-note">لم يتم العثور على فواتير مطابقة لبحثك</p>
+                  </div>
+                </td>
+              </tr>
             {% endfor %}
-          </select>
-        </div>
-        <div>
-          <label class="text-xs text-gray-500">من</label>
-          <input type="date" name="from" value="{{ date_from }}" class="w-full border rounded-lg px-3 py-2">
-        </div>
-        <div>
-          <label class="text-xs text-gray-500">إلى</label>
-          <input type="date" name="to" value="{{ date_to }}" class="w-full border rounded-lg px-3 py-2">
-        </div>
-        <div class="md:col-span-2">
-          <label class="text-xs text-gray-500">بحث</label>
-          <input type="text" name="q" value="{{ q }}" class="w-full border rounded-lg px-3 py-2" placeholder="رقم طلب/اتفاقية/مرجع">
-        </div>
+          </tbody>
+        </table>
       </div>
-      <div class="mt-2">
-        <button class="btn btn-sm">تطبيق</button>
-      </div>
-    </form>
-  </div>
-
-  <div class="mb-4 rounded-2xl bg-white p-4 shadow">
-    <div class="grid grid-cols-1 md:grid-cols-3 gap-3 text-sm">
-      <div><span class="text-gray-500">الإجمالي:</span> {{ totals.total|default:0|floatformat:2 }} ريال</div>
-      <div><span class="text-gray-500">مدفوع:</span> {{ totals.paid|default:0|floatformat:2 }} ريال</div>
-      <div><span class="text-gray-500">غير مدفوع:</span> {{ totals.unpaid|default:0|floatformat:2 }} ريال</div>
     </div>
-  </div>
 
-  <div class="overflow-x-auto rounded-2xl shadow bg-white">
-    <table class="min-w-full text-sm">
-      <thead>
-        <tr class="text-gray-600 border-b">
-          <th class="py-2 px-3 text-right">#</th>
-          <th class="py-2 px-3 text-right">الاتفاقية/الطلب</th>
-          <th class="py-2 px-3 text-right">المبلغ</th>
-          <th class="py-2 px-3 text-right">الحالة</th>
-          <th class="py-2 px-3 text-right">الإصدار</th>
-          <th class="py-2 px-3 text-right">السداد</th>
-        </tr>
-      </thead>
-      <tbody>
-        {% if invoices %}
-        {% for inv in invoices %}
-        <tr class="border-b">
-          <td class="py-2 px-3">#{{ inv.id }}</td>
-          <td class="py-2 px-3">A{{ inv.agreement_id }}{% if inv.agreement and inv.agreement.request_id %} / R{{ inv.agreement.request_id }}{% endif %}</td>
-          <td class="py-2 px-3">{{ inv.total_amount|floatformat:2 }}</td>
-          <td class="py-2 px-3">{{ inv.get_status_display }}</td>
-          <td class="py-2 px-3">{% if inv.issued_at %}{{ inv.issued_at|date:"Y-m-d" }}{% else %}—{% endif %}</td>
-          <td class="py-2 px-3">{% if inv.paid_at %}{{ inv.paid_at|date:"Y-m-d" }}{% else %}—{% endif %}</td>
-        </tr>
-        {% endfor %}
-        {% else %}
-        <tr>
-          <td colspan="6" class="py-4 px-3 text-gray-500">لا توجد فواتير مطابقة.</td>
-        </tr>
-        {% endif %}
-      </tbody>
-    </table>
+    {# ===== ترقيم الصفحات ===== #}
+    {% if is_paginated %}
+      <div class="pagination profile-section" style="text-align: center; padding: 1.5rem;">
+        <div class="pagination-inner employee-actions">
+          {% if page_obj.has_previous %}
+            <a class="btn btn-outline btn-sm"
+               href="?page={{ page_obj.previous_page_number }}{% if request.GET.q %}&q={{ request.GET.q }}{% endif %}{% if request.GET.status %}&status={{ request.GET.status }}{% endif %}{% if request.GET.method %}&method={{ request.GET.method }}{% endif %}{% if request.GET.from %}&from={{ request.GET.from }}{% endif %}{% if request.GET.to %}&to={{ request.GET.to }}{% endif %}">
+              ‹ السابق
+            </a>
+          {% else %}
+            <span class="btn btn-outline btn-sm" style="opacity: 0.5; cursor: not-allowed;">‹ السابق</span>
+          {% endif %}
+
+          <span class="pagination-info badge badge-default">
+            الصفحة {{ page_obj.number }} من {{ page_obj.paginator.num_pages }}
+          </span>
+
+          {% if page_obj.has_next %}
+            <a class="btn btn-outline btn-sm"
+               href="?page={{ page_obj.next_page_number }}{% if request.GET.q %}&q={{ request.GET.q }}{% endif %}{% if request.GET.status %}&status={{ request.GET.status }}{% endif %}{% if request.GET.method %}&method={{ request.GET.method }}{% endif %}{% if request.GET.from %}&from={{ request.GET.from }}{% endif %}{% if request.GET.to %}&to={{ request.GET.to }}{% endif %}">
+              التالي ›
+            </a>
+          {% else %}
+            <span class="btn btn-outline btn-sm" style="opacity: 0.5; cursor: not-allowed;">التالي ›</span>
+          {% endif %}
+        </div>
+      </div>
+    {% endif %}
+
+    {# ===== تلميحات وإرشادات ===== #}
+    <div class="profile-section" style="background: var(--primary-50); border-color: var(--primary-200); margin-top: 2rem;">
+      <div class="card-section-title" style="color: var(--primary-700);">💡 معلومات مهمة</div>
+      <div class="info-grid" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 1rem; margin-top: 1rem;">
+        <div class="info-item">
+          <div class="info-icon">💰</div>
+          <div class="info-content">
+            <div class="info-title">إجمالي العميل</div>
+            <div class="info-text">يشمل فقط قيمة الخدمة + VAT</div>
+          </div>
+        </div>
+        <div class="info-item">
+          <div class="info-icon">⏱️</div>
+          <div class="info-content">
+            <div class="info-title">معالجة المدفوعات</div>
+            <div class="info-text">تأكيد التحويل خلال 24 ساعة عمل</div>
+          </div>
+        </div>
+        <div class="info-item">
+          <div class="info-icon">📞</div>
+          <div class="info-content">
+            <div class="info-title">الدعم</div>
+            <div class="info-text">للمساعدة: support@samilink.sa</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
   </div>
-</div>
+</section>
+{% endblock %}
+
+{% block extra_scripts %}
+  {{ block.super }}
+  <script>
+  (function () {
+    // تهيئة تأثيرات التمرير
+    if (typeof initScrollReveal === 'function') {
+      initScrollReveal();
+    }
+
+    // تأثيرات على الأزرار
+    document.querySelectorAll('.btn').forEach(button => {
+      button.addEventListener('click', function() {
+        if (typeof animateButtonClick === 'function') {
+          animateButtonClick(this);
+        }
+      });
+    });
+
+    // تحسين تجربة الفلاتر
+    const filterForm = document.querySelector('.filter-form');
+    if (filterForm) {
+      const inputs = filterForm.querySelectorAll('input, select');
+      inputs.forEach(input => {
+        input.addEventListener('change', function() {
+          // إضافة تأثير عند التغيير
+          this.style.borderColor = 'var(--primary-500)';
+          this.style.boxShadow = '0 0 0 3px rgba(34, 197, 94, 0.1)';
+          setTimeout(() => {
+            this.style.borderColor = '';
+            this.style.boxShadow = '';
+          }, 1000);
+        });
+      });
+
+      // إرسال النموذج عند تغيير بعض الحقول
+      const autoSubmitFields = filterForm.querySelectorAll('select[name="status"], select[name="method"]');
+      autoSubmitFields.forEach(field => {
+        field.addEventListener('change', function() {
+          setTimeout(() => {
+            filterForm.submit();
+          }, 300);
+        });
+      });
+    }
+
+    // تأثيرات على صفوف الجدول
+    document.querySelectorAll('.table-clean tbody tr').forEach(row => {
+      row.addEventListener('mouseenter', function() {
+        this.style.background = 'var(--primary-50)';
+        this.style.transform = 'translateX(5px)';
+      });
+      
+      row.addEventListener('mouseleave', function() {
+        this.style.background = '';
+        this.style.transform = 'translateX(0)';
+      });
+
+      // تأثير النقر على صف الجدول
+      row.addEventListener('click', function(e) {
+        if (!e.target.closest('a') && !e.target.closest('button')) {
+          const link = this.querySelector('a.btn');
+          if (link) {
+            link.click();
+          }
+        }
+      });
+    });
+
+    // تحديث الإحصائيات بشكل حيوي
+    function updateStatsAnimation() {
+      const statValues = document.querySelectorAll('.stat-value');
+      statValues.forEach(stat => {
+        stat.style.animation = 'pulse 0.6s ease-in-out';
+        setTimeout(() => {
+          stat.style.animation = '';
+        }, 600);
+      });
+    }
+
+    // تطبيق تأثيرات على الإحصائيات عند التحميل
+    updateStatsAnimation();
+
+  })();
+  </script>
+
+  <style>
+  .client-payments-page .form-grid-6 {
+    grid-template-columns: repeat(6, 1fr);
+  }
+
+  .client-payments-page .form-field {
+    margin-bottom: 0;
+  }
+
+  .client-payments-page .form-label {
+    display: block;
+    font-weight: 600;
+    color: var(--dark-700);
+    margin-bottom: 0.5rem;
+    font-size: 0.95rem;
+  }
+
+  .client-payments-page .input {
+    width: 100%;
+    padding: 0.75rem 1rem;
+    border: 1px solid var(--dark-300);
+    border-radius: var(--radius-lg);
+    background: var(--white);
+    font-family: inherit;
+    font-size: 1rem;
+    transition: var(--transition);
+  }
+
+  .client-payments-page .input:focus {
+    outline: none;
+    border-color: var(--primary-500);
+    box-shadow: 0 0 0 3px rgba(34, 197, 94, 0.1);
+  }
+
+  .client-payments-page .stats-grid {
+    grid-template-columns: repeat(3, 1fr);
+  }
+
+  .client-payments-page .table-wrapper {
+    overflow-x: auto;
+    border-radius: var(--radius-xl);
+    border: 1px solid var(--dark-200);
+  }
+
+  .client-payments-page .table-clean {
+    width: 100%;
+    border-collapse: collapse;
+  }
+
+  .client-payments-page .table-clean th {
+    background: var(--dark-50);
+    color: var(--dark-700);
+    font-weight: 600;
+    padding: 1rem;
+    text-align: right;
+    border-bottom: 1px solid var(--dark-200);
+  }
+
+  .client-payments-page .table-clean td {
+    padding: 1rem;
+    border-bottom: 1px solid var(--dark-100);
+    vertical-align: top;
+    transition: all 0.3s ease;
+    cursor: pointer;
+  }
+
+  .client-payments-page .table-clean tr:last-child td {
+    border-bottom: none;
+  }
+
+  .client-payments-page .table-cell-main {
+    min-width: 150px;
+  }
+
+  .client-payments-page .table-cell-title {
+    font-weight: 600;
+    color: var(--dark-900);
+    margin-bottom: 0.25rem;
+  }
+
+  .client-payments-page .table-cell-subtitle {
+    color: var(--dark-600);
+    font-size: 0.875rem;
+    line-height: 1.4;
+  }
+
+  .client-payments-page .value-strong {
+    font-weight: 700;
+    color: var(--primary-600);
+  }
+
+  .client-payments-page .text-muted {
+    color: var(--dark-500);
+  }
+
+  .client-payments-page .table-count {
+    font-size: 0.9rem;
+  }
+
+  .client-payments-page .pagination-inner {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    gap: 1rem;
+  }
+
+  .client-payments-page .pagination-info {
+    padding: 0.5rem 1rem;
+  }
+
+  .client-payments-page .info-grid {
+    grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+  }
+
+  .client-payments-page .info-item {
+    display: flex;
+    align-items: flex-start;
+    gap: 1rem;
+    padding: 1rem;
+    background: var(--white);
+    border-radius: var(--radius-lg);
+    border: 1px solid var(--primary-200);
+  }
+
+  .client-payments-page .info-icon {
+    font-size: 1.5rem;
+    flex-shrink: 0;
+  }
+
+  .client-payments-page .info-content {
+    flex: 1;
+  }
+
+  .client-payments-page .info-title {
+    font-weight: 600;
+    color: var(--primary-700);
+    margin-bottom: 0.25rem;
+  }
+
+  .client-payments-page .info-text {
+    color: var(--primary-600);
+    font-size: 0.875rem;
+    line-height: 1.4;
+  }
+
+  .client-payments-page .empty-state {
+    text-align: center;
+    padding: 2rem;
+  }
+
+  .client-payments-page .empty-icon {
+    font-size: 3rem;
+    margin-bottom: 1rem;
+    opacity: 0.5;
+  }
+
+  @media (max-width: 1024px) {
+    .client-payments-page .form-grid-6 {
+      grid-template-columns: repeat(3, 1fr);
+    }
+  }
+
+  @media (max-width: 768px) {
+    .client-payments-page .form-grid-6 {
+      grid-template-columns: 1fr;
+    }
+    
+    .client-payments-page .stats-grid {
+      grid-template-columns: 1fr;
+    }
+    
+    .client-payments-page .table-clean {
+      font-size: 0.875rem;
+    }
+    
+    .client-payments-page .table-clean th,
+    .client-payments-page .table-clean td {
+      padding: 0.75rem 0.5rem;
+    }
+    
+    .client-payments-page .pagination-inner {
+      flex-direction: column;
+      gap: 0.5rem;
+    }
+    
+    .client-payments-page .info-grid {
+      grid-template-columns: 1fr;
+    }
+  }
+
+  @media (max-width: 480px) {
+    .client-payments-page .table-clean {
+      font-size: 0.8rem;
+    }
+    
+    .client-payments-page .table-actions {
+      flex-direction: column;
+    }
+    
+    .client-payments-page .table-actions .btn {
+      width: 100%;
+    }
+  }
+
+  /* تأثيرات الحركة */
+  @keyframes pulse {
+    0% { transform: scale(1); }
+    50% { transform: scale(1.05); }
+    100% { transform: scale(1); }
+  }
+
+  @keyframes fadeInUp {
+    from {
+      opacity: 0;
+      transform: translateY(20px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+
+  .client-payments-page .scroll-reveal {
+    animation: fadeInUp 0.6s ease-out;
+  }
+  </style>
 {% endblock %}

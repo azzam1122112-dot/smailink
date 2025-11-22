@@ -27,43 +27,75 @@
       <div class="profile-section">
         <div class="card-section-title">💰 تفاصيل المبالغ</div>
         <div class="amount-breakdown">
+
           <div class="amount-row">
-            <span class="amount-label">المبلغ الأساسي (P)</span>
-            <span class="amount-value">{{ breakdown.net_for_employee|floatformat:2 }} ر.س</span>
+            <span class="amount-label">
+              المبلغ الأساسي (P)
+              {% if inv.vat_percent %}
+                <span class="amount-percent">ضريبة {{ inv.vat_percent|floatformat:2 }}%</span>
+              {% endif %}
+            </span>
+            <span class="amount-value">
+              {{ inv.amount|floatformat:2 }} ر.س
+            </span>
           </div>
+
           <div class="amount-row">
-            <span class="amount-label">عمولة المنصة</span>
+            <span class="amount-label">
+              عمولة المنصّة (تُخصم من الموظف)
+              {% if inv.platform_fee_percent %}
+                <span class="amount-percent">{{ inv.platform_fee_percent|floatformat:2 }}%</span>
+              {% endif %}
+            </span>
             <span class="amount-value">
               {{ breakdown.platform_fee|floatformat:2 }} ر.س
             </span>
           </div>
+
           <div class="amount-row">
-            <span class="amount-label">الضريبة (VAT)</span>
+            <span class="amount-label">الضريبة (VAT على P فقط)</span>
             <span class="amount-value">
               {{ breakdown.vat_amount|floatformat:2 }} ر.س
             </span>
           </div>
+
           <div class="amount-row total-row">
-            <span class="amount-label">الإجمالي المستحق</span>
-            <span class="amount-value">{{ breakdown.client_total|floatformat:2 }} ر.س</span>
+            <span class="amount-label">إجمالي العميل (P + VAT)</span>
+            <span class="amount-value">
+              {{ breakdown.client_total|floatformat:2 }} ر.س
+            </span>
           </div>
+
+          <div class="amount-row subtotal-row">
+            <span class="amount-label">صافي الموظف (P − عمولة المنصّة)</span>
+            <span class="amount-value">
+              {{ breakdown.net_for_employee|floatformat:2 }} ر.س
+            </span>
+          </div>
+
         </div>
 
         <div class="quick-summary profile-section" style="background: var(--primary-50); border-color: var(--primary-200); margin-top: 1.5rem;">
           <div class="card-section-title" style="color: var(--primary-700);">📊 موجز سريع</div>
           <div class="summary-items">
             <div class="summary-item">
-              <span class="summary-label">صافي الموظف=</span>
+              <span class="summary-label">إجمالي العميل:</span>
+              <span class="summary-value">
+                {{ breakdown.client_total|floatformat:2 }} ر.س
+              </span>
+            </div>
+            <div class="summary-item">
+              <span class="summary-label">صافي الموظف:</span>
               <span class="summary-value">
                 {{ breakdown.net_for_employee|floatformat:2 }} ر.س
               </span>
             </div>
             <div class="summary-item">
-              <span class="summary-label">عمولة المنصة:</span>
+              <span class="summary-label">عمولة المنصّة (على الموظف):</span>
               <span class="summary-value">{{ breakdown.platform_fee|floatformat:2 }} ر.س</span>
             </div>
             <div class="summary-item">
-              <span class="summary-label">الضريبة (على المبلغ الأساسي فقط):</span>
+              <span class="summary-label">الضريبة (على P فقط):</span>
               <span class="summary-value">{{ breakdown.vat_amount|floatformat:2 }} ر.س</span>
             </div>
           </div>
@@ -384,6 +416,7 @@
     color: var(--dark-500);
     font-size: 0.8rem;
     font-weight: normal;
+    margin-right: 0.5rem;
   }
 
   .invoice-detail-page .subtotal-row {

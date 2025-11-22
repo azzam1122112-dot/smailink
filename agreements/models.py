@@ -10,6 +10,7 @@ from django.db.models import Q, Sum
 from django.urls import reverse
 from django.utils import timezone
 from django.utils.html import strip_tags
+from django.utils.functional import cached_property
 
 from finance.models import FinanceSettings
 
@@ -86,7 +87,7 @@ class Agreement(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
-    # تاريخ بداية التنفيذ الفعلي (يُضبط عند تأكيد الدفع من المالية)
+    # تاريخ بداية التنفيذ الفعلي
     started_at = models.DateField(
         "تاريخ بداية التنفيذ",
         null=True,
@@ -98,8 +99,7 @@ class Agreement(models.Model):
     @staticmethod
     def vat_percent() -> Decimal:
         """
-        نسبة الضريبة VAT — تُقرأ فقط من FinanceSettings.current_rates().
-        (لا يُسمح بأي مصدر آخر للنِّسب.)
+        نسبة الضريبة VAT — تُقرأ فقط من FinanceSettings.current_rates()
         """
         _, vat = FinanceSettings.current_rates()
         return Decimal(vat).quantize(Decimal("0.0001"), rounding=ROUND_HALF_UP)
@@ -107,67 +107,128 @@ class Agreement(models.Model):
     @staticmethod
     def platform_fee_percent() -> Decimal:
         """
-        نسبة عمولة المنصّة — تُقرأ فقط من FinanceSettings.current_rates().
-        (لا يُسمح بأي مصدر آخر للنِّسب.)
+        نسبة عمولة المنصّة — تُقرأ فقط من FinanceSettings.current_rates()
         """
         fee, _ = FinanceSettings.current_rates()
         return Decimal(fee).quantize(Decimal("0.0001"), rounding=ROUND_HALF_UP)
 
-    # ------------------------- خصائص مشتقة مالية -------------------------
+    # ------------------------- خصائص مشتقة مالية (مطابقة للسياسة الجديدة) -------------------------
     @property
     def p_amount(self) -> Decimal:
         """
-        قيمة المشروع الأساسية P بعد التقريب إلى خانتين عشريتين (تعتمد فقط على المبلغ المدخل).
+        السعر المقترح الأساسي P (المدخل في الاتفاقية)
         """
         return Decimal(self.total_amount or 0).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
 
+    @cached_property
+    def _breakdown(self):
+        """
+        Breakdown المالي الرسمي (السياسة المعتمدة):
+        - عمولة المنصّة تُخصم من الموظف فقط (لا تُضاف على العميل)
+        - VAT تُحسب على P فقط
+        - إجمالي العميل = P + (P * VAT)
+        - صافي الموظف = P - (P * fee)
+        """
+        from finance.services.pricing import compute_breakdown
+
+        return compute_breakdown(
+            self.p_amount,
+            fee_percent=self.platform_fee_percent(),
+            vat_rate=self.vat_percent(),
+        )
+
     @property
     def fee_amount(self) -> Decimal:
-        """
-        لا يوجد أي حساب تلقائي للعمولة، تعيد نفس مبلغ المشروع الأساسي.
-        """
-        return self.p_amount
+        """عمولة المنصّة (تُخصم من الموظف) = P * fee%"""
+        return self._breakdown.platform_fee_value
 
     @property
     def vat_base(self) -> Decimal:
-        """
-        الأساس الخاضع للضريبة = المبلغ المدخل فقط.
-        """
-        return self.p_amount
+        """الأساس الخاضع للضريبة = P فقط"""
+        return self._breakdown.taxable_base  # = P
 
     @property
     def vat_amount(self) -> Decimal:
-        """
-        لا يوجد أي حساب تلقائي للضريبة، تعيد نفس مبلغ المشروع الأساسي.
-        """
-        return self.p_amount
+        """قيمة الضريبة على العميل = P * VAT%"""
+        return self._breakdown.vat_amount
+
+    @property
+    def employee_net_amount(self) -> Decimal:
+        """صافي الموظف بعد خصم نسبة المنصة = P - fee"""
+        return self._breakdown.tech_payout
 
     @property
     def grand_total(self) -> Decimal:
+        """إجمالي العميل (بدون عمولة) = P + VAT"""
+        return self._breakdown.client_total
+
+    # ------------------------- أدوات فواتير الاتفاقية -------------------------
+    def _get_invoices_qs(self):
         """
-        الإجمالي النهائي = المبلغ المدخل فقط.
+        يرجّع QuerySet فواتير الاتفاقية إن كان related_name="invoices" موجودًا.
+        وإلا يرجّع None.
         """
-        return self.p_amount
+        mgr = getattr(self, "invoices", None)
+        if mgr is None:
+            return None
+        try:
+            return mgr.all()
+        except Exception:
+            return None
 
     @property
-    def employee_net_amount(self) -> Decimal | None:
+    def invoices_all_paid(self) -> bool:
         """
-        صافي الموظف = المبلغ المدخل فقط.
+        True إذا كانت كل فواتير الاتفاقية مدفوعة.
+        يدعم:
+        - invoices (جمع)
+        - invoice (مفرد) كـ fallback قديم.
         """
-        if self.p_amount is None:
+        try:
+            from finance.models import Invoice
+        except Exception:
+            return False
+
+        # 1) لو عندنا invoices manager
+        qs = self._get_invoices_qs()
+        if qs is not None:
+            if not qs.exists():
+                return False
+            paid_val = getattr(Invoice.Status, "PAID", "paid")
+            return not qs.exclude(status=paid_val).exists()
+
+        # 2) fallback قديم
+        inv = getattr(self, "invoice", None)
+        if inv is None:
+            return False
+        try:
+            paid_val = getattr(getattr(inv.__class__, "Status", None), "PAID", "paid")
+            return (getattr(inv, "status", "") or "").lower() == (paid_val or "").lower()
+        except Exception:
+            return False
+
+    @property
+    def last_paid_invoice(self):
+        """
+        آخر فاتورة مدفوعة لاستخدامها في الربط مع الـ Payout.
+        """
+        try:
+            from finance.models import Invoice
+        except Exception:
             return None
-        return self.p_amount
+
+        qs = self._get_invoices_qs()
+        if qs is not None:
+            paid_val = getattr(Invoice.Status, "PAID", "paid")
+            return qs.filter(status=paid_val).order_by("-paid_at", "-id").first()
+
+        inv = getattr(self, "invoice", None)
+        return inv if inv and self.invoices_all_paid else None
 
     # ------------------------- منطق سير التنفيذ -------------------------
     def mark_started(self, when=None, save: bool = True) -> None:
-        """
-        تُستدعى عند تأكيد الدفع من المالية:
-        - تضبط started_at إذا لم يكن مضبوطًا.
-        - لا تغيّر شيئًا إن كانت البداية مضبوطة مسبقًا.
-        """
         if self.started_at:
             return
-
         dt = when or timezone.now()
         self.started_at = dt.date()
         if save:
@@ -175,20 +236,12 @@ class Agreement(models.Model):
 
     @property
     def days_since_start(self) -> Optional[int]:
-        """
-        عدد الأيام التي مضت منذ بداية التنفيذ.
-        يرجع None إذا لم يبدأ التنفيذ بعد.
-        """
         if not self.started_at:
             return None
         return (timezone.now().date() - self.started_at).days
 
     @property
     def days_remaining(self) -> Optional[int]:
-        """
-        عدد الأيام المتبقية حتى انتهاء المدة المتفق عليها.
-        يرجع None إن لم يكن هناك مدة أو لم يبدأ التنفيذ.
-        """
         if not self.started_at or not self.duration_days:
             return None
         passed = self.days_since_start
@@ -199,31 +252,18 @@ class Agreement(models.Model):
 
     @property
     def all_milestones_approved(self) -> bool:
-        """
-        ترجع True إذا كانت جميع المراحل المرتبطة بهذه الاتفاقية
-        في حالة APPROVED.
-        (لا علاقة مالية بالمراحل، هذا فقط لضبط حالة "مكتمل").
-        """
-        # نعتبر الاتفاقية مكتملة إذا لم توجد مراحل غير معتمدة
         return not self.milestones.exclude(status=Milestone.Status.APPROVED).exists()
 
     def sync_request_state(self, save_request: bool = True) -> None:
         """
-        تزامن حالة الطلب المرتبط بناءً على:
-        - بداية التنفيذ (started_at).
-        - اعتماد جميع المراحل (all_milestones_approved).
-
-        القاعدة:
-        - إذا started_at موجودة والاتفاقية في حالة ACCEPTED:
-            * لو جميع المراحل معتمدة → الطلب "مكتمل".
-            * لو هناك مراحل لم تُعتمد بعد → الطلب "قيد التنفيذ".
-        - إن لم تبدأ بعد → لا تغيّر حالة الطلب.
-
-        ملاحظة مهمة:
-        - لا يتم استدعاء هذه الدالة عند قبول الاتفاقية فقط،
-          بل من منطق المالية بعد تأكيد دفع الفاتورة (invoice.mark_paid).
+        يزامن حالة الطلب بناءً على:
+        - وجود started_at
+        - status=ACCEPTED
+        - جميع الفواتير مدفوعة (invoices_all_paid)
+        - اعتماد جميع المراحل لإكمال الطلب
         """
-        from marketplace.models import Request  # import متأخر لتجنّب الدوران
+        from marketplace.models import Request
+        from finance.models import Payout
 
         req = getattr(self, "request", None)
         if not req:
@@ -232,33 +272,40 @@ class Agreement(models.Model):
         new_state = req.state
 
         state_enum = getattr(Request, "State", None)
-        in_progress_value = None
-        completed_value = None
-
-        if state_enum is not None:
-            in_progress_value = getattr(state_enum, "IN_PROGRESS", None)
-            if in_progress_value is None:
-                in_progress_value = getattr(state_enum, "INPROGRESS", None)
-            completed_value = getattr(state_enum, "COMPLETED", None)
-
+        in_progress_value = getattr(state_enum, "IN_PROGRESS", None) if state_enum else None
         if in_progress_value is None:
             in_progress_value = "in_progress"
+        completed_value = getattr(state_enum, "COMPLETED", None) if state_enum else None
         if completed_value is None:
             completed_value = "completed"
 
-        # شرط إضافي: لا تحول الطلب إلى قيد التنفيذ إلا إذا كانت الفاتورة مدفوعة فعلاً
-        invoice_paid = False
-        try:
-            invoice = getattr(self, "invoice", None)
-            if invoice and hasattr(invoice, "status"):
-                PAID_VAL = getattr(getattr(invoice.__class__, "Status", None), "PAID", "paid")
-                invoice_paid = (getattr(invoice, "status", None) or "").lower() == (PAID_VAL or "").lower()
-        except Exception:
-            pass
+        invoice_paid = self.invoices_all_paid
+        paid_invoice = self.last_paid_invoice
 
+        # ✅ لا يتحول الطلب لقيد التنفيذ إلا بعد سداد الفواتير
         if self.started_at and self.status == self.Status.ACCEPTED and invoice_paid:
             if self.all_milestones_approved:
                 new_state = completed_value
+
+                # ✅ أمر صرف تلقائي بصافي الموظف (وليس P)
+                try:
+                    existing = None
+                    if paid_invoice:
+                        existing = Payout.objects.filter(agreement=self, invoice=paid_invoice).first()
+
+                    if not existing and self.employee and paid_invoice:
+                        Payout.objects.create(
+                            employee=self.employee,
+                            agreement=self,
+                            invoice=paid_invoice,
+                            amount=self.employee_net_amount or Decimal("0.00"),
+                            status=Payout.Status.PENDING,
+                        )
+                except Exception:
+                    import logging
+                    logging.getLogger(__name__).exception(
+                        f"Failed to auto-create payout for agreement {self.pk}"
+                    )
             else:
                 new_state = in_progress_value
 
@@ -274,12 +321,10 @@ class Agreement(models.Model):
 
     # ------------------------- تحققات وتنقيات -------------------------
     def clean(self) -> None:
-        # صلاحية دور الموظف
         role = getattr(self.employee, "role", None)
         if role and role not in {"employee", "admin", "manager"}:
             raise ValidationError("يجب أن يكون الموظف بدور 'employee' أو 'admin/manager'.")
 
-        # توافق الموظف مع الطلب المُسنَّد
         assigned = getattr(self.request, "assigned_employee_id", None)
         if assigned and assigned != self.employee_id:
             raise ValidationError("الموظف في الاتفاقية يجب أن يطابق الموظف المُسنَّد على الطلب.")
@@ -296,7 +341,6 @@ class Agreement(models.Model):
         if self.rejection_reason:
             self.rejection_reason = strip_tags(self.rejection_reason).strip()
 
-        # قفل المدة/الإجمالي بعد مغادرة DRAFT
         if self.pk:
             try:
                 prev = Agreement.objects.only("duration_days", "total_amount", "status").get(pk=self.pk)
@@ -306,15 +350,47 @@ class Agreement(models.Model):
                 if prev.duration_days != self.duration_days or prev.total_amount != self.total_amount:
                     raise ValidationError("لا يُسمح بتعديل المدة أو إجمالي المشروع بعد مغادرة المسودة.")
 
-        # ❌ لا نفرض أي علاقة مالية مع المراحل:
-        # لا يوجد أي شرط يربط مجموع مبالغ المراحل بقيمة المشروع.
-
     def save(self, *args, **kwargs):
+        old_status = None
+        if self.pk:
+            try:
+                prev = Agreement.objects.only("status").get(pk=self.pk)
+                old_status = prev.status
+            except Agreement.DoesNotExist:
+                pass
         self.full_clean()
         super().save(*args, **kwargs)
 
+        # إشعار للموظف عند قبول أو رفض العميل للاتفاقية
+        try:
+            from notifications.utils import create_notification
+            employee = getattr(self, "employee", None)
+            req = getattr(self, "request", None)
+            client = getattr(req, "client", None) if req else None
+            if old_status and self.status != old_status:
+                if self.status == self.Status.ACCEPTED:
+                    create_notification(
+                        recipient=employee,
+                        title=f"تمت موافقة العميل على الاتفاقية للطلب #{req.pk}",
+                        body=f"قام العميل {client} بالموافقة على الاتفاقية للطلب '{req.title}'. يمكنك البدء في التنفيذ.",
+                        url=self.get_absolute_url() if hasattr(self, "get_absolute_url") else None,
+                        actor=client,
+                        target=self,
+                    )
+                elif self.status == self.Status.REJECTED:
+                    create_notification(
+                        recipient=employee,
+                        title=f"تم رفض الاتفاقية من العميل للطلب #{req.pk}",
+                        body=f"قام العميل {client} برفض الاتفاقية للطلب '{req.title}'. يمكنك مراجعة السبب واتخاذ الإجراء المناسب.",
+                        url=self.get_absolute_url() if hasattr(self, "get_absolute_url") else None,
+                        actor=client,
+                        target=self,
+                    )
+        except Exception:
+            pass
+
     # ------------------------- عرض عربي -------------------------
-    def __str__(self) -> str:  # pragma: no cover
+    def __str__(self) -> str:
         return f"Agreement#{self.pk} R{self.request_id} — {self.get_status_display()}"
 
     def get_absolute_url(self) -> str:
@@ -374,8 +450,8 @@ class Agreement(models.Model):
             models.Index(fields=["employee"]),
         ]
         constraints = [
-            models.CheckConstraint(check=Q(total_amount__gte=0), name="agreement_total_amount_gte_0"),
-            models.CheckConstraint(check=Q(duration_days__gte=1), name="agreement_duration_days_gte_1"),
+            models.CheckConstraint(condition=Q(total_amount__gte=0), name="agreement_total_amount_gte_0"),
+            models.CheckConstraint(condition=Q(duration_days__gte=1), name="agreement_duration_days_gte_1"),
         ]
         verbose_name = "اتفاقية"
         verbose_name_plural = "اتفاقيات"
@@ -390,7 +466,7 @@ class Milestone(models.Model):
         DELIVERED = "delivered", "تم التسليم"
         APPROVED = "approved", "معتمدة"
         REJECTED = "rejected", "مرفوضة"
-        PAID = "paid", "مدفوعة"  # تبقى احتياطياً لو احتجناها في منطق داخلي، بدون ربط بالفواتير
+        PAID = "paid", "مدفوعة"
 
     agreement = models.ForeignKey(
         "agreements.Agreement",
@@ -398,10 +474,8 @@ class Milestone(models.Model):
         related_name="milestones",
         verbose_name="الاتفاقية",
     )
-
     title = models.CharField("عنوان المرحلة", max_length=160)
 
-    # حقل المبلغ يبقى احتياطيًا، لا علاقة له بالفواتير في الوضع الحالي
     amount = models.DecimalField(
         "المبلغ (ريال)",
         max_digits=12,
@@ -411,8 +485,6 @@ class Milestone(models.Model):
     )
 
     order = models.PositiveIntegerField("الترتيب", default=1)
-
-    # مدة المرحلة بالأيام (ليست مدة استحقاق مالي)
     due_days = models.PositiveIntegerField(
         "مدة المرحلة (أيام)",
         null=True,
@@ -437,7 +509,6 @@ class Milestone(models.Model):
     rejected_reason = models.TextField("سبب الرفض", blank=True)
 
     paid_at = models.DateTimeField("وقت السداد", null=True, blank=True)
-
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
@@ -455,15 +526,15 @@ class Milestone(models.Model):
                 name="uniq_milestone_order_per_agreement",
             ),
             models.CheckConstraint(
-                check=Q(amount__gte=0),
+                condition=Q(amount__gte=0),
                 name="milestone_amount_gte_0",
             ),
             models.CheckConstraint(
-                check=Q(order__gte=1),
+                condition=Q(order__gte=1),
                 name="milestone_order_gte_1",
             ),
             models.CheckConstraint(
-                check=Q(due_days__isnull=True) | Q(due_days__gte=1),
+                condition=Q(due_days__isnull=True) | Q(due_days__gte=1),
                 name="milestone_due_days_gte_1_or_null",
             ),
         ]
@@ -471,14 +542,6 @@ class Milestone(models.Model):
         verbose_name_plural = "مراحل"
 
     def clean(self) -> None:
-        """
-        - التأكد من أن amount غير سالب (مع تقريب نقدي).
-        - التأكد من أن order >= 1.
-        - التأكد من أن مدة المرحلة (due_days) >= 1 إن وُجدت.
-        - التأكد من أن مجموع مدد المراحل لنفس الاتفاقية
-          لا يتجاوز مدة المشروع Agreement.duration_days.
-        - منع إضافة أكثر من 30 مرحلة لنفس الاتفاقية.
-        """
         self.amount = Decimal(self.amount or 0).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
         if self.amount < 0:
             raise ValidationError("مبلغ المرحلة يجب أن يكون رقمًا موجبًا أو صفرًا.")
@@ -492,7 +555,6 @@ class Milestone(models.Model):
         if not self.agreement_id:
             return
 
-        # حد أقصى 30 مرحلة لكل اتفاقية
         qs_for_count = Milestone.objects.filter(agreement_id=self.agreement_id)
         if self.pk:
             qs_for_count = qs_for_count.exclude(pk=self.pk)
@@ -500,7 +562,6 @@ class Milestone(models.Model):
         if count_existing + 1 > 30:
             raise ValidationError("لا يمكن إضافة أكثر من 30 مرحلة لنفس الاتفاقية (الحد الأقصى 30 مرحلة).")
 
-        # مجموع مدد المراحل لا يتجاوز مدة المشروع
         max_days = getattr(self.agreement, "duration_days", None)
         if max_days and self.due_days:
             qs_for_sum = Milestone.objects.filter(agreement_id=self.agreement_id)
@@ -521,13 +582,12 @@ class Milestone(models.Model):
                     }
                 )
 
-    def __str__(self) -> str:  # pragma: no cover
+    def __str__(self) -> str:
         return f"Milestone#{self.pk} A{self.agreement_id} — {self.title} ({self.order})"
 
     def get_absolute_url(self) -> str:
         return reverse("agreements:milestone_detail", kwargs={"pk": self.pk})
 
-    # -------- خصائص حالة مريحة --------
     @property
     def is_delivered(self) -> bool:
         return self.status == self.Status.DELIVERED
@@ -560,7 +620,6 @@ class Milestone(models.Model):
     def is_paid(self) -> bool:
         return self.status == self.Status.PAID
 
-    # -------- انتقالات منطقية --------
     def mark_delivered(self, note: str = "") -> None:
         if self.is_approved or self.is_paid:
             raise ValidationError("لا يمكن تسليم مرحلة معتمَدة أو مدفوعة.")
@@ -607,10 +666,6 @@ class Milestone(models.Model):
         self.save(update_fields=["status", "approved_at", "approved_by", "rejected_reason"])
 
     def mark_paid(self) -> None:
-        """
-        منطق داخلي فقط إن رغبت لاحقًا بوسم مرحلة كمدفوعة،
-        لكن بدون أي ربط مباشر بفواتير المالية.
-        """
         if not self.is_approved:
             raise ValidationError("لا يمكن السداد قبل اعتماد المرحلة.")
         self.status = self.Status.PAID
@@ -634,7 +689,7 @@ class AgreementClause(models.Model):
         verbose_name_plural = "بنود الاتفاقية"
         ordering = ["title"]
 
-    def __str__(self) -> str:  # pragma: no cover
+    def __str__(self) -> str:
         return f"{self.title} ({'مفعل' if self.is_active else 'موقوف'})"
 
 
@@ -674,7 +729,7 @@ class AgreementClauseItem(models.Model):
         if self.position < 1:
             raise ValidationError("ترتيب البند يجب أن يكون 1 أو أكبر.")
 
-    def __str__(self) -> str:  # pragma: no cover
+    def __str__(self) -> str:
         if self.clause:
             return f"[{self.position}] {self.clause.title}"
         return f"[{self.position}] بند مخصص: {self.custom_text[:30]}..."
@@ -687,8 +742,13 @@ class AgreementClauseItem(models.Model):
 # ------------------- تكامل المالية — فاتورة واحدة فقط للاتفاقية -------------------
 def _finance_create_total_invoice(agreement: Agreement) -> Optional[int]:
     """
-    ينشئ أو يضمن وجود **فاتورة واحدة غير مدفوعة** للاتفاقية.
-    لا يتم إنشاء فواتير لكل مرحلة إطلاقًا.
+    ينشئ أو يضمن وجود فاتورة واحدة غير مدفوعة للاتفاقية.
+
+    ✅ السياسة:
+    - نخزّن في invoice.amount قيمة P (السعر المقترح فقط)
+    - إجمالي العميل يُحسب للعرض فقط:
+      client_total = P + (P * VAT)
+    - عمولة المنصّة تُخصم من الموظف وتُستخدم في الاستحقاقات/الصرف
     """
     try:
         from finance.models import Invoice
@@ -698,7 +758,7 @@ def _finance_create_total_invoice(agreement: Agreement) -> Optional[int]:
     try:
         inv = Invoice.ensure_single_unpaid_for_agreement(
             agreement=agreement,
-            amount=agreement.p_amount,
+            amount=agreement.p_amount,  # P فقط كمبلغ أساس
         )
         return getattr(inv, "id", None)
     except Exception:
@@ -706,9 +766,6 @@ def _finance_create_total_invoice(agreement: Agreement) -> Optional[int]:
 
 
 def _no_finance_invoices_exist(agreement: Agreement) -> bool:
-    """
-    يفحص ما إذا كانت لا توجد أي فواتير مرتبطة بالاتفاقية.
-    """
     try:
         from finance.models import Invoice
     except Exception:
@@ -720,25 +777,15 @@ def _no_finance_invoices_exist(agreement: Agreement) -> bool:
         return True
 
 
-# إشارة بعد حفظ الاتفاقية: إنشاء فاتورة واحدة عند القبول فقط
 from django.db.models.signals import post_save
 from django.dispatch import receiver
 
 
 @receiver(post_save, sender=Agreement)
 def agreement_post_save(sender, instance: Agreement, created: bool, **kwargs):
-    """
-    - عند أن تكون حالة الاتفاقية ACCEPTED ولا توجد فواتير مرتبطة بها:
-        → يتم إنشاء فاتورة واحدة غير مدفوعة بالاعتماد على FinanceSettings.
-    - لا نقوم هنا بتغيير حالة الطلب إلى "قيد التنفيذ".
-      هذا يتم عند تأكيد الدفع من المالية عبر:
-        * agreement.mark_started()
-        * agreement.sync_request_state()
-    """
     try:
         if instance.status == Agreement.Status.ACCEPTED and _no_finance_invoices_exist(instance):
             with transaction.atomic():
                 _finance_create_total_invoice(instance)
     except Exception:
-        # لا نفشل حفظ الاتفاقية بسبب أي خطأ في تكامل المالية
         pass

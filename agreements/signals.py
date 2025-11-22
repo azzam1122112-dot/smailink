@@ -5,7 +5,7 @@ from django.db import transaction
 from django.db.models.signals import post_save
 from django.dispatch import receiver
 
-from .models import Milestone
+from .models import Milestone, Agreement
 
 # ملاحظات عامة:
 # - نعتمد نهجًا دفاعيًا: نتعامل مع اختلافات محتملة في أسماء الحالات والحقول.
@@ -84,6 +84,43 @@ def _milestone_status_paid(MilestoneCls):
 
 @receiver(post_save, sender=Milestone)
 def handle_milestone_post_save(sender, instance: Milestone, created: bool, **kwargs):
+    # إشعار للموظف عند قبول أو رفض استلام مرحلة
+    try:
+        from notifications.utils import create_notification
+        agreement = getattr(milestone, "agreement", None)
+        employee = getattr(agreement, "employee", None) if agreement else None
+        req = getattr(agreement, "request", None) if agreement else None
+        client = getattr(req, "client", None) if req else None
+        old_status = None
+        if milestone.pk:
+            try:
+                from agreements.models import Milestone as MilestoneModel
+                prev = MilestoneModel.objects.only("status").get(pk=milestone.pk)
+                old_status = prev.status
+            except Exception:
+                pass
+        if old_status and milestone.status != old_status:
+            if milestone.status == milestone.Status.APPROVED:
+                create_notification(
+                    recipient=employee,
+                    title=f"تم اعتماد المرحلة للطلب #{req.pk}",
+                    body=f"قام العميل {client} باعتماد المرحلة '{milestone.title}' ضمن الاتفاقية للطلب '{req.title}'.",
+                    url=milestone.get_absolute_url() if hasattr(milestone, "get_absolute_url") else None,
+                    actor=client,
+                    target=milestone,
+                )
+            elif milestone.status == milestone.Status.REJECTED:
+                create_notification(
+                    recipient=employee,
+                    title=f"تم رفض المرحلة من العميل للطلب #{req.pk}",
+                    body=f"قام العميل {client} برفض المرحلة '{milestone.title}' ضمن الاتفاقية للطلب '{req.title}'. يرجى مراجعة السبب واتخاذ الإجراء المناسب.",
+                    url=milestone.get_absolute_url() if hasattr(milestone, "get_absolute_url") else None,
+                    actor=client,
+                    target=milestone,
+                )
+    except Exception:
+        pass
+
     """
     سيناريو المعالجة:
     1) إذا أصبحت المرحلة APPROVED ⇒ أنشئ فاتورة مرتبطة إن لم تكن موجودة (idempotent).
@@ -100,6 +137,43 @@ def handle_milestone_post_save(sender, instance: Milestone, created: bool, **kwa
     if agreement is None:
         # حالة غير متوقعة: مرحلة بلا اتفاقية
         return
+
+    # إشعار للعميل عند وصول مرحلة جديدة للموافقة عليها
+    try:
+        MS_APPROVED = _milestone_status_approved(Milestone.__class__ if isinstance(Milestone, type) else Milestone)
+        if created and hasattr(milestone, "status") and str(getattr(milestone, "status", "")).lower() == str(MS_APPROVED).lower():
+            req = getattr(agreement, "request", None)
+            client = getattr(req, "client", None) if req else None
+            from notifications.utils import create_notification
+            if client:
+                create_notification(
+                    recipient=client,
+                    title=f"مرحلة جديدة بانتظار موافقتك للطلب #{req.pk}",
+                    body=f"تم إنشاء مرحلة جديدة ضمن الاتفاقية للطلب '{req.title}'. يرجى مراجعتها والموافقة عليها للمتابعة.",
+                    url=milestone.get_absolute_url() if hasattr(milestone, "get_absolute_url") else None,
+                    actor=getattr(agreement, "employee", None),
+                    target=milestone,
+                )
+    except Exception:
+        pass
+
+    # إشعار للعميل عند وصول اتفاقية جديدة للموافقة عليها
+    try:
+        if created and hasattr(agreement, "status") and str(getattr(agreement, "status", "")).lower() == str(getattr(Agreement.Status, "PENDING", "pending")).lower():
+            req = getattr(agreement, "request", None)
+            client = getattr(req, "client", None) if req else None
+            from notifications.utils import create_notification
+            if client:
+                create_notification(
+                    recipient=client,
+                    title=f"اتفاقية جديدة بانتظار موافقتك للطلب #{req.pk}",
+                    body=f"تم إنشاء اتفاقية جديدة للطلب '{req.title}'. يرجى مراجعتها والموافقة عليها للبدء في التنفيذ.",
+                    url=agreement.get_absolute_url() if hasattr(agreement, "get_absolute_url") else None,
+                    actor=getattr(agreement, "employee", None),
+                    target=agreement,
+                )
+    except Exception:
+        pass
 
     try:
         # استيرادات مؤجلة لتفادي الدوران

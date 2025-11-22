@@ -105,6 +105,25 @@ class ProfileView(LoginRequiredMixin, TemplateView):
     """
     template_name = "accounts/profile.html"
 
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        user = self.request.user
+        # فقط للعميل
+        if getattr(user, "role", None) == "client":
+            from django.db import models
+            from marketplace.models import Request
+            from finance.models import Invoice
+            # عدد الطلبات
+            requests_qs = Request.objects.filter(client=user)
+            context["client_requests_count"] = requests_qs.count()
+            # إجمالي المدفوع
+            paid_invoices = Invoice.objects.filter(agreement__request__client=user, status=getattr(Invoice.Status, "PAID", "paid"))
+            context["client_paid_total"] = paid_invoices.aggregate(total=models.Sum("amount"))['total'] or 0
+            # آخر 3 طلبات وحالتها
+            last_requests = requests_qs.order_by("-created_at")[:3]
+            context["client_last_requests"] = last_requests
+        return context
+
 
 class ProfileEditView(LoginRequiredMixin, UpdateView):
     """

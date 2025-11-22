@@ -1,4 +1,58 @@
 {% extends "base.html" %}
+{% if request.user.role == "client" %}
+  <section class="profile-section">
+    <h2 class="section-title">إحصائيات العميل</h2>
+    <div class="stats-grid">
+      <div class="stat-card">
+        <span class="stat-number">{{ client_requests_count }}</span>
+        <span class="stat-label">عدد الطلبات</span>
+      </div>
+      <div class="stat-card">
+        <span class="stat-number">{{ client_paid_total|floatformat:2 }}</span>
+        <span class="stat-label">إجمالي المدفوع</span>
+      </div>
+    </div>
+    <h3 class="section-title" style="margin-top:2rem;">آخر 3 طلبات</h3>
+      {% if client_last_requests and client_last_requests|length > 0 %}
+        <div class="last-request-box" style="margin-top:2rem;padding:1rem;background:#f8f9fa;border-radius:8px;box-shadow:0 1px 4px #eee;">
+          <h3 style="margin-bottom:1rem;">آخر طلب</h3>
+          {% with req=client_last_requests.0 %}
+            <ul style="list-style:none;padding:0;">
+              <li><strong>العنوان:</strong> {{ req.title }}</li>
+              <li><strong>الحالة:</strong> {{ req.get_status_display }}</li>
+              <li><strong>تاريخ الإنشاء:</strong> {{ req.created_at|date:"Y-m-d H:i" }}</li>
+            </ul>
+          {% endwith %}
+        </div>
+      {% else %}
+        <div class="alert alert-info" style="margin-top:2rem;">لا توجد طلبات لهذا العميل.</div>
+      {% endif %}
+    <table class="table table-clean">
+      <thead>
+        <tr>
+          <th>#</th>
+          <th>العنوان</th>
+          <th>الحالة</th>
+          <th>تاريخ الإنشاء</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for req in client_last_requests %}
+          <tr>
+            <td>{{ req.id }}</td>
+            <td>{{ req.title }}</td>
+            <td>{{ req.get_status_display }}</td>
+            <td>{{ req.created_at|date:"Y-m-d" }}</td>
+          </tr>
+        {% empty %}
+          <tr>
+            <td colspan="4" class="text-center text-muted">لا توجد طلبات</td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </section>
+{% endif %}
 {% block title %}ملفي الشخصي{% endblock %}
 
 {% block content %}
@@ -122,21 +176,31 @@
   <!-- قسم نظرة عامة / إحصائيات -->
   <section class="profile-section">
     <h2 class="section-title">نظرة عامة</h2>
-    {% if stats.activity_count or stats.notifications_count %}
+    {% if request.user.role == "client" %}
       <div class="stats-grid">
-        {% if stats.activity_count %}
         <div class="stat-card">
-          <span class="stat-number">{{ stats.activity_count }}</span>
-          <span class="stat-label">النشاطات</span>
+          <span class="stat-number">{{ client_requests_count }}</span>
+          <span class="stat-label">عدد الطلبات</span>
         </div>
-        {% endif %}
-        {% if stats.notifications_count %}
         <div class="stat-card">
-          <span class="stat-number">{{ stats.notifications_count }}</span>
-          <span class="stat-label">الإشعارات</span>
+          <span class="stat-number">{{ client_paid_total|floatformat:2 }}</span>
+          <span class="stat-label">إجمالي المدفوع</span>
         </div>
-        {% endif %}
       </div>
+      {% if client_last_requests and client_last_requests|length > 0 %}
+        <div class="last-request-box" style="margin-top:2rem;padding:1rem;background:#f8f9fa;border-radius:8px;box-shadow:0 1px 4px #eee;">
+          <h3 style="margin-bottom:1rem;">آخر طلب</h3>
+          {% with req=client_last_requests.0 %}
+            <ul style="list-style:none;padding:0;">
+              <li><strong>العنوان:</strong> {{ req.title }}</li>
+              <li><strong>الحالة:</strong> {{ req.get_status_display }}</li>
+              <li><strong>تاريخ الإنشاء:</strong> {{ req.created_at|date:"Y-m-d H:i" }}</li>
+            </ul>
+          {% endwith %}
+        </div>
+      {% else %}
+        <div class="alert alert-info" style="margin-top:2rem;">لا توجد طلبات لهذا العميل.</div>
+      {% endif %}
     {% else %}
       <div class="text-slate-500 text-center py-4">لا توجد إحصائيات متاحة حاليًا لهذا الحساب.</div>
     {% endif %}

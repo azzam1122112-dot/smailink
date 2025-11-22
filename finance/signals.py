@@ -90,12 +90,57 @@ def _invoice_pre_save_track_status(sender, instance: Invoice, **kwargs):
 
 @receiver(post_save, sender=Invoice)
 def _invoice_post_save_complete_request(sender, instance: Invoice, created: bool, **kwargs):
+    # إشعار للموظف عند سداد العميل للفاتورة
+    try:
+        PAID_VAL = _request_status_value(Invoice, "PAID", "paid")
+        old_status = getattr(instance, "__old_status", None)
+        new_status = getattr(instance, "status", None)
+        if new_status == PAID_VAL and new_status != old_status:
+            agreement = getattr(instance, "agreement", None)
+            employee = getattr(agreement, "employee", None) if agreement else None
+            req = getattr(agreement, "request", None) if agreement else None
+            client = getattr(req, "client", None) if req else None
+            from notifications.utils import create_notification
+            if employee:
+                create_notification(
+                    recipient=employee,
+                    title=f"تم دفع فاتورة للطلب #{req.pk}",
+                    body=f"قام العميل {client} بسداد فاتورة بقيمة {getattr(instance, 'amount', '')} ر.س للطلب '{req.title}'. يمكنك مراجعة التفاصيل في حسابك.",
+                    url=instance.get_absolute_url() if hasattr(instance, "get_absolute_url") else None,
+                    actor=client,
+                    target=instance,
+                )
+    except Exception:
+        pass
+
     """
     بعد حفظ الفاتورة: إن تغيّرت الحالة إلى (مدفوعة) نفّذ منطق إكمال الطلب/الاتفاقية
     في حال سُدِّدت **جميع الفواتير ذات الإجمالي > 0**.
     """
     if not FIN_AUTOCOMPLETE:
         return
+
+    # إشعار للعميل عند تغير حالة الفاتورة إلى مدفوعة
+    try:
+        PAID_VAL = _request_status_value(Invoice, "PAID", "paid")
+        old_status = getattr(instance, "__old_status", None)
+        new_status = getattr(instance, "status", None)
+        if new_status == PAID_VAL and new_status != old_status:
+            agreement = getattr(instance, "agreement", None)
+            req = getattr(agreement, "request", None) if agreement else None
+            client = getattr(req, "client", None) if req else None
+            from notifications.utils import create_notification
+            if client:
+                create_notification(
+                    recipient=client,
+                    title=f"تم دفع فاتورة طلبك #{req.pk}",
+                    body=f"تم دفع فاتورة بقيمة {getattr(instance, 'amount', '')} ر.س للطلب '{req.title}'. يمكنك مراجعة التفاصيل في حسابك.",
+                    url=instance.get_absolute_url() if hasattr(instance, "get_absolute_url") else None,
+                    actor=getattr(agreement, "employee", None),
+                    target=instance,
+                )
+    except Exception:
+        pass
 
     try:
         PAID_VAL = _request_status_value(Invoice, "PAID", "paid")
@@ -163,6 +208,22 @@ def _invoice_post_save_complete_request(sender, instance: Invoice, created: bool
                     req.updated_at = now
                     fields.append("updated_at")
                 req.save(update_fields=fields)
+
+                # إشعار للعميل عند اكتمال المشروع
+                try:
+                    client = getattr(req, "client", None)
+                    from notifications.utils import create_notification
+                    if client:
+                        create_notification(
+                            recipient=client,
+                            title=f"اكتمل تنفيذ مشروعك للطلب #{req.pk}",
+                            body=f"تم اكتمال جميع مراحل وفواتير المشروع '{req.title}'. يمكنك مراجعة التفاصيل في حسابك.",
+                            url=req.get_absolute_url() if hasattr(req, "get_absolute_url") else None,
+                            actor=getattr(agreement, "employee", None),
+                            target=req,
+                        )
+                except Exception:
+                    pass
 
             # وسم الاتفاقية كمكتملة (بحذر عبر فحص الخيارات)
             Agreement = apps.get_model("agreements", "Agreement")

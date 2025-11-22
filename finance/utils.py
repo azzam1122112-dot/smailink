@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from decimal import Decimal, ROUND_HALF_UP, InvalidOperation
-from typing import Tuple, Optional, Iterable, Dict, Any
+from typing import Tuple, Optional, Dict, Any
 from datetime import date, timedelta
 
 from django.conf import settings
@@ -12,17 +12,18 @@ from django.utils import timezone
 
 from .models import FinanceSettings
 
+
 # ============================
 # مفاتيح الكاش وإعداداته
 # ============================
-_FINANCE_CFG_CACHE_KEY = "finance:cfg:v2"  # v2 لتفريقه عن الإصدارات السابقة
+_FINANCE_CFG_CACHE_KEY = "finance:cfg:v3"  # v3 لتفريقه عن الإصدارات السابقة
 _FINANCE_CFG_TTL = getattr(settings, "FINANCE_CFG_TTL", 600)  # 10 دقائق افتراضيًا
 
 
 # ============================
 # محولات وتنسيقات آمنة
 # ============================
-def _to_dec(val, q: Optional[str] = None) -> Decimal:
+def _to_dec(val: Any, q: Optional[str] = None) -> Decimal:
     """تحويل آمن إلى Decimal مع تقريب اختياري."""
     if isinstance(val, Decimal):
         d = val
@@ -31,17 +32,18 @@ def _to_dec(val, q: Optional[str] = None) -> Decimal:
             d = Decimal(str(val))
         except (InvalidOperation, TypeError, ValueError):
             d = Decimal("0")
+
     if q:
         return d.quantize(Decimal(q), rounding=ROUND_HALF_UP)
     return d
 
 
-def money_q2(val) -> Decimal:
+def money_q2(val: Any) -> Decimal:
     """تقريب مبالغ نقدية إلى خانتين."""
     return _to_dec(val, "0.01")
 
 
-def percent_q4(val) -> Decimal:
+def percent_q4(val: Any) -> Decimal:
     """تقريب نسب إلى أربع خانات (0..1)."""
     return _to_dec(val, "0.0001")
 
@@ -73,8 +75,8 @@ class FinanceCfg:
 def _fetch_cfg_from_db() -> FinanceCfg:
     """يجلب الإعدادات من قاعدة البيانات مع سقوط آمن لقيم افتراضية."""
     cfg = FinanceSettings.get_solo()
-    fee = percent_q4(cfg.platform_fee_percent)
-    vat = percent_q4(cfg.vat_rate)
+    fee = percent_q4(getattr(cfg, "platform_fee_percent", 0))
+    vat = percent_q4(getattr(cfg, "vat_rate", 0))
     return FinanceCfg(
         platform_fee_percent=fee,
         vat_rate=vat,
@@ -117,14 +119,13 @@ def invalidate_finance_cfg_cache() -> None:
 def current_rates_cached() -> Tuple[Decimal, Decimal]:
     """
     يُرجع (platform_fee_percent, vat_rate) من الكاش/القاعدة.
-    مفيد عندما لا تريد استدعاء FinanceSettings.current_rates مباشرة.
     """
     cfg = get_finance_cfg()
     return cfg.platform_fee_percent, cfg.vat_rate
 
 
 # ============================
-# حساب صافي الموظف وإجمالي العميل من مبلغ أساسي
+# حساب الصافي والإجمالي حسب السياسة المعتمدة
 # ============================
 def calculate_financials_from_net(
     net_amount: Any,
@@ -132,24 +133,29 @@ def calculate_financials_from_net(
     vat_rate: Optional[Any] = None,
 ) -> Dict[str, Decimal]:
     """
-    يحسب القيم المالية الأساسية انطلاقًا من مبلغ صافي الموظف:
+    السياسة المعتمدة في SamiLink:
+
+    - العميل لا يتحمّل نسبة المنصّة.
+    - العميل يدفع: P + (P * VAT)
+    - صافي الموظف: P - (P * Fee)
+    - العمولة تُخصم من الموظف فقط.
 
     المدخل:
-      - net_amount: صافي الموظف (proposed_price في العرض)
-      - platform_fee_percent: نسبة عمولة المنصّة على مقياس 0..1 (مثال 0.10 لـ 10%)
-      - vat_rate: نسبة ضريبة القيمة المضافة على مقياس 0..1 (مثال 0.15 لـ 15%)
+      - net_amount: السعر المقترح P (في العروض/الفواتير)
+      - platform_fee_percent: نسبة عمولة المنصّة (0..1) مثال 0.10
+      - vat_rate: نسبة الضريبة (0..1) مثال 0.15
 
-    إذا لم تُمرَّر النسب، يتم جلبها من إعدادات المالية (FinanceSettings) عن طريق الكاش.
+    إذا لم تُمرَّر النسب، يتم جلبها من FinanceSettings عبر الكاش.
 
     المخرجات:
-      - net_for_employee: صافي الموظف (نفس net_amount بعد التقريب)
-      - platform_fee: قيمة عمولة المنصّة
-      - vat_amount: قيمة الضريبة على (الصافي + عمولة المنصّة)
-      - client_total: المبلغ النهائي الذي يدفعه العميل (صافي + عمولة + ضريبة)
+      - net_for_employee: صافي الموظف بعد خصم العمولة
+      - platform_fee: قيمة عمولة المنصّة (تخصم من الموظف)
+      - vat_amount: قيمة الضريبة على السعر المقترح فقط
+      - client_total: المبلغ الذي يدفعه العميل (السعر + الضريبة فقط)
     """
-    net = money_q2(net_amount)
+    P = money_q2(net_amount)
 
-    # fallback إلى الإعدادات المخزنة إذا لم تُمرَّر النسب يدويًا
+    # fallback للإعدادات إذا لم تُمرَّر النسب
     if platform_fee_percent is None or vat_rate is None:
         cfg = get_finance_cfg()
         if platform_fee_percent is None:
@@ -157,10 +163,10 @@ def calculate_financials_from_net(
         if vat_rate is None:
             vat_rate = cfg.vat_rate
 
-    pf = percent_q4(platform_fee_percent)
-    vr = percent_q4(vat_rate)
+    fee_p = percent_q4(platform_fee_percent)  # 0..1
+    vat_p = percent_q4(vat_rate)              # 0..1
 
-    if net <= Decimal("0.00"):
+    if P <= Decimal("0.00"):
         return {
             "net_for_employee": Decimal("0.00"),
             "platform_fee": Decimal("0.00"),
@@ -168,21 +174,13 @@ def calculate_financials_from_net(
             "client_total": Decimal("0.00"),
         }
 
-
-    # عمولة المنصة كنسبة من السعر المقترح
-    platform_fee = money_q2(net * pf)
-
-    # الضريبة على السعر المقترح فقط
-    vat_amount = money_q2(net * vr)
-
-    # المجموع قبل الضريبة = السعر المقترح + عمولة المنصة
-    subtotal = money_q2(net + platform_fee)
-
-    # الإجمالي الذي يدفعه العميل
-    client_total = money_q2(subtotal + vat_amount)
+    platform_fee = money_q2(P * fee_p)
+    vat_amount = money_q2(P * vat_p)
+    client_total = money_q2(P + vat_amount)
+    net_for_employee = money_q2(P - platform_fee)
 
     return {
-        "net_for_employee": money_q2(net - platform_fee),
+        "net_for_employee": net_for_employee,
         "platform_fee": platform_fee,
         "vat_amount": vat_amount,
         "client_total": client_total,
@@ -194,10 +192,7 @@ def calculate_financials(
     platform_fee_percent: Optional[Any] = None,
     vat_rate: Optional[Any] = None,
 ) -> Dict[str, Decimal]:
-    """
-    دالة غلاف (alias) لسهولة الاستخدام/التوافق الخلفي.
-    نفس سلوك calculate_financials_from_net تمامًا.
-    """
+    """Alias للتوافق الخلفي."""
     return calculate_financials_from_net(
         net_amount=net_amount,
         platform_fee_percent=platform_fee_percent,
@@ -217,10 +212,7 @@ def mask_iban(iban: str) -> str:
 
 
 def get_bank_config() -> Dict[str, str]:
-    """
-    يرجع إعدادات الحساب البنكي من settings مع قيم افتراضية آمنة للعرض.
-    تُستخدم في صفحات checkout/الفواتير.
-    """
+    """يرجع إعدادات الحساب البنكي من settings مع قيم افتراضية آمنة للعرض."""
     bank_name = getattr(settings, "BANK_NAME", "SAUDI BANK")
     bank_acc_name = getattr(settings, "BANK_ACCOUNT_NAME", "SamiLink LLC")
     bank_iban = getattr(settings, "BANK_IBAN", "SA00 0000 0000 0000 0000 0000")
@@ -233,23 +225,27 @@ def get_bank_config() -> Dict[str, str]:
 
 
 # ============================
-# فترات التقارير (ملائمة للقوالب)
+# فترات التقارير
 # ============================
-def parse_period_params(period: str | None, from_str: str | None, to_str: str | None) -> Tuple[Optional[date], Optional[date]]:
+def parse_period_params(
+    period: str | None,
+    from_str: str | None,
+    to_str: str | None
+) -> Tuple[Optional[date], Optional[date]]:
     """
     يحوّل مُدخلات الفترة إلى (d1, d2) تاريخين شامِلَين:
     period: today | 7d | 30d | custom
-    إذا custom: يعتمد from/to بصيغة YYYY-MM-DD (قد يكون أيًّا منهما فارغًا).
-    الافتراضي: آخر 30 يومًا.
     """
     p = (period or "").strip()
     today = date.today()
+
     if p == "today":
         return today, today
     if p == "7d":
         return today - timedelta(days=6), today
     if p == "30d":
         return today - timedelta(days=29), today
+
     if p == "custom":
         try:
             d1 = date.fromisoformat((from_str or "").strip()) if from_str else None
@@ -260,7 +256,7 @@ def parse_period_params(period: str | None, from_str: str | None, to_str: str | 
         except Exception:
             d2 = None
         return d1, d2
-    # default
+
     return today - timedelta(days=29), today
 
 
@@ -268,11 +264,8 @@ def parse_period_params(period: str | None, from_str: str | None, to_str: str | 
 # تجميعات منسّقة للفواتير
 # ============================
 def _invoice_status_values() -> Dict[str, str]:
-    """
-    إرجاع قيم حالات الفاتورة من نموذج Invoice دون استيراد على المستوى العلوي
-    (تفادي الدوائر). الاستيراد يتم داخل الدالة.
-    """
-    from .models import Invoice  # استيراد كسول
+    """إرجاع قيم حالات الفاتورة من نموذج Invoice دون استيراد على المستوى العلوي."""
+    from .models import Invoice
     return {
         "PAID": getattr(Invoice.Status, "PAID", "paid"),
         "UNPAID": getattr(Invoice.Status, "UNPAID", "unpaid"),
@@ -282,15 +275,10 @@ def _invoice_status_values() -> Dict[str, str]:
 
 def invoices_totals(qs) -> Dict[str, Decimal]:
     """
-    يحسب مجاميع أساسية على QuerySet للفواتير:
-    - total: مجموع amount
-    - paid: مجموع amount للحالة مدفوعة
-    - unpaid: مجموع amount لغير المدفوعة
-    - vat_total: مجموع VAT لكل الفواتير
-    - fee_total: مجموع عمولة المنصّة لكل الفواتير
-    ملاحظة: يعتمد الحقول الافتراضية (amount / vat_amount / platform_fee_amount).
+    يحسب مجاميع أساسية على QuerySet للفواتير اعتمادًا على الحقول المخزنة.
+    ملاحظة: بعض الفواتير القديمة قد تكون حقولها صفر.
     """
-    from django.db.models import Q, Sum  # محلي
+    from django.db.models import Q, Sum
     st = _invoice_status_values()
     agg = qs.aggregate(
         total=Sum("amount"),
@@ -298,6 +286,7 @@ def invoices_totals(qs) -> Dict[str, Decimal]:
         unpaid=Sum("amount", filter=Q(status=st["UNPAID"])),
         vat_total=Sum("vat_amount"),
         fee_total=Sum("platform_fee_amount"),
+        client_total=Sum("total_amount"),
     )
     return {
         "total": agg["total"] or Decimal("0.00"),
@@ -305,19 +294,93 @@ def invoices_totals(qs) -> Dict[str, Decimal]:
         "unpaid": agg["unpaid"] or Decimal("0.00"),
         "vat_total": agg["vat_total"] or Decimal("0.00"),
         "fee_total": agg["fee_total"] or Decimal("0.00"),
+        "client_total": agg["client_total"] or Decimal("0.00"),
+    }
+
+
+def invoices_totals_live(
+    qs,
+    platform_fee_percent: Optional[Any] = None,
+    vat_rate: Optional[Any] = None
+) -> Dict[str, Decimal]:
+    """
+    تجميعات "Live" تُحسب من amount مباشرة حسب السياسة المعتمدة،
+    مفيدة لو حقول vat_amount / platform_fee_amount في الفواتير القديمة غير محدثة.
+    """
+    from django.db.models import Q, Sum, F, Value, DecimalField, ExpressionWrapper
+    st = _invoice_status_values()
+
+    if platform_fee_percent is None or vat_rate is None:
+        cfg = get_finance_cfg()
+        if platform_fee_percent is None:
+            platform_fee_percent = cfg.platform_fee_percent
+        if vat_rate is None:
+            vat_rate = cfg.vat_rate
+
+    fee_p = percent_q4(platform_fee_percent)
+    vat_p = percent_q4(vat_rate)
+
+    fee_expr = ExpressionWrapper(
+        F("amount") * Value(fee_p),
+        output_field=DecimalField(max_digits=12, decimal_places=2)
+    )
+    vat_expr = ExpressionWrapper(
+        F("amount") * Value(vat_p),
+        output_field=DecimalField(max_digits=12, decimal_places=2)
+    )
+    client_expr = ExpressionWrapper(
+        F("amount") + vat_expr,
+        output_field=DecimalField(max_digits=12, decimal_places=2)
+    )
+    net_expr = ExpressionWrapper(
+        F("amount") - fee_expr,
+        output_field=DecimalField(max_digits=12, decimal_places=2)
+    )
+
+    agg = qs.aggregate(
+        total=Sum("amount"),
+        paid=Sum("amount", filter=Q(status=st["PAID"])),
+        unpaid=Sum("amount", filter=Q(status=st["UNPAID"])),
+        vat_total=Sum(vat_expr),
+        fee_total=Sum(fee_expr),
+        client_total=Sum(client_expr),
+        net_total=Sum(net_expr),
+    )
+
+    return {
+        "total": agg["total"] or Decimal("0.00"),
+        "paid": agg["paid"] or Decimal("0.00"),
+        "unpaid": agg["unpaid"] or Decimal("0.00"),
+        "vat_total": agg["vat_total"] or Decimal("0.00"),
+        "fee_total": agg["fee_total"] or Decimal("0.00"),
+        "client_total": agg["client_total"] or Decimal("0.00"),
+        "net_total": agg["net_total"] or Decimal("0.00"),
     }
 
 
 def employee_net_from_invoices(qs) -> Decimal:
-    """
-    صافي الموظف = مجموع P (amount) - مجموع عمولة المنصّة (platform_fee_amount)
-    على مجموعة فواتير معينة (قد تكون مُرشّحة مسبقاً حسب الموظف/الحالة).
-    """
-    from django.db.models import Sum  # محلي
+    """صافي الموظف = مجموع P - مجموع عمولة المنصّة."""
+    from django.db.models import Sum
     agg = qs.aggregate(p=Sum("amount"), fee=Sum("platform_fee_amount"))
     P = agg["p"] or Decimal("0.00")
     F = agg["fee"] or Decimal("0.00")
-    return (P - F) if P >= F else Decimal("0.00")
+    return money_q2(P - F) if P >= F else Decimal("0.00")
+
+
+def employee_net_from_invoices_live(qs, platform_fee_percent: Optional[Any] = None) -> Decimal:
+    """صافي الموظف "Live" من amount مباشرة."""
+    from django.db.models import Sum, F, Value, DecimalField, ExpressionWrapper
+
+    if platform_fee_percent is None:
+        platform_fee_percent = get_finance_cfg().platform_fee_percent
+
+    fee_p = percent_q4(platform_fee_percent)
+    net_expr = ExpressionWrapper(
+        F("amount") - (F("amount") * Value(fee_p)),
+        output_field=DecimalField(max_digits=12, decimal_places=2),
+    )
+    agg = qs.aggregate(net=Sum(net_expr))
+    return agg["net"] or Decimal("0.00")
 
 
 def invoice_eff_date(inv) -> Optional[timezone.datetime]:
@@ -329,19 +392,262 @@ def invoice_eff_date(inv) -> Optional[timezone.datetime]:
 
 
 # ============================
+# دفتر الحركة (Ledger) + الخزينة
+# ============================
+def record_ledger(
+    entry_type: str,
+    direction: str,
+    amount: Any,
+    *,
+    invoice=None,
+    payout=None,
+    refund=None,
+    tax_remittance=None,
+    created_by=None,
+    note: str = "",
+):
+    """
+    Helper موحّد لإضافة قيد خزينة بشكل آمن.
+    يستخدم lazy import لتجنّب circular imports.
+    """
+    from .models import LedgerEntry  # lazy
+
+    amt = money_q2(amount)
+    if amt <= Decimal("0.00"):
+        return None
+
+    # توحيد القيم إن أمكن
+    if hasattr(LedgerEntry, "Type"):
+        valid_types = {c.value for c in LedgerEntry.Type}
+        if entry_type not in valid_types:
+            entry_type = LedgerEntry.Type.CLIENT_PAYMENT
+
+    if hasattr(LedgerEntry, "Direction"):
+        valid_dirs = {c.value for c in LedgerEntry.Direction}
+        if direction not in valid_dirs:
+            direction = LedgerEntry.Direction.IN_
+
+    return LedgerEntry.objects.create(
+        entry_type=entry_type,
+        direction=direction,
+        amount=amt,
+        invoice=invoice,
+        payout=payout,
+        refund=refund,
+        tax_remittance=tax_remittance,
+        created_by=created_by,
+        note=(note or "")[:255],
+    )
+
+
+def treasury_balance() -> Decimal:
+    """رصيد الخزينة اللحظي = مجموع الدخول - مجموع الخروج (من الـLedger)."""
+    try:
+        from django.db.models import Sum, Q
+        from .models import LedgerEntry  # lazy
+
+        agg = LedgerEntry.objects.aggregate(
+            ins=Sum("amount", filter=Q(direction=LedgerEntry.Direction.IN_)),
+            outs=Sum("amount", filter=Q(direction=LedgerEntry.Direction.OUT)),
+        )
+        ins = agg["ins"] or Decimal("0.00")
+        outs = agg["outs"] or Decimal("0.00")
+        return money_q2(ins - outs)
+    except Exception:
+        # سقوط آمن لو الجدول غير موجود أو لم يُفعّل بعد
+        return Decimal("0.00")
+
+
+def vat_stock() -> Decimal:
+    """مخزون VAT الحالي = VAT محصّل من العملاء (مدفوعة) - VAT مُورّدة."""
+    from django.db.models import Sum
+    from .models import Invoice, TaxRemittance  # lazy
+
+    st = _invoice_status_values()
+    paid_vat = (
+        Invoice.objects.filter(status=st["PAID"])
+        .aggregate(s=Sum("vat_amount"))["s"]
+        or Decimal("0.00")
+    )
+    remitted = (
+        TaxRemittance.objects
+        .exclude(status=getattr(TaxRemittance.Status, "CANCELLED", "cancelled"))
+        .aggregate(s=Sum("amount"))["s"]
+        or Decimal("0.00")
+    )
+    return money_q2(paid_vat - remitted)
+
+
+def pending_employee_payable() -> Decimal:
+    """إجمالي مستحقات الموظفين بانتظار الصرف (Pending Payouts)."""
+    from django.db.models import Sum
+    from .models import Payout  # lazy
+
+    pending = (
+        Payout.objects.filter(status=getattr(Payout.Status, "PENDING", "pending"))
+        .aggregate(s=Sum("amount"))["s"]
+        or Decimal("0.00")
+    )
+    return money_q2(pending)
+
+
+def customer_liability() -> Decimal:
+    """التزامات العملاء = إجمالي ما دفعه العملاء - ما صُرف للموظفين - ما رُدّ للعملاء."""
+    from django.db.models import Sum
+    from .models import Invoice, Payout, Refund  # lazy
+
+    st = _invoice_status_values()
+    paid_invoices_total = (
+        Invoice.objects.filter(status=st["PAID"])
+        .aggregate(s=Sum("total_amount"))["s"]
+        or Decimal("0.00")
+    )
+    paid_payouts_total = (
+        Payout.objects.filter(status=getattr(Payout.Status, "PAID", "paid"))
+        .aggregate(s=Sum("amount"))["s"]
+        or Decimal("0.00")
+    )
+    refunded_total = (
+        Refund.objects.filter(status=getattr(Refund.Status, "SENT", "sent"))
+        .aggregate(s=Sum("amount"))["s"]
+        or Decimal("0.00")
+    )
+
+    return money_q2(paid_invoices_total - paid_payouts_total - refunded_total)
+
+
+def treasury_snapshot() -> Dict[str, Decimal]:
+    """
+    Snapshot جاهز للوحة المالية:
+    - treasury_balance
+    - customer_liability
+    - pending_employee_payable
+    - vat_stock
+    """
+    return {
+        "treasury_balance": treasury_balance(),
+        "customer_liability": customer_liability(),
+        "pending_employee_payable": pending_employee_payable(),
+        "vat_stock": vat_stock(),
+    }
+
+
+# ============================
+# استحقاق صرف الموظف (Eligibility)
+# ============================
+@dataclass
+class PayoutEligibility:
+    ok: bool
+    reason: str = ""
+
+
+def is_eligible_for_payout(
+    *,
+    agreement=None,
+    invoice=None,
+    now=None,
+    safety_days: int = 3,
+) -> PayoutEligibility:
+    """
+    يقرر هل الموظف مستحق للصرف الآن.
+
+    الشروط:
+    1) الطلب مكتمل (completed).
+    2) الفاتورة مدفوعة (paid) + لها paid_at.
+    3) لا يوجد نزاع (disputed).
+    4) مرّت نافذة الأمان safety_days بعد paid_at.
+    5) لا يوجد أمر صرف سابق غير ملغي لنفس الاتفاقية/الفاتورة.
+    """
+    from finance.models import Payout
+    from finance.models import Invoice
+    from agreements.models import Agreement
+    from marketplace.models import Request
+
+    now = now or timezone.now()
+
+    if invoice is None and agreement is None:
+        return PayoutEligibility(False, "يلزم تمرير agreement أو invoice.")
+
+    if invoice is None and agreement is not None:
+        paid_val = getattr(getattr(Invoice, "Status", None), "PAID", "paid")
+        invoice = (
+            Invoice.objects
+            .filter(agreement=agreement, status=paid_val)
+            .order_by("-paid_at", "-issued_at", "-id")
+            .first()
+        )
+
+    if agreement is None and invoice is not None:
+        agreement = getattr(invoice, "agreement", None)
+
+    if agreement is None:
+        return PayoutEligibility(False, "الاتفاقية غير موجودة.")
+    if invoice is None:
+        return PayoutEligibility(False, "لا توجد فاتورة مدفوعة مرتبطة بالاتفاقية.")
+
+    req = getattr(agreement, "request", None)
+    if req is None:
+        return PayoutEligibility(False, "الطلب غير مرتبط بالاتفاقية.")
+
+    completed_req_val = getattr(getattr(Request, "Status", None), "COMPLETED", "completed")
+    disputed_req_val = getattr(getattr(Request, "Status", None), "DISPUTED", "disputed")
+    paid_inv_val = getattr(getattr(Invoice, "Status", None), "PAID", "paid")
+    cancelled_payout_val = getattr(getattr(Payout, "Status", None), "CANCELLED", "cancelled")
+
+    # 1) الطلب مكتمل
+    if (getattr(req, "status", "") or "").lower() != str(completed_req_val).lower():
+        return PayoutEligibility(False, "الطلب غير مكتمل بعد.")
+
+    # 2) الفاتورة مدفوعة
+    if (getattr(invoice, "status", "") or "").lower() != str(paid_inv_val).lower():
+        return PayoutEligibility(False, "الفاتورة غير مدفوعة.")
+    paid_at = getattr(invoice, "paid_at", None)
+    if not paid_at:
+        return PayoutEligibility(False, "تاريخ الدفع غير متوفر.")
+
+    # 3) لا نزاع
+    if (getattr(req, "status", "") or "").lower() == str(disputed_req_val).lower():
+        return PayoutEligibility(False, "مجمّد بسبب نزاع على الطلب.")
+
+    # 4) نافذة الأمان (قابلة للضبط مستقبلاً من FinanceSettings إن أضفت الحقل)
+    try:
+        cfg = FinanceSettings.get_solo()
+        safety_days = int(getattr(cfg, "payout_safety_days", safety_days) or safety_days)
+    except Exception:
+        safety_days = safety_days
+
+    ready_at = paid_at + timedelta(days=max(safety_days, 0))
+    if now < ready_at:
+        remaining = (ready_at - now).days + 1
+        return PayoutEligibility(False, f"بانتظار نافذة الأمان ({remaining} يوم/أيام).")
+
+    # 5) منع تكرار الصرف
+    exists = (
+        Payout.objects
+        .filter(agreement=agreement)
+        .exclude(status=cancelled_payout_val)
+        .exists()
+    )
+    if exists:
+        return PayoutEligibility(False, "تم إصدار أمر صرف سابق لهذه الاتفاقية.")
+
+    return PayoutEligibility(True, "جاهز للصرف.")
+
+
+# ============================
 # Webhook: توقيع HMAC (اختياري)
 # ============================
-def verify_webhook_signature(body: bytes, header_signature: str, secret: Optional[str]) -> bool:
-    """
-    يتحقق من HMAC-SHA256 للـ body باستخدام secret.
-    يعيد True إذا تطابق التوقيع مع الهيدر 'X-Payment-Signature'.
-    """
+def verify_webhook_signature(
+    body: bytes,
+    header_signature: str,
+    secret: Optional[str]
+) -> bool:
+    """يتحقق من HMAC-SHA256 للـ body باستخدام secret."""
     if not secret:
         return False
     try:
-        import hmac, hashlib  # محلي لتجنّب الاستيراد غير اللازم
+        import hmac, hashlib
         calc = hmac.new(secret.encode("utf-8"), body or b"", hashlib.sha256).hexdigest()
-        # استخدام compare_digest للحماية من التوقيت
         return hmac.compare_digest((header_signature or ""), calc)
     except Exception:
         return False

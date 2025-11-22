@@ -76,7 +76,7 @@
                 
                 {% if r.client and r.client.phone %}
                   <div class="employee-location" style="margin-top: 0.25rem;">
-                    <span>📞 {{ r.client.phone }}</span>
+                    <span>📞 {{ r.client.phone|slice:":-4"|add:"****" }}</span>
                   </div>
                 {% endif %}
               </div>

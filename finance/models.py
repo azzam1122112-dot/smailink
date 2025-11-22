@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from decimal import Decimal, ROUND_HALF_UP, InvalidOperation
 from datetime import timedelta
-from typing import Optional, Iterable, Tuple, Dict
+from typing import Optional, Iterable, Tuple, Dict, Any
 
 from django.conf import settings
 from django.core.exceptions import ValidationError
@@ -15,6 +15,52 @@ from django.utils import timezone
 
 # ملاحظة: استخدام السلسلة من settings.AUTH_USER_MODEL آمن كقيمة ForeignKey
 User = settings.AUTH_USER_MODEL
+
+
+# =========================================================
+# أدوات مالية مساعدة (quantize / Decimal)
+# =========================================================
+def _as_decimal(val: Any) -> Decimal:
+    if isinstance(val, Decimal):
+        return val
+    try:
+        return Decimal(str(val or "0"))
+    except (InvalidOperation, TypeError, ValueError):
+        return Decimal("0")
+
+def _q2(val: Any) -> Decimal:
+    return _as_decimal(val).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+
+def _q4(val: Any) -> Decimal:
+    return _as_decimal(val).quantize(Decimal("0.0001"), rounding=ROUND_HALF_UP)
+
+def _compute_breakdown(P: Any, pf: Any, vp: Any) -> Dict[str, Decimal]:
+    """
+    السياسة المعتمدة:
+    - العميل لا يتحمل عمولة المنصّة
+    - إجمالي العميل = P + P*VAT
+    - صافي الموظف = P - P*Fee
+    """
+    P = _q2(P)
+    pf = _q4(pf)
+    vp = _q4(vp)
+
+    fee_value = _q2(P * pf)          # عمولة تخصم من الموظف
+    vat_value = _q2(P * vp)          # ضريبة على السعر المقترح فقط
+
+    client_total = _q2(P + vat_value)
+    tech_net = _q2(P - fee_value) if P >= fee_value else Decimal("0.00")
+
+    return {
+        "P": P,
+        "fee_percent": pf,
+        "fee_value": fee_value,
+        "vat_percent": vp,
+        "vat_value": vat_value,
+        "subtotal": P,               # للعرض
+        "client_total": client_total,
+        "tech_net": tech_net,
+    }
 
 
 # =========================================================
@@ -61,23 +107,18 @@ class FinanceSettings(models.Model):
     def current_rates(cls) -> Tuple[Decimal, Decimal]:
         """
         تُرجِع (platform_fee_percent, vat_rate) من FinanceSettings فقط.
-
-        - مصدر الحقيقة الوحيد للنِّسَب هو هذا الجدول (الذي يتم ضبطه من صفحة
-          إعدادات المالية في لوحة التحكم).
-        - لا يتم الاعتماد على settings ولا على متغيّرات بيئة في الحسابات التشغيلية.
+        - مصدر الحقيقة الوحيد للنِّسَب هو هذا الجدول.
         """
         try:
             cfg = cls.get_solo()
             fee = cfg.platform_fee_percent
             vat = cfg.vat_rate
         except Exception:
-            # في الحالات الاستثنائية جدًا (قبل إنشاء السجل مثلًا)
-            # نستخدم نفس القيم الافتراضية المعرفة في الحقول.
             fee = Decimal("0.10")
             vat = Decimal("0.15")
 
-        fee = Decimal(fee).quantize(Decimal("0.0001"), rounding=ROUND_HALF_UP)
-        vat = Decimal(vat).quantize(Decimal("0.0001"), rounding=ROUND_HALF_UP)
+        fee = _q4(fee)
+        vat = _q4(vat)
         return fee, vat
 
 
@@ -101,6 +142,7 @@ class Payout(models.Model):
         null=True,
         blank=True,
         related_name="payouts",
+        verbose_name="الاتفاقية",
     )
     invoice = models.ForeignKey(
         "finance.Invoice",
@@ -108,6 +150,7 @@ class Payout(models.Model):
         null=True,
         blank=True,
         related_name="payouts",
+        verbose_name="الفاتورة",
     )
 
     amount = models.DecimalField(
@@ -120,6 +163,7 @@ class Payout(models.Model):
         max_length=20,
         choices=Status.choices,
         default=Status.PENDING,
+        db_index=True,
     )
     method = models.CharField("طريقة الصرف", max_length=50, blank=True, default="")
     ref_code = models.CharField("مرجع العملية", max_length=100, blank=True, default="")
@@ -141,6 +185,8 @@ class Payout(models.Model):
         return f"Payout#{self.pk} to {self.employee_id} — {self.amount} ({self.status})"
 
     def mark_paid(self, *, method: str = "", ref: str = "") -> None:
+        if self.status == self.Status.PAID:
+            return
         self.status = self.Status.PAID
         if method:
             self.method = method[:50]
@@ -149,6 +195,74 @@ class Payout(models.Model):
         if not self.paid_at:
             self.paid_at = timezone.now()
         self.save(update_fields=["status", "method", "ref_code", "paid_at", "updated_at"])
+
+
+# =========================================================
+# توريدات الضريبة (VAT Remittance)
+# =========================================================
+class TaxRemittance(models.Model):
+    """
+    يمثل عملية توريد/خصم ضريبة VAT للجهة الحكومية.
+    لا نخزن "مخزن الضريبة" كحقل ثابت؛ بل نحسبه:
+        VAT Collected - VAT Remitted
+    """
+
+    class Status(models.TextChoices):
+        PENDING = "pending", "قيد الانتظار"
+        SENT = "sent", "تم التوريد"
+        CANCELLED = "cancelled", "ملغي"
+
+    amount = models.DecimalField(
+        "مبلغ التوريد",
+        max_digits=12,
+        decimal_places=2,
+        validators=[MinValueValidator(Decimal("0.01"))],
+        help_text="إجمالي الضريبة المُورَّدة في هذه العملية.",
+    )
+    period_from = models.DateField("من تاريخ", null=True, blank=True)
+    period_to = models.DateField("إلى تاريخ", null=True, blank=True)
+
+    status = models.CharField(
+        max_length=20,
+        choices=Status.choices,
+        default=Status.PENDING,
+        db_index=True,
+    )
+    ref_code = models.CharField(
+        "مرجع التوريد",
+        max_length=100,
+        blank=True,
+        default="",
+        db_index=True,
+        help_text="رقم مرجع السداد/التحويل للضريبة.",
+    )
+    note = models.CharField("ملاحظة", max_length=255, blank=True, default="")
+
+    created_at = models.DateTimeField("تاريخ الإنشاء", auto_now_add=True, db_index=True)
+    sent_at = models.DateTimeField("تاريخ التوريد", null=True, blank=True, db_index=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["-created_at", "-id"]
+        indexes = [
+            models.Index(fields=["status", "created_at"]),
+            models.Index(fields=["period_from", "period_to"]),
+        ]
+        verbose_name = "توريد ضريبة"
+        verbose_name_plural = "توريدات الضريبة"
+
+    def __str__(self) -> str:
+        return f"TaxRemittance#{self.pk} {self.amount} ({self.get_status_display()})"
+
+    def mark_sent(self, *, ref: str = "") -> None:
+        if self.status == self.Status.SENT:
+            return
+        self.status = self.Status.SENT
+        if ref:
+            self.ref_code = ref[:100]
+        if not self.sent_at:
+            self.sent_at = timezone.now()
+        self.save(update_fields=["status", "ref_code", "sent_at", "updated_at"])
 
 
 # =========================================================
@@ -171,8 +285,11 @@ class InvoiceQuerySet(models.QuerySet):
         now = timezone.now()
         return self.unpaid().filter(due_at__isnull=False, due_at__lt=now)
 
-    # تجميعات مفيدة للتقارير
     def totals(self) -> Dict[str, Decimal]:
+        """
+        تجميعات مفيدة للتقارير.
+        بعد التحديث: fee/vat/total تُحسب وتُحفظ داخل Invoice.
+        """
         agg = self.aggregate(
             amount=Sum("amount"),
             fee=Sum("platform_fee_amount"),
@@ -193,9 +310,11 @@ class InvoiceQuerySet(models.QuerySet):
 class Invoice(models.Model):
     """
     فاتورة مالية مرتبطة باتفاقية (Agreement)، وقد تُسند إلى مرحلة (Milestone).
-    • تدعم تحصيل كامل المبلغ مقدّمًا (Escrow).
-    • VAT تُحتسب على (P + عمولة المنصّة).
-    • توافق خلفي: الحقل amount هو الأساس (P) وباقي الإجماليات تُعاد اشتقاقها عند الحفظ.
+
+    السياسة المالية المعتمدة:
+    - العميل لا يتحمل نسبة المنصّة.
+    - total_amount (الذي يراه العميل ويدفعه) = P + VAT(P)
+    - platform_fee_amount تُخصم من الموظف فقط.
     """
 
     class Status(models.TextChoices):
@@ -203,7 +322,6 @@ class Invoice(models.Model):
         PAID = "paid", "مدفوعة"
         CANCELLED = "cancelled", "ملغاة"
 
-    # -------- ارتباطات --------
     agreement = models.ForeignKey(
         "agreements.Agreement",
         on_delete=models.CASCADE,
@@ -220,8 +338,7 @@ class Invoice(models.Model):
         help_text="يُفضّل فاتورة واحدة لكل مرحلة.",
     )
 
-    # -------- مبالغ أساسية --------
-    # P: قيمة الخدمة/المرحلة قبل الرسوم والضريبة (الأساس المحاسبي)
+    # P: قيمة الخدمة/المرحلة قبل الرسوم والضريبة
     amount = models.DecimalField(
         "المبلغ (P)",
         max_digits=12,
@@ -229,13 +346,13 @@ class Invoice(models.Model):
         default=Decimal("0.00"),
     )
 
-    # جميع الحقول المالية تعتمد فقط على المبلغ المدخل (amount)
+    # نسب محفوظة (0..1)
     platform_fee_percent = models.DecimalField(
-        "نسبة المنصّة",
+        "نسبة المنصّة (0..1)",
         max_digits=5,
         decimal_places=4,
         default=Decimal("0.00"),
-        help_text="تم تعطيل الحسابات التلقائية."
+        help_text="تُخصم من الموظف فقط.",
     )
     platform_fee_amount = models.DecimalField(
         "قيمة عمولة المنصّة",
@@ -243,12 +360,13 @@ class Invoice(models.Model):
         decimal_places=2,
         default=Decimal("0.00"),
     )
+
     vat_percent = models.DecimalField(
-        "نسبة الضريبة VAT",
+        "نسبة الضريبة VAT (0..1)",
         max_digits=5,
         decimal_places=4,
         default=Decimal("0.00"),
-        help_text="تم تعطيل الحسابات التلقائية."
+        help_text="ضريبة على السعر المقترح فقط.",
     )
     vat_amount = models.DecimalField(
         "قيمة الضريبة",
@@ -256,49 +374,48 @@ class Invoice(models.Model):
         decimal_places=2,
         default=Decimal("0.00"),
     )
+
     subtotal = models.DecimalField(
-        "المجموع الفرعي",
+        "المجموع الفرعي (P)",
         max_digits=12,
         decimal_places=2,
         default=Decimal("0.00"),
-        help_text="تم تعطيل الحسابات التلقائية."
+        help_text="يساوي P للعرض.",
     )
     total_amount = models.DecimalField(
-        "الإجمالي المستحق",
+        "الإجمالي المستحق من العميل",
         max_digits=12,
         decimal_places=2,
         default=Decimal("0.00"),
-        help_text="المبلغ النهائي الذي يراه العميل ويدفعه (المبلغ المدخل فقط)",
+        help_text="= P + ضريبة P.",
     )
 
-    # -------- الحالة والتواريخ --------
     status = models.CharField(
         max_length=16,
         choices=Status.choices,
         default=Status.UNPAID,
+        db_index=True,
     )
     issued_at = models.DateTimeField("تاريخ الإصدار", default=timezone.now, db_index=True)
     due_at = models.DateTimeField("موعد السداد", null=True, blank=True, db_index=True)
     paid_at = models.DateTimeField("تاريخ السداد", null=True, blank=True, db_index=True)
 
-    # -------- معلومات الدفع --------
-    method = models.CharField("طريقة السداد", max_length=50, blank=True)  # مثال: حوالة/مدى/فيزا
-    ref_code = models.CharField(  # مرجع بوابة/عملية داخلي
+    method = models.CharField("طريقة السداد", max_length=50, blank=True)
+    ref_code = models.CharField(
         "مرجع العملية",
         max_length=100,
         blank=True,
         db_index=True,
         help_text="مرجع الدفع من بوابة/حوالة (قد لا يكون فريدًا).",
     )
-    paid_ref = models.CharField(  # مرجع التحويل البنكي الحقيقي من العميل
+    paid_ref = models.CharField(
         "مرجع الدفع البنكي",
         max_length=64,
         blank=True,
         null=True,
-        help_text="رقم/مرجع التحويل البنكي الذي يرسله العميل أو تسجله المالية بعد المراجعة.",
+        help_text="مرجع التحويل البنكي الذي يرسله العميل.",
     )
 
-    # -------- تتبّع --------
     created_by = models.ForeignKey(
         User,
         on_delete=models.SET_NULL,
@@ -317,10 +434,9 @@ class Invoice(models.Model):
             models.Index(fields=["agreement"]),
             models.Index(fields=["paid_at"]),
             models.Index(fields=["due_at"]),
-            models.Index(fields=["paid_ref"]),  # للبحث السريع بمرجع التحويل
+            models.Index(fields=["paid_ref"]),
         ]
         constraints = [
-            # فاتورة واحدة كحد أقصى لكل Milestone (إن وُجدت)
             models.UniqueConstraint(
                 fields=["milestone"],
                 condition=Q(milestone__isnull=False),
@@ -331,22 +447,15 @@ class Invoice(models.Model):
         verbose_name = "فاتورة"
         verbose_name_plural = "فواتير"
 
-    # ======================
-    #  تمثيل وروابط
-    # ======================
-    def __str__(self) -> str:  # pragma: no cover
+    def __str__(self) -> str:
         return f"Invoice#{self.pk} A{self.agreement_id} — {self.get_status_display()} {self.total_amount}"
 
     def get_absolute_url(self) -> str:
         return reverse("finance:invoice_detail", kwargs={"pk": self.pk})
 
     def get_mark_paid_url(self) -> str:
-        # تأكد من وجود المسار المماثل في finance/urls.py
         return reverse("finance:mark_invoice_paid", kwargs={"pk": self.pk})
 
-    # ======================
-    #  خصائص مشتقة
-    # ======================
     @property
     def is_unpaid(self) -> bool:
         return self.status == self.Status.UNPAID
@@ -361,125 +470,135 @@ class Invoice(models.Model):
 
     @property
     def is_overdue(self) -> bool:
-        """متأخرة: غير مدفوعة وتجاوزت موعد السداد."""
         return bool(self.is_unpaid and self.due_at and self.due_at < timezone.now())
 
     @property
     def effective_date(self):
-        """eff_date: تاريخ احتساب للتقارير (paid_at أو issued_at)."""
         return self.paid_at or self.issued_at
 
     @property
     def tech_net(self) -> Decimal:
-        """صافي الموظف من هذه الفاتورة (P - عمولة المنصة)."""
-        P = self._as_decimal(self.amount)
-        F = self._as_decimal(self.platform_fee_amount)
-        return (P - F) if P >= F else Decimal("0.00")
+        """
+        صافي الموظف الحقيقي من هذه الفاتورة = P - Fee(P)
+        """
+        return _compute_breakdown(self.amount, self.platform_fee_percent, self.vat_percent)["tech_net"]
+
+    @property
+    def client_total_amount(self) -> Decimal:
+        """
+        إجمالي ما يدفعه العميل = P + VAT(P)
+        """
+        return _compute_breakdown(self.amount, self.platform_fee_percent, self.vat_percent)["client_total"]
 
     @property
     def as_breakdown(self) -> Dict[str, Decimal]:
-        """تفصيل مبالغ الفاتورة كقاموس مفيد للواجهات."""
+        bd = _compute_breakdown(self.amount, self.platform_fee_percent, self.vat_percent)
         return {
-            "P": self._q2(self.amount),
-            "fee_percent": self._q4(self.platform_fee_percent),
-            "fee_value": self._q2(self.platform_fee_amount),
-            "subtotal": self._q2(self.subtotal),
-            "vat_percent": self._q4(self.vat_percent),
-            "vat_value": self._q2(self.vat_amount),
-            "total": self._q2(self.total_amount),
+            "P": bd["P"],
+            "fee_percent": bd["fee_percent"],
+            "fee_value": bd["fee_value"],
+            "subtotal": bd["subtotal"],
+            "vat_percent": bd["vat_percent"],
+            "vat_value": bd["vat_value"],
+            "total": bd["client_total"],
+            "tech_net": bd["tech_net"],
         }
-
-    # ======================
-    #  أدوات حسابية
-    # ======================
-    @staticmethod
-    def _as_decimal(val) -> Decimal:
-        """تحويل آمن إلى Decimal."""
-        if isinstance(val, Decimal):
-            return val
-        try:
-            return Decimal(str(val or "0"))
-        except (InvalidOperation, TypeError, ValueError):
-            return Decimal("0")
-
-    @staticmethod
-    def _q2(val: Decimal) -> Decimal:
-        """تقريب إلى خانتين عشريتين بطريقة آمنة."""
-        return Invoice._as_decimal(val).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
-
-    @staticmethod
-    def _q4(val: Decimal) -> Decimal:
-        """تقريب إلى أربع خانات (مفيد للنِّسب)."""
-        return Invoice._as_decimal(val).quantize(Decimal("0.0001"), rounding=ROUND_HALF_UP)
 
     def recompute_totals(self) -> None:
         """
-        حساب تلقائي للحقول المالية:
-        - platform_fee_amount = amount × platform_fee_percent
-        - vat_amount = amount × vat_percent
-        - total_amount = amount + platform_fee_amount + vat_amount
+        إعادة حساب جميع الإجماليات وفق السياسة المعتمدة.
         """
-        amount = self._as_decimal(self.amount)
-        platform_fee_percent = self._as_decimal(self.platform_fee_percent)
-        vat_percent = self._as_decimal(self.vat_percent)
-        self.platform_fee_amount = (amount * platform_fee_percent).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
-        self.subtotal = amount
-        self.vat_amount = (amount * vat_percent).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
-        self.total_amount = (amount + self.platform_fee_amount + self.vat_amount).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+        # لو النِّسب غير مُحددة نستخدم إعدادات المنصّة
+        if self.platform_fee_percent is None or self.platform_fee_percent == Decimal("0.00"):
+            fee, _ = FinanceSettings.current_rates()
+            self.platform_fee_percent = fee
+
+        if self.vat_percent is None or self.vat_percent == Decimal("0.00"):
+            _, vat = FinanceSettings.current_rates()
+            self.vat_percent = vat
+
+        bd = _compute_breakdown(self.amount, self.platform_fee_percent, self.vat_percent)
+
+        self.platform_fee_amount = bd["fee_value"]   # تخصم من الموظف
+        self.vat_amount = bd["vat_value"]            # على السعر فقط
+        self.subtotal = bd["subtotal"]               # = P
+        self.total_amount = bd["client_total"]       # ما يدفعه العميل
 
     def recalc_and_save(self, *, update_timestamps: bool = True) -> None:
-        """
-        تم تعطيل أي حساب تلقائي. جميع الحقول المالية تعتمد فقط على المبلغ المدخل (amount).
-        """
         self.recompute_totals()
-        fields = ["platform_fee_amount", "subtotal", "vat_amount", "total_amount"]
+        fields = [
+            "platform_fee_percent",
+            "platform_fee_amount",
+            "subtotal",
+            "vat_percent",
+            "vat_amount",
+            "total_amount",
+        ]
         if update_timestamps and hasattr(self, "updated_at"):
             self.updated_at = timezone.now()
             fields.append("updated_at")
         self.save(update_fields=fields)
 
-    # ======================
-    #  ضمان سلامة البيانات
-    # ======================
     def clean(self):
         super().clean()
 
-        # عدم السماح بالقيم السالبة
         for fld in ("amount", "platform_fee_amount", "subtotal", "vat_amount", "total_amount"):
-            val = self._as_decimal(getattr(self, fld, None))
+            val = _as_decimal(getattr(self, fld, None))
             if val < 0:
                 raise ValidationError({fld: "لا يمكن أن يكون سالبًا."})
 
-        # نسب داخل النطاق [0, 1]
         for fld in ("platform_fee_percent", "vat_percent"):
-            v = self._as_decimal(getattr(self, fld, 0))
+            v = _as_decimal(getattr(self, fld, 0))
             if v < 0 or v > 1:
                 raise ValidationError({fld: "النسبة يجب أن تكون بين 0 و 1."})
 
-        # توافق الاتفاقية عند وجود milestone
         if self.milestone_id and self.agreement_id:
             ms_agreement_id = getattr(self.milestone, "agreement_id", None)
             if ms_agreement_id and ms_agreement_id != self.agreement_id:
                 raise ValidationError("الاتفاقية المرتبطة لا تتطابق مع اتفاقية المرحلة.")
 
-        # due_at إن وُجد يجب ألا يسبق issued_at
         if self.due_at and self.issued_at and self.due_at < self.issued_at:
             raise ValidationError({"due_at": "موعد السداد لا يمكن أن يسبق تاريخ الإصدار."})
 
-        # paid_at إن وُجد يجب ألا يسبق issued_at
         if self.paid_at and self.issued_at and self.paid_at < self.issued_at:
             raise ValidationError({"paid_at": "تاريخ السداد لا يمكن أن يسبق تاريخ الإصدار."})
 
     def save(self, *args, **kwargs):
-        """
-        تم تعطيل أي منطق حسابي تلقائي. جميع الحقول المالية تعتمد فقط على المبلغ المدخل (amount).
-        """
+        is_new = self.pk is None
         self.recompute_totals()
-        return super().save(*args, **kwargs)
+        result = super().save(*args, **kwargs)
 
-    # ======================
-    #  واجهة عمليات الدفع
-    # ======================
+        # إشعار المالية عند إنشاء فاتورة جديدة
+        try:
+            if is_new:
+                from core.notifications.utils import notify_finance_of_invoice
+                notify_finance_of_invoice(self)
+        except Exception:
+            pass
+
+        # إشعار المدير عند وجود فاتورة متأخرة بعد 3 أيام من إصدارها ولم تُدفع
+        try:
+            from django.contrib.auth import get_user_model
+            from notifications.utils import create_notification
+            User = get_user_model()
+            admin_users = User.objects.filter(role="admin", is_active=True)
+            if self.status != getattr(self.Status, "PAID", "paid") and self.issued_at:
+                from django.utils import timezone
+                overdue_days = 3
+                if (timezone.now() - self.issued_at).days >= overdue_days:
+                    for user in admin_users:
+                        create_notification(
+                            recipient=user,
+                            title=f"فاتورة متأخرة #{self.pk}",
+                            body=f"فاتورة بقيمة {self.amount} ر.س للطلب المرتبط لم تُدفع منذ أكثر من {overdue_days} أيام.",
+                            url=self.get_absolute_url() if hasattr(self, "get_absolute_url") else None,
+                            actor=getattr(self.agreement, "employee", None) if hasattr(self, "agreement") else None,
+                            target=self,
+                        )
+        except Exception:
+            pass
+        return result
+
     def mark_paid(
         self,
         *,
@@ -490,12 +609,8 @@ class Invoice(models.Model):
         paid_at=None,
         save: bool = True,
     ):
-        """
-        يوسم الفاتورة كمدفوعة ويحدّث الحقول ذات الصلة.
-        يُفضّل استدعاؤها ضمن transaction.atomic() من الفيو.
-        """
         if self.status == self.Status.PAID:
-            return self  # لا تكرار
+            return self
 
         self.status = self.Status.PAID
         self.method = (method or self.method or "")[:50]
@@ -515,8 +630,10 @@ class Invoice(models.Model):
                 "paid_ref",
                 "paid_at",
                 "updated_at",
+                "platform_fee_percent",
                 "platform_fee_amount",
                 "subtotal",
+                "vat_percent",
                 "vat_amount",
                 "total_amount",
             ]
@@ -533,9 +650,6 @@ class Invoice(models.Model):
             self.save(update_fields=["status", "updated_at"])
         return self
 
-    # ======================
-    #  دوال استعلام مساعدة
-    # ======================
     @classmethod
     def unpaid_for_agreement(cls, agreement_id: int):
         return cls.objects.for_agreement(agreement_id).unpaid()
@@ -546,10 +660,6 @@ class Invoice(models.Model):
 
     @classmethod
     def totals_by_status(cls) -> Dict[str, Decimal]:
-        """
-        اختصار لتجميعات شائعة: paid / unpaid / fee / vat / total
-        (مفيد للوحة النظرة العامة).
-        """
         paid = cls.objects.paid().totals()["total"]
         unpaid = cls.objects.unpaid().totals()["total"]
         agg_all = cls.objects.all().totals()
@@ -561,13 +671,7 @@ class Invoice(models.Model):
             "total": agg_all["total"],
         }
 
-    # ======================
-    #  مُساعدات عملية/إنشاء
-    # ======================
     def set_due_in_days(self, days: int = 3, save: bool = True):
-        """
-        يضبط موعد السداد بعد N أيام من الآن (الافتراضي 3 أيام — SLA معتمد).
-        """
         self.due_at = timezone.now() + timedelta(days=max(0, int(days)))
         if save:
             self.save(update_fields=["due_at", "updated_at"])
@@ -578,22 +682,13 @@ class Invoice(models.Model):
         platform_fee_percent: Optional[Decimal],
         vat_percent: Optional[Decimal],
     ) -> Tuple[Decimal, Decimal]:
-        """
-        مساعد داخلي لإحضار نسب افتراضية من FinanceSettings فقط.
-
-        - إذا تم تمرير نسب مخصصة في الوسيطات تُستخدم كما هي.
-        - إذا لم تُمرّر، يتم جلب النِّسَب من FinanceSettings.current_rates().
-        """
         if platform_fee_percent is not None and vat_percent is not None:
-            return platform_fee_percent, vat_percent
+            return _q4(platform_fee_percent), _q4(vat_percent)
 
         fee, vat = FinanceSettings.current_rates()
         pf = platform_fee_percent if platform_fee_percent is not None else fee
         vp = vat_percent if vat_percent is not None else vat
-        return (
-            pf.quantize(Decimal("0.0001"), rounding=ROUND_HALF_UP),
-            vp.quantize(Decimal("0.0001"), rounding=ROUND_HALF_UP),
-        )
+        return _q4(pf), _q4(vp)
 
     @classmethod
     def create_for_milestone(
@@ -606,11 +701,6 @@ class Invoice(models.Model):
         platform_fee_percent: Optional[Decimal] = None,
         vat_percent: Optional[Decimal] = None,
     ) -> "Invoice":
-        """
-        ينشئ فاتورة لمرحلة إذا لم تكن موجودة. يشتق الاتفاقية والمبلغ تلقائيًا عند الحاجة.
-        - amount: إن لم يُمرّر، سيُستخدم milestone.amount إن وُجد، وإلا يُقسّم إجمالي الاتفاقية بالتساوي.
-        - platform_fee_percent/vat_percent: إن لم تُمرّر، تُستخدم القيم من FinanceSettings.
-        """
         if milestone is None:
             raise ValidationError("لا يمكن إنشاء فاتورة: المرحلة غير مرفقة.")
 
@@ -637,7 +727,6 @@ class Invoice(models.Model):
                     "created_by": created_by if created_by else None,
                 },
             )
-            # اضبط due_at إن لم تكن محددة
             if not inv.due_at:
                 inv.set_due_in_days(days=due_days, save=True)
             return inv
@@ -652,18 +741,11 @@ class Invoice(models.Model):
         vat_percent: Optional[Decimal] = None,
         due_days: int = 3,
     ) -> "Invoice":
-        """
-        ينشئ **فاتورة تحصيل كامل مقدمًا** للاتفاقية:
-        - المبلغ الأساسي (P) يُؤخذ من agreement.total_amount إن وُجد، وإلا يُجمع مبالغ المراحل.
-        - platform_fee_percent/vat_percent: إن لم تُمرّر، تُستخدم القيم من FinanceSettings.
-        """
         if agreement is None:
             raise ValidationError("الاتفاقية غير موجودة.")
 
-        # حساب الأساس P
         P = getattr(agreement, "total_amount", None)
         if P is None:
-            # حاول جمع مبالغ المراحل
             parts: Iterable[Decimal] = []
             for m in agreement.milestones.all():
                 amt = getattr(m, "amount", None)
@@ -698,10 +780,6 @@ class Invoice(models.Model):
         platform_fee_percent: Optional[Decimal] = None,
         vat_percent: Optional[Decimal] = None,
     ) -> "Invoice":
-        """
-        يضمن وجود فاتورة واحدة (غير مدفوعة) للاتفاقية بدون مرحلة (إيداع كامل).
-        إن وُجدت تُحدّث قيمتها، وإلا تُنشأ.
-        """
         if agreement is None:
             raise ValidationError("الاتفاقية غير موجودة.")
 
@@ -716,11 +794,8 @@ class Invoice(models.Model):
             if inv:
                 if amount is not None and inv.amount != amount:
                     inv.amount = amount
-                # أبقِ النِّسب كما هي إن كانت مخصصة، وإلا استخدم الحالية من FinanceSettings
-                if inv.platform_fee_percent is None:
-                    inv.platform_fee_percent = pf
-                if inv.vat_percent is None:
-                    inv.vat_percent = vp
+                inv.platform_fee_percent = inv.platform_fee_percent or pf
+                inv.vat_percent = inv.vat_percent or vp
                 inv.recalc_and_save()
                 return inv
 
@@ -749,6 +824,164 @@ def employee_net_from_paid_invoices(employee_id: int) -> Decimal:
     F = agg["fee"] or Decimal("0.00")
     return (P - F) if P >= F else Decimal("0.00")
 
+
+# =========================================================
+# Refunds / مرتجعات العملاء
+# =========================================================
+class Refund(models.Model):
+    """
+    مرتجع مالي للعميل مرتبط بفاتورة مدفوعة.
+    يمكن أن يكون كامل أو جزئي.
+    """
+
+    class Status(models.TextChoices):
+        PENDING = "pending", "بانتظار التنفيذ"
+        SENT = "sent", "تم الإرجاع"
+        FAILED = "failed", "فشل الإرجاع"
+        CANCELLED = "cancelled", "ملغي"
+
+    invoice = models.ForeignKey(
+        Invoice,
+        on_delete=models.CASCADE,
+        related_name="refunds",
+        verbose_name="الفاتورة",
+    )
+    # ربط اختياري للسهولة في القوالب/التقارير
+    request = models.ForeignKey(
+        "marketplace.Request",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="refunds",
+        verbose_name="الطلب",
+    )
+
+    amount = models.DecimalField(
+        "المبلغ المرجع",
+        max_digits=12,
+        decimal_places=2,
+        default=Decimal("0.00"),
+    )
+    reason = models.TextField("سبب الإرجاع", blank=True)
+
+    status = models.CharField(
+        "الحالة",
+        max_length=16,
+        choices=Status.choices,
+        default=Status.PENDING,
+    )
+
+    method = models.CharField("طريقة الإرجاع", max_length=50, blank=True)
+    ref_code = models.CharField("مرجع الإرجاع", max_length=100, blank=True)
+
+    created_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="created_refunds",
+        verbose_name="أنشئ بواسطة",
+    )
+
+    created_at = models.DateTimeField("تاريخ الإنشاء", auto_now_add=True)
+    updated_at = models.DateTimeField("آخر تحديث", auto_now=True)
+    sent_at = models.DateTimeField("تاريخ الإرجاع", null=True, blank=True)
+
+    class Meta:
+        ordering = ["-created_at", "-id"]
+        verbose_name = "مرتجع عميل"
+        verbose_name_plural = "مرتجعات العملاء"
+
+    def __str__(self):
+        return f"Refund #{self.pk} - Invoice #{self.invoice_id}"
+
+    @property
+    def is_done(self) -> bool:
+        return self.status == self.Status.SENT
+
+    def mark_sent(self, *, method: str = "", ref: str = "") -> None:
+        self.status = self.Status.SENT
+        if method:
+            self.method = method[:50]
+        if ref:
+            self.ref_code = ref[:100]
+        if not self.sent_at:
+            self.sent_at = timezone.now()
+        self.save(update_fields=["status", "method", "ref_code", "sent_at", "updated_at"])
+
+    def mark_failed(self, reason: str = "") -> None:
+        self.status = self.Status.FAILED
+        if reason:
+            self.reason = (self.reason + "\n" + reason).strip()
+        self.save(update_fields=["status", "reason", "updated_at"])
+
+    def cancel(self, reason: str = "") -> None:
+        self.status = self.Status.CANCELLED
+        if reason:
+            self.reason = (self.reason + "\n" + reason).strip()
+        self.save(update_fields=["status", "reason", "updated_at"])
+
+# finance/models.py
+from django.db import models
+from django.conf import settings
+from django.utils import timezone
+from decimal import Decimal
+
+class LedgerEntry(models.Model):
+    class Type(models.TextChoices):
+        CLIENT_PAYMENT = "client_payment", "تحصيل عميل"
+        EMPLOYEE_PAYOUT = "employee_payout", "صرف موظف"
+        CLIENT_REFUND = "client_refund", "إرجاع عميل"
+        VAT_REMITTANCE = "vat_remittance", "توريد ضريبة"
+
+    class Direction(models.TextChoices):
+        IN_ = "in", "دخول"
+        OUT = "out", "خروج"
+
+    entry_type = models.CharField(max_length=32, choices=Type.choices)
+    direction = models.CharField(max_length=8, choices=Direction.choices)
+
+    amount = models.DecimalField(max_digits=12, decimal_places=2, default=Decimal("0.00"))
+
+    # روابط اختيارية للمرجع
+    invoice = models.ForeignKey(
+        "finance.Invoice",
+        null=True, blank=True, on_delete=models.SET_NULL,
+        related_name="ledger_entries"
+    )
+    payout = models.ForeignKey(
+        "finance.Payout",
+        null=True, blank=True, on_delete=models.SET_NULL,
+        related_name="ledger_entries"
+    )
+    refund = models.ForeignKey(
+        "finance.Refund",
+        null=True, blank=True, on_delete=models.SET_NULL,
+        related_name="ledger_entries"
+    )
+    tax_remittance = models.ForeignKey(
+        "finance.TaxRemittance",
+        null=True, blank=True, on_delete=models.SET_NULL,
+        related_name="ledger_entries"
+    )
+
+    created_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        null=True, blank=True, on_delete=models.SET_NULL,
+        related_name="ledger_created"
+    )
+    note = models.CharField(max_length=255, blank=True)
+    created_at = models.DateTimeField(default=timezone.now)
+
+    class Meta:
+        ordering = ["-created_at", "-id"]
+        indexes = [
+            models.Index(fields=["entry_type", "direction"]),
+            models.Index(fields=["created_at"]),
+        ]
+
+    def __str__(self):
+        return f"{self.get_entry_type_display()} {self.amount} ({self.direction})"
 
 # =========================================================
 # توافق خلفي: إبقاء اسم FinanceConfig مستخدمًا سابقًا

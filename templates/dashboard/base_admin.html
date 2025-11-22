@@ -1,4 +1,4 @@
-{# قالب أساس لكل صفحات الإدارة #}
+{# dashboard/templates/dashboard/base_admin.html #}
 {% load static %}
 {% load humanize %}
 <!doctype html>
@@ -8,10 +8,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>{% block title %}مساحة الإدارة{% endblock %}</title>
 
-  {# خط عربي مريح #}
   <link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;700;800&display=swap" rel="stylesheet">
-
-  {# لو عندك Tailwind مدمج عبر app.css—أبقه #}
   <link rel="stylesheet" href="{% static 'css/app-new.css' %}">
   <link rel="stylesheet" href="{% static 'css/icons.css' %}">
 
@@ -19,44 +16,280 @@
 
   <style>
     :root{
-      --bg:#f5f7fb; --card:#ffffff; --muted:#64748b; --border:#e2e8f0;
-      --brand:#2563eb; --brand-2:#7c3aed; --ok:#059669; --warn:#f59e0b; --danger:#e11d48;
+      --bg: var(--bg, #f5f7fb);
+      --card: var(--card, #ffffff);
+      --muted: var(--muted, #64748b);
+      --border: var(--border, #e2e8f0);
+
+      --brand: var(--primary-600, #2563eb);
+      --brand-2: var(--secondary-600, #7c3aed);
+      --ok: var(--success-600, #059669);
+      --warn: var(--warning-600, #f59e0b);
+      --danger: var(--danger-600, #e11d48);
+
+      --white: var(--white, #ffffff);
+      --dark-900: var(--dark-900, #0f172a);
+      --dark-700: var(--dark-700, #334155);
+      --dark-500: var(--dark-500, #64748b);
+      --dark-200: var(--dark-200, #e5e7eb);
+      --dark-100: var(--dark-100, #e2e8f0);
+
+      --radius-lg: var(--radius-lg, 0.9rem);
+      --radius-xl: var(--radius-xl, 1.2rem);
+
+      --shadow-sm: var(--shadow-sm, 0 2px 8px rgba(15,23,42,.05));
+      --shadow-md: var(--shadow-md, 0 6px 18px rgba(15,23,42,.08));
+      --shadow-lg: var(--shadow-lg, 0 12px 32px rgba(15,23,42,.12));
+
+      --transition: var(--transition, all .18s ease);
     }
-    html,body{height:100%} body{background:linear-gradient(180deg,#f8fafc,#eef2f7);font-family:"Tajawal",sans-serif}
-    .layout{display:grid;grid-template-columns:250px 1fr;min-height:100vh}
-    .sidebar{background:#0f172a;color:#e5e7eb}
-    .sidebar a{display:flex;align-items:center;gap:.6rem;color:#cbd5e1;padding:.7rem 1rem;border-radius:.8rem}
-    .sidebar a:hover,.sidebar a.active{background:#1f2937;color:#fff}
-    .topbar{background:var(--card);border-bottom:1px solid var(--border)}
-    .container{max-width:1280px;margin:0 auto;padding:1rem}
-    .card{background:var(--card);border:1px solid var(--border);border-radius:1rem;padding:1rem}
-    @media(min-width:768px){.card{padding:1.4rem}}
+
+    html,body{height:100%}
+    body{
+      background:
+        radial-gradient(1200px circle at 100% -10%, #dbeafe 0%, transparent 60%),
+        radial-gradient(950px circle at -10% 0%, #ede9fe 0%, transparent 55%),
+        linear-gradient(180deg,#f8fafc,#eef2f7);
+      font-family:"Tajawal",sans-serif;
+      color: var(--dark-900);
+    }
+
+    /* ===== Layout ===== */
+    .layout{
+      display:grid;
+      grid-template-columns:270px 1fr;
+      min-height:100vh;
+      gap:0;
+    }
+    @media (max-width: 1024px){
+      .layout{grid-template-columns:230px 1fr}
+    }
+    @media (max-width: 768px){
+      .layout{grid-template-columns:1fr}
+    }
+
+    /* ===== Sidebar ===== */
+    .sidebar{
+      background:#0b1220;
+      color:#e5e7eb;
+      padding:1rem .9rem;
+      position:sticky;
+      top:0;
+      height:100vh;
+      overflow:auto;
+      border-left:1px solid rgba(255,255,255,.06);
+      box-shadow: inset -1px 0 0 rgba(255,255,255,.04);
+    }
+    .sidebar::-webkit-scrollbar{width:6px}
+    .sidebar::-webkit-scrollbar-thumb{background:rgba(255,255,255,.15);border-radius:999px}
+
+    .sidebar-title{
+      display:flex;align-items:center;gap:.6rem;
+      font-size:1.05rem;font-weight:800;margin:.25rem .25rem 1rem;color:#fff;
+      letter-spacing:.2px;
+    }
+    .sidebar-subtitle{
+      font-size:.8rem;color:#94a3b8;margin:-.6rem .25rem 1rem;
+    }
+
+    /* ===== Mobile sidebar toggle ===== */
+    .sidebar-toggle{
+      display:none;position:fixed;bottom:18px;right:18px;z-index:50;
+      background:var(--brand);color:#fff;padding:.7rem .9rem;border-radius:999px;
+      box-shadow: var(--shadow-lg);font-weight:800;gap:.4rem;align-items:center;
+    }
+    @media (max-width: 768px){
+      .sidebar{
+        position:fixed;inset:0 auto 0 0;width:85%;max-width:290px;
+        transform:translateX(110%);transition: var(--transition);z-index:40;
+      }
+      .sidebar.open{transform:translateX(0)}
+      .sidebar-backdrop{
+        display:none;position:fixed;inset:0;background:rgba(2,6,23,.45);z-index:30;
+      }
+      .sidebar-backdrop.show{display:block}
+      .sidebar-toggle{display:inline-flex}
+      .layout{grid-template-columns:1fr}
+    }
+
+    /* ===== Topbar ===== */
+    .topbar{
+      background:rgba(255,255,255,.9);
+      border-bottom:1px solid var(--border);
+      position:sticky;top:0;z-index:20;
+      backdrop-filter:saturate(120%) blur(6px);
+    }
+
+    .container{
+      max-width:1320px;margin:0 auto;padding:1rem;
+    }
+
+    /* ===== Cards (عام) ===== */
+    .card{
+      background:var(--card);
+      border:1px solid var(--border);
+      border-radius:1rem;
+      padding:1rem;
+      box-shadow: var(--shadow-sm);
+      transition: var(--transition);
+    }
+    .card:hover{box-shadow: var(--shadow-md)}
+    @media(min-width:768px){.card{padding:1.35rem}}
+
     .kpi{font-weight:800;font-size:1.7rem}
     .lbl{color:var(--muted);font-size:.9rem}
-    .btn{display:inline-flex;align-items:center;gap:.5rem;border-radius:12px;padding:.5rem .9rem;font-weight:700}
-    .btn-blue{background:var(--brand);color:#fff}.btn-blue:hover{filter:brightness(.95)}
-    .btn-green{background:var(--ok);color:#fff}.btn-green:hover{filter:brightness(.95)}
-    .btn-purple{background:var(--brand-2);color:#fff}.btn-purple:hover{filter:brightness(.95)}
-    .btn-rose{background:var(--danger);color:#fff}.btn-rose:hover{filter:brightness(.95)}
-    .btn-gray{background:#f1f5f9;color:#0f172a;border:1px solid var(--border)}
-    .table{width:100%;font-size:.925rem}
-    .table th{color:#475569;font-weight:600;text-align:right}
-    .table td,.table th{padding:.65rem .25rem}
-    .table tr+tr{border-top:1px solid #eef2f7}
-    .fade-in{animation:fadeIn .45s ease both}@keyframes fadeIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+
+    /* =====================================================
+       ✅ KPI / STAT CARDS (للوحات التحكم)
+       ===================================================== */
+    .stats-grid{
+      display:grid;
+      grid-template-columns: repeat(4, minmax(0,1fr));
+      gap:1rem;
+    }
+    @media (max-width: 1280px){
+      .stats-grid{grid-template-columns: repeat(2, minmax(0,1fr));}
+    }
+    @media (max-width: 640px){
+      .stats-grid{grid-template-columns: 1fr;}
+    }
+
+    .stat-card{
+      position:relative;
+      overflow:hidden;
+      display:flex;
+      align-items:center;
+      justify-content:space-between;
+      gap:1rem;
+      padding:1.1rem 1.2rem;
+      border-radius:1.1rem;
+      border:1px solid var(--border);
+      background: var(--card);
+      box-shadow: var(--shadow-sm);
+      transition: var(--transition);
+    }
+    .stat-card:hover{
+      transform: translateY(-3px);
+      box-shadow: var(--shadow-lg);
+      border-color: var(--dark-200);
+    }
+
+    .stat-left{
+      display:flex;align-items:center;gap:.9rem;min-width:0;
+    }
+    .stat-icon{
+      width:46px;height:46px;border-radius:14px;
+      display:grid;place-items:center;font-size:1.4rem;font-weight:800;
+      background:#f8fafc;border:1px solid var(--dark-100);
+      flex:0 0 auto;
+    }
+    .stat-meta{min-width:0}
+    .stat-label{
+      font-size:.9rem;color:var(--dark-500);margin-bottom:.2rem;white-space:nowrap;
+    }
+    .stat-value{
+      font-size:1.6rem;font-weight:800;letter-spacing:.2px;white-space:nowrap;
+      color:var(--dark-900);
+    }
+    .stat-sub{
+      font-size:.8rem;color:var(--muted);margin-top:.25rem;white-space:nowrap;
+    }
+
+    .stat-chip{
+      display:inline-flex;align-items:center;gap:.3rem;
+      padding:.2rem .55rem;border-radius:999px;font-size:.78rem;font-weight:700;
+      border:1px solid var(--dark-100);background:#f8fafc;color:var(--dark-700);
+      white-space:nowrap;
+    }
+
+    /* ألوان جاهزة */
+    .stat-primary .stat-icon{background:#eff6ff;color:#1d4ed8;border-color:#dbeafe;}
+    .stat-success .stat-icon{background:#ecfdf5;color:#047857;border-color:#bbf7d0;}
+    .stat-warning .stat-icon{background:#fffbeb;color:#b45309;border-color:#fde68a;}
+    .stat-danger  .stat-icon{background:#fff1f2;color:#be123c;border-color:#fecdd3;}
+    .stat-purple  .stat-icon{background:#f5f3ff;color:#6d28d9;border-color:#ddd6fe;}
+
+    /* ===== Section header ===== */
+    .section-head{
+      display:flex;align-items:end;justify-content:space-between;gap:1rem;margin-bottom:.8rem;
+    }
+    .section-title{
+      font-size:1.25rem;font-weight:800;letter-spacing:.2px;margin:0;
+      display:flex;align-items:center;gap:.5rem;
+    }
+    .section-note{font-size:.9rem;color:var(--muted)}
+
+    /* ===== Buttons ===== */
+    .btn{
+      display:inline-flex;align-items:center;justify-content:center;gap:.5rem;
+      border-radius:12px;padding:.5rem .9rem;font-weight:700;transition: var(--transition);
+      text-decoration:none;line-height:1;border:1px solid transparent;
+    }
+    .btn-blue{background:var(--brand);color:#fff}
+    .btn-blue:hover{filter:brightness(.96)}
+    .btn-green{background:var(--ok);color:#fff}
+    .btn-green:hover{filter:brightness(.96)}
+    .btn-purple{background:var(--brand-2);color:#fff}
+    .btn-purple:hover{filter:brightness(.96)}
+    .btn-rose{background:var(--danger);color:#fff}
+    .btn-rose:hover{filter:brightness(.96)}
+    .btn-gray{
+      background:#f1f5f9;color:#0f172a;border:1px solid var(--border);
+    }
+    .btn-gray:hover{background:#e9eef5}
+    .btn-sm{padding:.4rem .7rem;font-size:.85rem;border-radius:.7rem}
+    .btn-xs{padding:.25rem .55rem;font-size:.78rem;border-radius:.6rem}
+
+    /* ===== Table ===== */
+    .table{
+      width:100%;font-size:.92rem;border-collapse:separate;border-spacing:0;
+    }
+    .table thead th{
+      color:#475569;font-weight:700;text-align:right;background:#f8fafc;
+      border-bottom:1px solid var(--dark-100);padding:.85rem .6rem;white-space:nowrap;
+    }
+    .table td{
+      padding:.8rem .6rem;border-bottom:1px solid #eef2f7;vertical-align:middle;
+    }
+    .table tbody tr:hover{background:#f8fafc}
+
+    /* ===== Badges ===== */
+    .badge{
+      display:inline-flex;align-items:center;padding:.2rem .55rem;border-radius:999px;
+      font-size:.78rem;font-weight:700;border:1px solid var(--dark-100);
+      background:#f8fafc;color:#0f172a;white-space:nowrap;
+    }
+
+    /* ===== Animations ===== */
+    .fade-in{animation:fadeIn .45s ease both}
+    @keyframes fadeIn{
+      from{opacity:0;transform:translateY(8px)}
+      to{opacity:1;transform:none}
+    }
+
+    /* ===== Messages ===== */
+    .flash-wrap{margin: 1rem 0; display: grid; gap: .5rem;}
+    .flash{
+      padding: .9rem 1rem;border-radius: .9rem;border: 1px solid #dbeafe;
+      background: #eff6ff;color: #1e3a8a;font-weight: 700;box-shadow: var(--shadow-sm);
+    }
   </style>
 </head>
 <body>
 
+<div id="sidebar-backdrop" class="sidebar-backdrop"></div>
+
 <div class="layout">
-  {# ============ Sidebar ============ #}
-  <aside class="sidebar">
-    <div class="p-4 text-lg font-extrabold">لوحة المدير</div>
+
+  <aside id="sidebar" class="sidebar">
+    <div class="sidebar-title">
+      <span>لوحة المدير</span>
+    </div>
+    <div class="sidebar-subtitle">إدارة المنصّة والتحكم الكامل</div>
 
     {% include "dashboard/partials/_sidebar.html" %}
   </aside>
 
-  {# ============ Main ============ #}
   <main>
     <div class="topbar">
       <div class="container flex items-center justify-between gap-3">
@@ -66,18 +299,57 @@
 
     <div class="container fade-in">
       {% block page_header %}{% endblock %}
+
       {% if messages %}
-        <div class="my-3 space-y-2">
+        <div class="flash-wrap">
           {% for m in messages %}
-            <div class="card" style="border-color:#dbeafe;background:#eff6ff">{{ m }}</div>
+            <div class="flash">{{ m }}</div>
           {% endfor %}
         </div>
       {% endif %}
+
       {% block content %}{% endblock %}
     </div>
   </main>
 </div>
 
+<button id="sidebar-toggle" class="sidebar-toggle" type="button" aria-label="فتح القائمة">
+  ☰ القائمة
+</button>
+
 {% block extra_js %}{% endblock %}
+{% block extra_scripts %}{% endblock %}
+
+<script>
+(function(){
+  const sidebar = document.getElementById('sidebar');
+  const toggle = document.getElementById('sidebar-toggle');
+  const backdrop = document.getElementById('sidebar-backdrop');
+
+  function openSidebar(){
+    sidebar.classList.add('open');
+    backdrop.classList.add('show');
+    document.body.style.overflow = 'hidden';
+  }
+  function closeSidebar(){
+    sidebar.classList.remove('open');
+    backdrop.classList.remove('show');
+    document.body.style.overflow = '';
+  }
+
+  if(toggle){
+    toggle.addEventListener('click', function(){
+      if(sidebar.classList.contains('open')) closeSidebar();
+      else openSidebar();
+    });
+  }
+  if(backdrop){ backdrop.addEventListener('click', closeSidebar); }
+
+  window.addEventListener('resize', function(){
+    if(window.innerWidth > 768) closeSidebar();
+  });
+})();
+</script>
+
 </body>
 </html>

@@ -1,0 +1,121 @@
+{% extends "base.html" %}
+{% load humanize %}
+
+{% block title %}مستحقات الموظفين (المالية){% endblock %}
+
+{% block content %}
+<section class="page-section" dir="rtl">
+  <div class="container mx-auto px-4 py-6">
+
+    <div class="mb-6">
+      <div class="section-badge">👷 مستحقات الموظفين</div>
+      <h1 class="text-2xl md:text-3xl font-extrabold mt-2">مستحقات الموظفين (للمالية)</h1>
+      <p class="text-sm text-gray-600 mt-1">
+        تُعرض فقط للطلبات المكتملة، وبشرط سداد الفاتورة. صافي الموظف = P - عمولة المنصّة.
+      </p>
+    </div>
+
+    {% if rows %}
+      <div class="overflow-x-auto rounded-2xl bg-white shadow">
+        <table class="min-w-full text-sm">
+          <thead>
+            <tr class="text-gray-600 border-b">
+              <th class="py-2 px-3 text-right">الطلب</th>
+              <th class="py-2 px-3 text-right">الاتفاقية</th>
+              <th class="py-2 px-3 text-right">الموظف</th>
+              <th class="py-2 px-3 text-right">قيمة الخدمة P</th>
+              <th class="py-2 px-3 text-right">عمولة المنصّة</th>
+              <th class="py-2 px-3 text-right">صافي المستحق</th>
+              <th class="py-2 px-3 text-right">أمر الصرف</th>
+              <th class="py-2 px-3 text-right">إجراء</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for r in rows %}
+              <tr class="border-b hover:bg-gray-50">
+                <td class="py-2 px-3">
+                  {% if r.request %}
+                    <a href="{% url 'marketplace:request_detail' r.request.pk %}">
+                      #{{ r.request.pk }} — {{ r.request.title|default:"طلب" }}
+                    </a>
+                  {% else %}
+                    —
+                  {% endif %}
+                </td>
+                <td class="py-2 px-3">#{{ r.agreement.id }}</td>
+                <td class="py-2 px-3">
+                  {% if r.employee %}{{ r.employee }}{% else %}—{% endif %}
+                </td>
+                <td class="py-2 px-3">{{ r.P|floatformat:2 }} ريال</td>
+                <td class="py-2 px-3">{{ r.fee|floatformat:2 }} ريال</td>
+                <td class="py-2 px-3 font-extrabold">{{ r.net_for_employee|floatformat:2 }} ريال</td>
+
+                <td class="py-2 px-3">
+                  {% if r.payout %}
+                    <span class="badge badge-verified">
+                      أمر #{{ r.payout.id }} — {{ r.payout.get_status_display }}
+                    </span>
+                  {% else %}
+                    <span class="badge badge-pending">لا يوجد</span>
+                  {% endif %}
+                </td>
+
+                <td class="py-2 px-3">
+                  {% if not r.payout %}
+                    <form method="post" action="">
+                      {% csrf_token %}
+                      <input type="hidden" name="agreement_id" value="{{ r.agreement.id }}">
+                      <button type="submit" class="btn btn-primary btn-sm">
+                        ➕ إنشاء أمر صرف
+                      </button>
+                    </form>
+                  {% else %}
+                    <span class="text-sm text-gray-500">تم الإنشاء مسبقًا</span>
+                  {% endif %}
+                </td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+
+      <div class="profile-section mt-6">
+        <div class="card-section-title">إجمالي المستحقات حسب الموظف</div>
+        <div class="overflow-x-auto rounded-2xl bg-white shadow mt-3">
+          <table class="min-w-full text-sm">
+            <thead>
+              <tr class="text-gray-600 border-b">
+                <th class="py-2 px-3 text-right">الموظف</th>
+                <th class="py-2 px-3 text-right">إجمالي الصافي المستحق</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for r in rows %}
+                {% if r.employee %}
+                  <tr class="border-b hover:bg-gray-50">
+                    <td class="py-2 px-3">{{ r.employee }}</td>
+                    <td class="py-2 px-3 font-semibold">
+                      {{ totals_by_employee.r.employee.id|default:"0"|floatformat:2 }} ريال
+                    </td>
+                  </tr>
+                {% endif %}
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+        <p class="text-xs text-gray-500 mt-2">
+          * قد يظهر الموظف أكثر من مرة في الجدول أعلاه حسب عدد الاتفاقيات.
+        </p>
+      </div>
+
+    {% else %}
+      <div class="profile-section">
+        <p class="text-sm text-gray-600">
+          لا توجد مستحقات حالياً (تحقق من أن الطلب مكتمل وأن الفاتورة مدفوعة).
+        </p>
+      </div>
+    {% endif %}
+
+  </div>
+</section>
+{% endblock %}

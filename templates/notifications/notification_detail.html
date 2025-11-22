@@ -3,60 +3,424 @@
 
 {% block title %}تفاصيل التنبيه — سامي لينك{% endblock %}
 
-{% block extra_head %}
-<style>
-  .detail-card{border-radius:1.25rem; transition:box-shadow .2s}
-  .detail-card:hover{box-shadow:0 18px 36px -18px rgba(0,0,0,.2)}
-</style>
+{% block content %}
+<section class="page-section notification-detail-page">
+  <div class="container">
+    
+    {# ===== زر الرجوع ===== #}
+    <header class="mb-6">
+      <a href="{% url 'notifications:list' %}" class="btn btn-outline">
+        <span style="transform: rotate(180deg); display: inline-block;">→</span>
+        رجوع للتنبيهات
+      </a>
+    </header>
+
+    {# ===== بطاقة تفاصيل التنبيه ===== #}
+    <article class="profile-section notification-detail-card scroll-reveal">
+      <div class="notification-header" style="display: flex; align-items: flex-start; gap: 1.5rem;">
+        
+        {# أيقونة التنبيه #}
+        <div class="notification-icon" style="width: 70px; height: 70px; border-radius: var(--radius-xl); background: linear-gradient(135deg, var(--primary-500), var(--primary-700)); display: flex; align-items: center; justify-content: center; color: white; font-size: 1.5rem; flex-shrink: 0; box-shadow: var(--shadow-md);">
+          🔔
+        </div>
+
+        {# محتوى التنبيه #}
+        <div class="notification-content" style="flex: 1;">
+          <div class="notification-title-row" style="display: flex; justify-content: space-between; align-items: flex-start; gap: 1rem; margin-bottom: 1rem;">
+            <h1 class="notification-title" style="font-size: 1.75rem; font-weight: 800; color: var(--dark-900); margin: 0; line-height: 1.3;">
+              {{ n.title|default:"تنبيه" }}
+            </h1>
+            <span class="notification-date" style="color: var(--dark-500); font-size: 0.9rem; flex-shrink: 0;">
+              {{ n.created_at|date:"Y-m-d H:i" }}
+            </span>
+          </div>
+
+          {# نص التنبيه #}
+          <div class="notification-body">
+            {% if n.body %}
+              <div class="notification-text" style="color: var(--dark-700); line-height: 1.7; font-size: 1.05rem; white-space: pre-line;">
+                {{ n.body }}
+              </div>
+            {% else %}
+              <div class="notification-empty" style="color: var(--dark-500); font-style: italic; padding: 1rem; background: var(--dark-50); border-radius: var(--radius); text-align: center;">
+                لا يوجد وصف إضافي لهذا التنبيه.
+              </div>
+            {% endif %}
+          </div>
+
+          {# أزرار الإجراءات #}
+          <div class="notification-actions employee-actions" style="margin-top: 2rem; padding-top: 1.5rem; border-top: 1px solid var(--dark-200);">
+            
+            {# حالة القراءة #}
+            <div class="status-badges" style="display: flex; align-items: center; gap: 1rem; flex-wrap: wrap;">
+              {% if n.is_read %}
+                <span class="badge badge-verified">
+                  ✅ مقروء
+                </span>
+              {% else %}
+                <span class="badge badge-pending">
+                  ⏳ غير مقروء
+                </span>
+                <a href="{% url 'notifications:mark_read' n.id %}" class="btn btn-outline btn-sm">
+                  ✅ تعليم كمقروء
+                </a>
+              {% endif %}
+            </div>
+
+            {# الروابط والإجراءات الإضافية #}
+            <div class="action-buttons" style="display: flex; align-items: center; gap: 0.75rem; flex-wrap: wrap; margin-top: 1rem;">
+              {% if n.url %}
+                <a href="{{ n.get_absolute_url }}" class="btn btn-secondary btn-sm">
+                  🔗 فتح الرابط المرتبط
+                </a>
+              {% endif %}
+
+              <a href="{% url 'notifications:delete' n.id %}" 
+                 class="btn btn-danger btn-sm"
+                 onclick="return confirm('هل أنت متأكد من حذف هذا التنبيه؟');">
+                🗑️ حذف
+              </a>
+            </div>
+          </div>
+        </div>
+      </div>
+    </article>
+
+    {# ===== معلومات إضافية ===== #}
+    <div class="profile-section" style="background: var(--dark-50); margin-top: 1.5rem;">
+      <div class="card-section-title">📋 معلومات التنبيه</div>
+      <div class="notification-meta" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem; margin-top: 1rem;">
+        <div class="meta-item">
+          <div class="meta-label">تاريخ الإنشاء</div>
+          <div class="meta-value">{{ n.created_at|date:"Y-m-d H:i" }}</div>
+        </div>
+        <div class="meta-item">
+          <div class="meta-label">الحالة</div>
+          <div class="meta-value">
+            {% if n.is_read %}
+              <span class="badge badge-verified">مقروء</span>
+            {% else %}
+              <span class="badge badge-pending">غير مقروء</span>
+            {% endif %}
+          </div>
+        </div>
+        <div class="meta-item">
+          <div class="meta-label">معرف التنبيه</div>
+          <div class="meta-value">#{{ n.id }}</div>
+        </div>
+        {% if n.url %}
+        <div class="meta-item">
+          <div class="meta-label">رابط مرتبط</div>
+          <div class="meta-value">
+            <a href="{{ n.get_absolute_url }}" class="link">فتح الرابط</a>
+          </div>
+        </div>
+        {% endif %}
+      </div>
+    </div>
+
+    {# ===== التنبيهات المشابهة ===== #}
+    {% if related_notifications %}
+    <div class="profile-section" style="margin-top: 1.5rem;">
+      <div class="card-section-title">📨 تنبيهات مشابهة</div>
+      <div class="related-notifications" style="margin-top: 1rem;">
+        {% for related_n in related_notifications|slice:":3" %}
+          <div class="related-item" style="padding: 1rem; border: 1px solid var(--dark-200); border-radius: var(--radius-lg); margin-bottom: 0.75rem; transition: var(--transition);">
+            <a href="{% url 'notifications:detail' related_n.id %}" style="text-decoration: none; color: inherit;">
+              <div style="display: flex; justify-content: space-between; align-items: flex-start; gap: 1rem;">
+                <div>
+                  <div style="font-weight: 600; color: var(--dark-900); margin-bottom: 0.25rem;">
+                    {{ related_n.title|default:"تنبيه" }}
+                  </div>
+                  {% if related_n.body %}
+                    <div style="color: var(--dark-600); font-size: 0.9rem; line-height: 1.4;">
+                      {{ related_n.body|truncatewords:15 }}
+                    </div>
+                  {% endif %}
+                </div>
+                <div style="display: flex; flex-direction: column; align-items: flex-end; gap: 0.5rem; flex-shrink: 0;">
+                  <span style="color: var(--dark-500); font-size: 0.8rem;">
+                    {{ related_n.created_at|date:"Y-m-d H:i" }}
+                  </span>
+                  {% if not related_n.is_read %}
+                    <span class="badge badge-pending" style="font-size: 0.7rem;">جديد</span>
+                  {% endif %}
+                </div>
+              </div>
+            </a>
+          </div>
+        {% endfor %}
+      </div>
+    </div>
+    {% endif %}
+
+  </div>
+</section>
 {% endblock %}
 
-{% block content %}
-<header class="mb-8">
-  <a href="{% url 'notifications:list' %}" class="inline-flex items-center gap-2 px-3 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700 transition">
-    <i class="fas fa-arrow-right"></i>
-    <span>رجوع للتنبيهات</span>
-  </a>
-</header>
+{% block extra_scripts %}
+  {{ block.super }}
+  <script>
+  (function () {
+    // تهيئة تأثيرات التمرير
+    if (typeof initScrollReveal === 'function') {
+      initScrollReveal();
+    }
 
-<article class="detail-card border border-slate-200 dark:border-slate-700 p-6 bg-white dark:bg-slate-900">
-  <div class="flex items-start gap-4">
-    <div class="w-14 h-14 rounded-2xl grid place-items-center text-white shadow"
-         style="background-image:linear-gradient(135deg,#0284c7,#075985);">
-      <i class="fas fa-bell"></i>
-    </div>
-    <div class="flex-1">
-      <div class="flex items-center justify-between gap-3">
-        <h1 class="text-2xl font-black text-slate-800 dark:text-slate-100">{{ n.title|default:"تنبيه" }}</h1>
-        <span class="text-xs text-slate-500 dark:text-slate-400">{{ n.created_at|date:"Y-m-d H:i" }}</span>
-      </div>
+    // تأثيرات على الأزرار
+    document.querySelectorAll('.btn').forEach(button => {
+      button.addEventListener('click', function() {
+        if (typeof animateButtonClick === 'function') {
+          animateButtonClick(this);
+        }
+      });
+    });
 
-      {% if n.body %}
-        <p class="mt-3 text-slate-700 dark:text-slate-300 leading-relaxed whitespace-pre-line">{{ n.body }}</p>
-      {% else %}
-        <p class="mt-3 text-slate-600 dark:text-slate-400">لا يوجد وصف إضافي لهذا التنبيه.</p>
-      {% endif %}
+    // تأثيرات على بطاقة التنبيه
+    const notificationCard = document.querySelector('.notification-detail-card');
+    if (notificationCard) {
+      notificationCard.addEventListener('mouseenter', function() {
+        this.style.transform = 'translateY(-5px)';
+        this.style.boxShadow = 'var(--shadow-xl)';
+      });
+      
+      notificationCard.addEventListener('mouseleave', function() {
+        this.style.transform = 'translateY(0)';
+        this.style.boxShadow = '';
+      });
+    }
 
-      <div class="mt-6 flex items-center flex-wrap gap-2">
-        {% if n.is_read %}
-          <span class="chip chip-read">مقروء</span>
-        {% else %}
-          <span class="chip chip-unread">غير مقروء</span>
-          <a href="{% url 'notifications:mark_read' n.id %}" class="px-3 py-2 rounded-lg bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 transition">
-            <i class="fas fa-check mr-1"></i> تعليم كمقروء
-          </a>
-        {% endif %}
+    // تأثيرات على العناصر ذات الصلة
+    document.querySelectorAll('.related-item').forEach(item => {
+      item.addEventListener('mouseenter', function() {
+        this.style.transform = 'translateX(5px)';
+        this.style.background = 'var(--primary-50)';
+        this.style.borderColor = 'var(--primary-300)';
+      });
+      
+      item.addEventListener('mouseleave', function() {
+        this.style.transform = 'translateX(0)';
+        this.style.background = '';
+        this.style.borderColor = 'var(--dark-200)';
+      });
+    });
 
-        {% if n.url %}
-          <a href="{{ n.get_absolute_url }}" class="px-3 py-2 rounded-lg text-primary-700 dark:text-primary-300 hover:bg-primary-50 dark:hover:bg-primary-900/20 transition">
-            <i class="fas fa-link mr-1"></i> فتح الرابط المرتبط
-          </a>
-        {% endif %}
+    // تحسين تأكيد الحذف
+    const deleteButton = document.querySelector('.btn-danger');
+    if (deleteButton) {
+      deleteButton.addEventListener('click', function(e) {
+        if (!confirm('هل أنت متأكد من حذف هذا التنبيه؟ لا يمكن التراجع عن هذا الإجراء.')) {
+          e.preventDefault();
+          return false;
+        }
+        
+        // استخدام نظام التوست إذا كان متاحًا
+        if (typeof showToast === 'function') {
+          showToast('جاري حذف التنبيه...', 'info');
+        }
+      });
+    }
 
-        <a href="{% url 'notifications:delete' n.id %}" class="px-3 py-2 rounded-lg bg-red-600 text-white hover:bg-red-700 transition" onclick="return confirm('حذف هذا التنبيه؟');">
-          <i class="fas fa-trash mr-1"></i> حذف
-        </a>
-      </div>
-    </div>
-  </div>
-</article>
+    // تأثيرات على أيقونة التنبيه
+    const notificationIcon = document.querySelector('.notification-icon');
+    if (notificationIcon) {
+      setInterval(() => {
+        if (!document.querySelector('.badge-verified')) {
+          notificationIcon.style.animation = 'pulse 2s infinite';
+        }
+      }, 5000);
+    }
+
+    // نسخ معلومات التنبيه (يمكن تطويرها لاحقًا)
+    const notificationText = document.querySelector('.notification-text');
+    if (notificationText) {
+      notificationText.style.cursor = 'pointer';
+      notificationText.title = 'انقر للنسخ';
+      notificationText.addEventListener('click', function() {
+        const textToCopy = this.textContent;
+        navigator.clipboard.writeText(textToCopy).then(() => {
+          if (typeof showToast === 'function') {
+            showToast('تم نسخ نص التنبيه', 'success');
+          }
+        });
+      });
+    }
+
+  })();
+  </script>
+
+  <style>
+  .notification-detail-page .notification-detail-card {
+    transition: all 0.3s ease;
+    border: 1px solid var(--dark-200);
+  }
+
+  .notification-detail-page .notification-header {
+    align-items: flex-start;
+  }
+
+  .notification-detail-page .notification-title {
+    font-size: 1.75rem;
+    font-weight: 800;
+    color: var(--dark-900);
+    line-height: 1.3;
+  }
+
+  .notification-detail-page .notification-text {
+    color: var(--dark-700);
+    line-height: 1.7;
+    font-size: 1.05rem;
+    white-space: pre-line;
+  }
+
+  .notification-detail-page .notification-empty {
+    color: var(--dark-500);
+    font-style: italic;
+    padding: 1rem;
+    background: var(--dark-50);
+    border-radius: var(--radius);
+    text-align: center;
+  }
+
+  .notification-detail-page .notification-actions {
+    margin-top: 2rem;
+    padding-top: 1.5rem;
+    border-top: 1px solid var(--dark-200);
+  }
+
+  .notification-detail-page .status-badges {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    flex-wrap: wrap;
+  }
+
+  .notification-detail-page .action-buttons {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    flex-wrap: wrap;
+    margin-top: 1rem;
+  }
+
+  .notification-detail-page .notification-meta {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 1rem;
+  }
+
+  .notification-detail-page .meta-item {
+    padding: 1rem;
+    background: var(--white);
+    border-radius: var(--radius-lg);
+    border: 1px solid var(--dark-200);
+  }
+
+  .notification-detail-page .meta-label {
+    color: var(--dark-600);
+    font-size: 0.875rem;
+    margin-bottom: 0.5rem;
+  }
+
+  .notification-detail-page .meta-value {
+    color: var(--dark-900);
+    font-weight: 600;
+  }
+
+  .notification-detail-page .related-notifications {
+    margin-top: 1rem;
+  }
+
+  .notification-detail-page .related-item {
+    padding: 1rem;
+    border: 1px solid var(--dark-200);
+    border-radius: var(--radius-lg);
+    margin-bottom: 0.75rem;
+    transition: var(--transition);
+  }
+
+  .notification-detail-page .related-item:hover {
+    transform: translateX(5px);
+    background: var(--primary-50);
+    border-color: var(--primary-300);
+  }
+
+  .notification-detail-page .link {
+    color: var(--primary-600);
+    text-decoration: none;
+    font-weight: 600;
+  }
+
+  .notification-detail-page .link:hover {
+    color: var(--primary-700);
+    text-decoration: underline;
+  }
+
+  @media (max-width: 768px) {
+    .notification-detail-page .notification-header {
+      flex-direction: column;
+      text-align: center;
+    }
+    
+    .notification-detail-page .notification-icon {
+      align-self: center;
+    }
+    
+    .notification-detail-page .notification-title-row {
+      flex-direction: column;
+      text-align: center;
+    }
+    
+    .notification-detail-page .notification-meta {
+      grid-template-columns: 1fr;
+    }
+    
+    .notification-detail-page .action-buttons {
+      flex-direction: column;
+      align-items: stretch;
+    }
+    
+    .notification-detail-page .action-buttons .btn {
+      width: 100%;
+    }
+  }
+
+  @media (max-width: 480px) {
+    .notification-detail-page .notification-title {
+      font-size: 1.5rem;
+    }
+    
+    .notification-detail-page .notification-icon {
+      width: 60px;
+      height: 60px;
+      font-size: 1.25rem;
+    }
+    
+    .notification-detail-page .status-badges {
+      justify-content: center;
+    }
+  }
+
+  /* تأثيرات الحركة */
+  @keyframes pulse {
+    0% { transform: scale(1); }
+    50% { transform: scale(1.05); }
+    100% { transform: scale(1); }
+  }
+
+  @keyframes fadeIn {
+    from {
+      opacity: 0;
+      transform: translateY(20px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+
+  .notification-detail-page .scroll-reveal {
+    animation: fadeIn 0.6s ease-out;
+  }
+  </style>
 {% endblock %}
