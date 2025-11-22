@@ -1,10 +1,10 @@
+{# templates/home.html #}
 {% extends "base.html" %}
 {% load static %}
 {% block title %}منصة سامي لينك التقنية — وسيط سعودي موثوق{% endblock %}
 
-{% block content %}
-
-<!-- قسم البطل المحسن -->
+{% block page_hero %}
+{# قسم البطل - خارج المحتوى الرئيسي للاستفادة من التخطيط الخاص #}
 <section id="hero" class="hero-section">
   <div class="container">
     <div class="hero-content fade-in">
@@ -12,16 +12,16 @@
         <div class="hero-badge">
           <span>وسيط سعودي منظم</span>
         </div>
-        
+
         <h1 class="hero-title">
           إدارة <span>احترافية</span> لدورة عملك من أول طلب حتى آخر فاتورة
         </h1>
-        
+
         <p class="hero-description">
-          منصة سامي لينك وسيط سعودي ١٠٠٪ ينظم العلاقة بين العملاء والتقنيين بدورة عمل واضحة، 
+          منصة سامي لينك وسيط سعودي ١٠٠٪ ينظم العلاقة بين العملاء والتقنيين بدورة عمل واضحة،
           فواتير نظامية، وحماية مالية للطرفين بما يتوافق مع الأنظمة السعودية.
         </p>
-        
+
         <div class="hero-features">
           <div class="hero-feature">
             <div class="hero-feature-icon">✓</div>
@@ -36,43 +36,45 @@
             <div class="hero-feature-text">تقنيون سعوديون تم التحقق من هوياتهم وخبراتهم قبل الانضمام للمنصة</div>
           </div>
         </div>
-        
+
         <div class="hero-actions">
           <a href="{% url 'marketplace:request_create' %}" class="btn btn-primary">
-            <i class="fa fa-plus"></i> اطلب خدمة
+            ➕ اطلب خدمة
           </a>
+
           {% if user.is_authenticated %}
             {% if user.role == 'client' %}
               <a href="{% url 'marketplace:my_requests' %}" class="btn btn-secondary">
-                إدارة طلباتي
+                📋 إدارة طلباتي
               </a>
             {% elif user.role == 'employee' or user.role == 'tech' %}
               <a href="{% url 'marketplace:my_tasks' %}" class="btn btn-secondary">
-                عرض مهامي
+                🛠️ عرض مهامي
               </a>
             {% else %}
               <a href="{% url 'dashboard:admin_dashboard' %}" class="btn btn-secondary">
-                الانتقال للوحة التحكم
+                📊 الانتقال للوحة التحكم
               </a>
             {% endif %}
           {% else %}
             <a href="{% url 'accounts:register' %}" class="btn btn-secondary">
-              ابدأ الآن
+              🚀 ابدأ الآن
             </a>
           {% endif %}
+
           <a href="#how-it-works" class="btn btn-outline">
-            تعرف على المنصة
+            ℹ️ تعرف على المنصة
           </a>
         </div>
       </div>
-      
+
       <div class="hero-visual scroll-reveal">
         <div class="hero-card">
           <div class="hero-card-header">
             <h2 class="hero-card-title">مسار واحد واضح لكل الأطراف</h2>
             <p class="hero-card-description">رحلة منظمة من الطلب حتى التسليم</p>
           </div>
-          
+
           <div class="hero-steps">
             <div class="hero-step">
               <div class="step-number">1</div>
@@ -83,7 +85,7 @@
                 </div>
               </div>
             </div>
-            
+
             <div class="hero-step">
               <div class="step-number">2</div>
               <div class="step-content">
@@ -93,13 +95,14 @@
                 </div>
               </div>
             </div>
-            
+
             <div class="hero-step">
               <div class="step-number">3</div>
               <div class="step-content">
                 <div class="step-title">اتفاقية بمراحل وتسوية آمنة</div>
                 <div class="step-description">
-                  بعد اختيار العرض الأنسب تُنشأ اتفاقية بمراحل دفع واضحة، وتتم إدارة التنفيذ والملاحظات داخل سامي لينك.
+                  بعد اختيار العرض الأنسب تُنشأ اتفاقية بمراحل دفع واضحة،
+                  وتتم إدارة التنفيذ والملاحظات داخل سامي لينك.
                 </div>
               </div>
             </div>
@@ -109,18 +112,21 @@
     </div>
   </div>
 </section>
+{% endblock %}
+
+{% block content %}
 
 <!-- قسم كيف تعمل المنصة -->
 <section id="how-it-works" class="section how-it-works">
   <div class="container">
     <div class="section-header scroll-reveal">
-      <div class="section-badge">عملية منظمة</div>
+      <div class="section-badge">🔄 عملية منظمة</div>
       <h2 class="section-title">كيف تعمل منصة سامي لينك؟</h2>
       <p class="section-description">
         رحلة منظمة من الطلب حتى الإكمال، بخطوات بسيطة وواضحة لكل من العميل والتقني.
       </p>
     </div>
-    
+
     <div class="steps-grid">
       <div class="step-card scroll-reveal">
         <div class="step-number-large">١</div>
@@ -130,7 +136,7 @@
           يقوم العميل بإنشاء طلب جديد، وتوضيح طبيعة المشروع أو المهمة، والمدة المتوقعة والميزانية، مع إمكانية إرفاق ملفات توضيحية.
         </p>
       </div>
-      
+
       <div class="step-card scroll-reveal">
         <div class="step-number-large">٢</div>
         <div class="step-icon">💼</div>
@@ -139,7 +145,7 @@
           تُرسل إشعارات للتقنيين المناسبين، ويقومون بتقديم عروضهم داخل المنصة مع تفاصيل السعر، المدة، وطريقة التنفيذ.
         </p>
       </div>
-      
+
       <div class="step-card scroll-reveal">
         <div class="step-number-large">٣</div>
         <div class="step-icon">📄</div>
@@ -148,7 +154,7 @@
           بعد اختيار العرض الأنسب، تُنشأ اتفاقية تحتوي على مراحل عمل ودفعات، وتُربط آليًا بفواتير تصدر من المنصة.
         </p>
       </div>
-      
+
       <div class="step-card scroll-reveal">
         <div class="step-number-large">٤</div>
         <div class="step-icon">✅</div>
@@ -161,51 +167,71 @@
   </div>
 </section>
 
-<!-- قسم التقنيين الموثوقين -->
-<section id="team" class="section">
+<!-- قسم التقنيين - كروت صغيرة احترافية + صور -->
+<section id="team" class="section team-section team-section--mini">
   <div class="container">
     <div class="section-header scroll-reveal">
-      <div class="section-badge">فريق موثوق</div>
-      <h2 class="section-title">التقنيون الموثوقون في سامي لينك</h2>
+      <div class="section-badge">👥 التقنيون</div>
+      <h2 class="section-title">التقنيون السعوديون في سامي لينك</h2>
       <p class="section-description">
-        نخبة من التقنيين السعوديين تم التحقق من هوياتهم وخبراتهم قبل قبولهم في المنصة.
+        تقنيون سعوديون تم التحقق من هوياتهم وخبراتهم قبل قبولهم في المنصة.
       </p>
     </div>
-    
-    {% if team_members %}
-      <div class="team-grid">
-        {% for emp in team_members %}
-          <div class="team-card scroll-reveal">
-            <div class="team-avatar">
-              {% if emp.avatar_url %}
-                <img src="{{ emp.avatar_url }}" alt="{{ emp.full_name }}">
-              {% else %}
-                <div class="avatar-fallback">{{ emp.initials|default:"ت" }}</div>
-              {% endif %}
+
+    {# دعم متغيرات قديمة/جديدة بدون كسر #}
+    {% if featured_employees %}
+      {% with tech_list=featured_employees %}
+        {% include "website/_tech_mini_grid.html" %}
+      {% endwith %}
+    {% elif team_members %}
+      {% with tech_list=team_members %}
+        {% include "website/_tech_mini_grid.html" %}
+      {% endwith %}
+    {% else %}
+      <div class="mini-tech-grid">
+        {% for i in "1234" %}
+          <article class="mini-tech-card scroll-reveal" aria-label="تقني">
+            <div class="mini-tech-head">
+              <div class="mini-tech-avatar">
+                {# نفس منطق _tech_mini_grid.html #}
+                {% if i.avatar_url %}
+                  <img src="{{ i.avatar_url }}" alt="تقني سعودي {{ i }}" loading="lazy" />
+                {% elif i.avatar %}
+                  <img src="{{ i.avatar.url }}" alt="تقني سعودي {{ i }}" loading="lazy" />
+                {% elif i.image %}
+                  <img src="{{ i.image.url }}" alt="تقني سعودي {{ i }}" loading="lazy" />
+                {% elif i.photo %}
+                  <img src="{{ i.photo.url }}" alt="تقني سعودي {{ i }}" loading="lazy" />
+                {% elif i.profile_image %}
+                  <img src="{{ i.profile_image.url }}" alt="تقني سعودي {{ i }}" loading="lazy" />
+                {% elif i.profile and i.profile.avatar %}
+                  <img src="{{ i.profile.avatar.url }}" alt="تقني سعودي {{ i }}" loading="lazy" />
+                {% elif i.profile and i.profile.photo %}
+                  <img src="{{ i.profile.photo.url }}" alt="تقني سعودي {{ i }}" loading="lazy" />
+                {% elif i.profile and i.profile.image %}
+                  <img src="{{ i.profile.image.url }}" alt="تقني سعودي {{ i }}" loading="lazy" />
+                {% else %}
+                  <img src="{% static 'img/avatar-placeholder.png' %}" alt="تقني سعودي {{ i }}" loading="lazy" />
+                {% endif %}
+              </div>
+              <div class="mini-tech-info">
+                <div class="mini-tech-name">تقني سعودي {{ i }}</div>
+                <div class="mini-tech-sub">تقني سعودي معتمد</div>
+              </div>
             </div>
-            
-            <h3 class="team-name">{{ emp.full_name|default:emp.name|default:emp.email }}</h3>
-            <p class="team-role">{{ emp.speciality|default:"تقني معتمد" }}</p>
-            <p class="team-location">{{ emp.city|default:"الرياض" }}</p>
-            
-            <div class="team-status">
-              <span class="status-dot"></span>
-              <span>جاهز لاستقبال الطلبات</span>
+            <div class="mini-tech-skills">
+              <span class="skill-tag-small">Django</span>
+              <span class="skill-tag-small">React</span>
+              <span class="skill-tag-small">API</span>
             </div>
-          </div>
+          </article>
         {% endfor %}
       </div>
-    {% else %}
-      <div class="info-card scroll-reveal">
-        <p class="info-text">
-          لا توجد قائمة منشورة للتقنيين الموثوقين في الوقت الحالي. يمكن إضافة وإدارة القائمة من لوحة الإدارة متى ما تم تجهيز الفريق.
-        </p>
-      </div>
     {% endif %}
-    
-    <div class="text-center scroll-reveal" style="margin-top: 3rem;">
-      <a href="{% url 'profiles:employees_list' %}" class="btn btn-outline">
-        عرض جميع التقنيين
+
+    <div class="center-actions scroll-reveal" style="margin-top: 1.75rem;">
+      <a href="{% url 'profiles:employees_list' %}" class="btn btn-secondary">
+        👥 عرض جميع التقنيين
       </a>
     </div>
   </div>
@@ -217,13 +243,13 @@
     <div class="contact-grid">
       <div class="contact-info scroll-reveal">
         <div class="section-header" style="text-align: right;">
-          <div class="section-badge">دعم مستمر</div>
+          <div class="section-badge">📞 دعم مستمر</div>
           <h2 class="section-title">تواصل مع فريق سامي لينك</h2>
           <p class="section-description" style="margin: 0;">
             للاستفسارات، الشراكات، أو التجربة الأولى للمنصة؛ يسعدنا تواصلك معنا عبر البريد الإلكتروني أو الواتساب.
           </p>
         </div>
-        
+
         <div class="contact-methods">
           <div class="contact-method">
             <div class="contact-icon">📧</div>
@@ -232,7 +258,7 @@
               <a href="mailto:support@samilink.sa" class="contact-value">support@samilink.sa</a>
             </div>
           </div>
-          
+
           <div class="contact-method">
             <div class="contact-icon">💬</div>
             <div class="contact-details">
@@ -240,7 +266,7 @@
               <a href="https://wa.me/966500000000" class="contact-value">+966 50 000 0000</a>
             </div>
           </div>
-          
+
           <div class="contact-method">
             <div class="contact-icon">🕒</div>
             <div class="contact-details">
@@ -250,18 +276,18 @@
           </div>
         </div>
       </div>
-      
+
       <div class="contact-sidebar scroll-reveal">
-        <div class="sidebar-badge">جاهزون لمرافقتك</div>
+        <div class="sidebar-badge">🚀 جاهزون لمرافقتك</div>
         <h3 class="sidebar-title">من أول طلب حتى التسليم</h3>
         <p class="sidebar-description">
           يمكن تهيئة المنصة للاستخدام الداخلي في شركتك أو فريقك، مع صلاحيات مالية وإدارية متقدمة
           وتقارير متابعة مخصصة بحسب احتياج الإدارة.
         </p>
-        
+
         <div style="margin-top: 1.5rem;">
-          <a href="mailto:support@samilink.sa?subject=طلب شراكة" class="btn btn-primary btn-sm">
-            طلب شراكة
+          <a href="mailto:support@samilink.sa?subject=طلب شراكة" class="btn btn-primary">
+            🤝 طلب شراكة
           </a>
         </div>
       </div>
@@ -269,4 +295,194 @@
   </div>
 </section>
 
+{% endblock %}
+
+{% block extra_scripts %}
+{{ block.super }}
+<script>
+(function() {
+    if (typeof initScrollReveal === 'function') {
+        initScrollReveal();
+    }
+    if (typeof initGlobalAnimations === 'function') {
+        initGlobalAnimations();
+    }
+    if (typeof initButtonEffects === 'function') {
+        initButtonEffects();
+    }
+
+    document.addEventListener('DOMContentLoaded', function() {
+        const ctaButtons = document.querySelectorAll('.hero-actions .btn');
+        ctaButtons.forEach((btn, index) => {
+            btn.style.animationDelay = `${index * 0.1 + 0.5}s`;
+        });
+
+        const stepCards = document.querySelectorAll('.step-card');
+        stepCards.forEach(card => {
+            card.addEventListener('mouseenter', function() {
+                this.style.transform = 'translateY(-10px)';
+                this.style.boxShadow = 'var(--shadow-xl)';
+            });
+            card.addEventListener('mouseleave', function() {
+                this.style.transform = 'translateY(-5px)';
+                this.style.boxShadow = 'var(--shadow-lg)';
+            });
+        });
+
+        const techCards = document.querySelectorAll('.mini-tech-card');
+        techCards.forEach(card => {
+            card.addEventListener('mouseenter', function() {
+                this.style.transform = 'translateY(-5px) scale(1.02)';
+            });
+            card.addEventListener('mouseleave', function() {
+                this.style.transform = 'translateY(0) scale(1)';
+            });
+        });
+    });
+
+    document.querySelectorAll('a[href^="#"]').forEach(anchor => {
+        anchor.addEventListener('click', function (e) {
+            e.preventDefault();
+            const target = document.querySelector(this.getAttribute('href'));
+            if (target) {
+                if (typeof scrollToElement === 'function') {
+                    scrollToElement(target);
+                } else {
+                    target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                }
+            }
+        });
+    });
+
+    window.addEventListener('load', function() {
+        document.body.classList.add('loaded');
+        const revealElements = document.querySelectorAll('.scroll-reveal');
+        revealElements.forEach((el, index) => {
+            el.style.animationDelay = `${index * 0.1}s`;
+        });
+    });
+
+})();
+</script>
+
+<style>
+.hero-section {
+    position: relative;
+    overflow: hidden;
+}
+.hero-section::before {
+    content: '';
+    position: absolute;
+    top: -50%;
+    right: -20%;
+    width: 100%;
+    height: 200%;
+    background: radial-gradient(circle, rgba(34, 197, 94, 0.05) 0%, transparent 70%);
+    z-index: -1;
+}
+
+.team-section--mini {
+    background: linear-gradient(135deg, var(--primary-50) 0%, var(--white) 100%);
+}
+
+/* شبكة الكروت */
+.mini-tech-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+    gap: 1rem;
+    margin-top: 1.75rem;
+    max-width: 980px;
+    margin-left: auto;
+    margin-right: auto;
+}
+
+.mini-tech-card {
+    background: var(--white);
+    border-radius: 16px;
+    padding: 1rem;
+    box-shadow: var(--shadow-sm);
+    border: 1px solid var(--dark-200);
+    transition: transform .2s ease, box-shadow .2s ease, border-color .2s ease;
+}
+
+.mini-tech-card:hover {
+    transform: translateY(-4px);
+    box-shadow: var(--shadow-md);
+    border-color: var(--primary-200);
+}
+
+.mini-tech-head {
+    display: flex;
+    align-items: center;
+    gap: .75rem;
+    margin-bottom: .75rem;
+}
+
+/* الصورة الشخصية */
+.mini-tech-avatar {
+    width: 48px;
+    height: 48px;
+    border-radius: 999px;
+    overflow: hidden;
+    background: var(--primary-50, #eff6ff);
+    border: 2px solid var(--primary-200, #bfdbfe);
+    flex: 0 0 auto;
+}
+.mini-tech-avatar img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display:block;
+}
+
+.mini-tech-info {
+    text-align: right;
+    flex: 1;
+    min-width: 0;
+}
+
+.mini-tech-name {
+    font-weight: 800;
+    color: var(--dark-900);
+    margin-bottom: 0.1rem;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.mini-tech-sub {
+    color: var(--muted, #64748b);
+    font-size: 0.85rem;
+    font-weight: 600;
+}
+
+.mini-tech-skills {
+    display: flex;
+    flex-wrap: wrap;
+    gap: .35rem;
+}
+
+.skill-tag-small{
+    background: var(--primary-50, #eff6ff);
+    border: 1px solid var(--primary-200, #bfdbfe);
+    color: var(--primary-700, #1d4ed8);
+    padding: .25rem .55rem;
+    border-radius: 999px;
+    font-size: .78rem;
+    font-weight: 700;
+}
+
+.center-actions { text-align:center; }
+
+@media (max-width: 768px) {
+    .hero-content { grid-template-columns: 1fr; gap: 2rem; }
+    .hero-title { font-size: 2.5rem; }
+    .steps-grid { grid-template-columns: 1fr; }
+    .contact-grid { grid-template-columns: 1fr; }
+}
+
+@media (max-width: 420px) {
+    .mini-tech-grid { grid-template-columns: 1fr; }
+}
+</style>
 {% endblock %}

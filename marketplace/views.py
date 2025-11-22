@@ -892,20 +892,27 @@ def request_change_state(request, pk: int):
     # الحالة الحالية (تطبيع)
     current = str(getattr(req, "status", getattr(req, "state", "")) or "").strip().lower()
 
-    # الانتقالات المسموحة
-    allowed_transitions = {
-        "in_progress": {"awaiting_review", "cancelled"},
-        "awaiting_review": {"in_progress", "awaiting_payment"},
-        "awaiting_payment": {"completed", "cancelled"},
-        "completed": set(),
-        "cancelled": set(),
-    }
 
-    # منع انتقال غير منطقي (إلا الإلغاء)
-    if new_state != "cancelled":
-        if current not in allowed_transitions or new_state not in allowed_transitions[current]:
-            messages.error(request, "لا يُسمح بالانتقال المطلوب من الحالة الحالية.")
-            return redirect(req.get_absolute_url())
+    # السماح للمدير بتغيير الحالة من 'نزاع' لأي حالة أخرى
+    is_admin_user = _is_admin(user)
+    if current == "disputed" and is_admin_user:
+        # إزالة علم النزاع عند تغيير الحالة
+        if hasattr(req, "has_dispute"):
+            req.has_dispute = False
+    else:
+        # الانتقالات المسموحة
+        allowed_transitions = {
+            "in_progress": {"awaiting_review", "cancelled"},
+            "awaiting_review": {"in_progress", "awaiting_payment"},
+            "awaiting_payment": {"completed", "cancelled"},
+            "completed": set(),
+            "cancelled": set(),
+        }
+        # منع انتقال غير منطقي (إلا الإلغاء)
+        if new_state != "cancelled":
+            if current not in allowed_transitions or new_state not in allowed_transitions[current]:
+                messages.error(request, "لا يُسمح بالانتقال المطلوب من الحالة الحالية.")
+                return redirect(req.get_absolute_url())
 
     # تحديد اسم حقل الحالة الفعلي (status أو state)
     field = _status_field_name(req)
@@ -918,52 +925,53 @@ def request_change_state(request, pk: int):
     # =========================================================
     if new_state == "in_progress":
         agreement = getattr(req, "agreement", None)
+        # إذا المدير يحاول تغيير الحالة من نزاع، تجاوز شرط الفاتورة
+        if not (current == "disputed" and is_admin_user):
+            # لا يوجد اتفاقية => لا يوجد فاتورة => لا بدء تنفيذ
+            if not agreement:
+                messages.error(request, "لا يمكن بدء التنفيذ قبل وجود اتفاقية وفاتورة مدفوعة.")
+                return redirect(req.get_absolute_url())
 
-        # لا يوجد اتفاقية => لا يوجد فاتورة => لا بدء تنفيذ
-        if not agreement:
-            messages.error(request, "لا يمكن بدء التنفيذ قبل وجود اتفاقية وفاتورة مدفوعة.")
-            return redirect(req.get_absolute_url())
+            invoice_paid = False
 
-        invoice_paid = False
+            # ✅ المصدر الرسمي الجديد إن وُجد
+            if hasattr(agreement, "invoices_all_paid"):
+                try:
+                    invoice_paid = bool(agreement.invoices_all_paid)
+                except Exception:
+                    invoice_paid = False
+            else:
+                # fallback لو لم تُحدَّث Agreement بعد
+                try:
+                    invoices_mgr = getattr(agreement, "invoices", None)
+                    if invoices_mgr is not None:
+                        qs = invoices_mgr.all()
+                        if qs.exists():
+                            from finance.models import Invoice as InvoiceModel
+                            paid_val = getattr(getattr(InvoiceModel, "Status", None), "PAID", "paid")
+                            invoice_paid = not qs.exclude(status=paid_val).exists()
+                    else:
+                        inv = getattr(agreement, "invoice", None)
+                        if inv is not None:
+                            status_val = str(getattr(inv, "status", "") or "").lower()
+                            paid_val = str(getattr(getattr(inv.__class__, "Status", None), "PAID", "paid") or "").lower()
+                            invoice_paid = status_val == paid_val
+                except Exception:
+                    invoice_paid = False
 
-        # ✅ المصدر الرسمي الجديد إن وُجد
-        if hasattr(agreement, "invoices_all_paid"):
+            if not invoice_paid:
+                messages.error(request, "لا يمكن تحويل الطلب إلى قيد التنفيذ إلا بعد سداد جميع فواتير الاتفاقية.")
+                return redirect(req.get_absolute_url())
+
+            # (اختياري) تثبيت تاريخ البدء وتزامن حالة الطلب من داخل الاتفاقية
             try:
-                invoice_paid = bool(agreement.invoices_all_paid)
+                if hasattr(agreement, "mark_started"):
+                    agreement.mark_started(save=True)
+                if hasattr(agreement, "sync_request_state"):
+                    # لا نحفظ الطلب هنا حتى لا يحدث تعارض، لأننا سنحفظه بعد قليل
+                    agreement.sync_request_state(save_request=False)
             except Exception:
-                invoice_paid = False
-        else:
-            # fallback لو لم تُحدَّث Agreement بعد
-            try:
-                invoices_mgr = getattr(agreement, "invoices", None)
-                if invoices_mgr is not None:
-                    qs = invoices_mgr.all()
-                    if qs.exists():
-                        from finance.models import Invoice as InvoiceModel
-                        paid_val = getattr(getattr(InvoiceModel, "Status", None), "PAID", "paid")
-                        invoice_paid = not qs.exclude(status=paid_val).exists()
-                else:
-                    inv = getattr(agreement, "invoice", None)
-                    if inv is not None:
-                        status_val = str(getattr(inv, "status", "") or "").lower()
-                        paid_val = str(getattr(getattr(inv.__class__, "Status", None), "PAID", "paid") or "").lower()
-                        invoice_paid = status_val == paid_val
-            except Exception:
-                invoice_paid = False
-
-        if not invoice_paid:
-            messages.error(request, "لا يمكن تحويل الطلب إلى قيد التنفيذ إلا بعد سداد جميع فواتير الاتفاقية.")
-            return redirect(req.get_absolute_url())
-
-        # (اختياري) تثبيت تاريخ البدء وتزامن حالة الطلب من داخل الاتفاقية
-        try:
-            if hasattr(agreement, "mark_started"):
-                agreement.mark_started(save=True)
-            if hasattr(agreement, "sync_request_state"):
-                # لا نحفظ الطلب هنا حتى لا يحدث تعارض، لأننا سنحفظه بعد قليل
-                agreement.sync_request_state(save_request=False)
-        except Exception:
-            pass
+                pass
 
     # تحديث الحالة على الطلب
     setattr(req, field, new_state)

@@ -1,6 +1,5 @@
-# agreements/views.py
-from __future__ import annotations
 
+from __future__ import annotations
 import logging
 from datetime import timedelta
 from decimal import Decimal
@@ -30,6 +29,15 @@ from .forms import AgreementEditForm, MilestoneFormSet, AgreementClauseSelectFor
 from .models import Agreement, AgreementClauseItem, Milestone
 
 logger = logging.getLogger(__name__)
+@login_required
+@transaction.atomic
+def close_dispute_view(request: HttpRequest, request_id: int) -> HttpResponse:
+    req = get_object_or_404(Request, pk=request_id)
+    if not _is_admin(request.user):
+        return HttpResponseForbidden("غير مصرح لك بإغلاق النزاع.")
+    req.close_dispute()
+    messages.success(request, "تم إغلاق النزاع واستئناف الطلب.")
+    return redirect("marketplace:request_detail", pk=req.pk)
 
 
 # ============================== صلاحيات مساعدة ==============================
@@ -443,7 +451,8 @@ def milestone_deliver(request: HttpRequest, milestone_id: int, *args, **kwargs) 
     ms = Milestone.objects.select_related("agreement__request").select_for_update().get(pk=milestone_id)
     req = ms.agreement.request
 
-    if getattr(req, "is_frozen", False) or str(getattr(req, "status", "")).lower() == "disputed":
+    is_admin = _is_admin(request.user)
+    if (getattr(req, "is_frozen", False) or str(getattr(req, "status", "")).lower() == "disputed") and not is_admin:
         messages.error(request, "لا يمكن تسليم المرحلة: الطلب في حالة نزاع.")
         return _redirect_to_request_detail(ms)
 

@@ -100,7 +100,7 @@
                       class="inline-form"
                       onsubmit="return confirm('سيتم تعليم الطلب «قيد التنفيذ». متابعة؟');">
                   {% csrf_token %}
-                  <input type="hidden" name="status" value="in_progress">
+                  <input type="hidden" name="state" value="in_progress">
                   <button class="btn btn-secondary btn-sm" aria-label="تعيين قيد التنفيذ">
                     🚀 قيد التنفيذ
                   </button>
@@ -111,7 +111,7 @@
                       class="inline-form"
                       onsubmit="return confirm('سيتم تعليم الطلب «بانتظار اتفاقية». متابعة؟');">
                   {% csrf_token %}
-                  <input type="hidden" name="status" value="agreement_pending">
+                  <input type="hidden" name="state" value="agreement_pending">
                   <button class="btn btn-secondary btn-sm" aria-label="تعيين بانتظار اتفاقية">
                     📝 بانتظار اتفاقية
                   </button>
@@ -122,7 +122,7 @@
                       class="inline-form"
                       onsubmit="return confirm('تعليم الطلب «مكتمل» يدويًا؟ يُفضَّل اكتماله تلقائيًا بعد السداد.');">
                   {% csrf_token %}
-                  <input type="hidden" name="status" value="completed">
+                  <input type="hidden" name="state" value="completed">
                   <button class="btn btn-success btn-sm" aria-label="تعيين مكتمل">
                     ✅ مكتمل
                   </button>
@@ -153,7 +153,7 @@
                       class="inline-form"
                       onsubmit="return confirm('سيتم تعليم الطلب «قيد التنفيذ». متابعة؟');">
                   {% csrf_token %}
-                  <input type="hidden" name="status" value="in_progress">
+                  <input type="hidden" name="state" value="in_progress">
                   <button class="btn btn-secondary btn-sm">
                     🚀 قيد التنفيذ
                   </button>

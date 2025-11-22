@@ -122,6 +122,10 @@ TEMPLATES = [
                 "django.template.context_processors.request",
                 "django.contrib.auth.context_processors.auth",
                 "django.contrib.messages.context_processors.messages",
+
+                # ✅ Context Processor عام للإشعارات (يمرّر unread_count + latest)
+                # أنشئه في: core/notifications/context_processors.py
+                "core.notifications.context_processors.notifications_context",
             ],
         },
     },

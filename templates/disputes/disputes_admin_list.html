@@ -1,0 +1,409 @@
+{# disputes/templates/disputes/disputes_admin_list.html (لوحة إدارة النزاعات) #}
+{% extends "base.html" %}
+
+{% block title %}إدارة النزاعات{% endblock %}
+
+{% block extra_head %}
+<style>
+  .disputes-admin-page {
+    padding: 2.5rem 0;
+  }
+
+  .disputes-admin-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-end;
+    gap: 1.25rem;
+    margin-bottom: 1.75rem;
+  }
+
+  .disputes-admin-title {
+    font-size: 1.6rem;
+    font-weight: 800;
+    color: var(--dark-900);
+    margin: 0 0 .25rem;
+  }
+
+  .disputes-admin-subtitle {
+    font-size: .9rem;
+    color: var(--dark-500);
+  }
+
+  .disputes-filter-card {
+    background: var(--surface-alt);
+    border-radius: var(--radius-lg);
+    border: 1px solid var(--dark-200);
+    padding: 1.25rem 1.5rem;
+    margin-bottom: 1.5rem;
+  }
+
+  .disputes-filter-grid {
+    display: grid;
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+    gap: .75rem;
+  }
+
+  @media (max-width: 768px) {
+    .disputes-filter-grid {
+      grid-template-columns: 1fr;
+    }
+  }
+
+  .disputes-filter-actions {
+    grid-column: 1 / -1;
+    display: flex;
+    flex-wrap: wrap;
+    gap: .5rem;
+    margin-top: .25rem;
+  }
+
+  .disputes-input,
+  .disputes-select {
+    width: 100%;
+    padding: .55rem .75rem;
+    border-radius: .65rem;
+    border: 1px solid var(--dark-200);
+    font-size: .9rem;
+    color: var(--dark-800);
+    background: #fff;
+    outline: none;
+    transition: border-color .18s ease, box-shadow .18s ease, background .18s ease;
+  }
+
+  .disputes-input:focus,
+  .disputes-select:focus {
+    border-color: var(--primary-400);
+    box-shadow: 0 0 0 3px rgba(52, 144, 220, .18);
+    background: #fff;
+  }
+
+  .disputes-list-card {
+    background: #fff;
+    border-radius: var(--radius-lg);
+    border: 1px solid var(--dark-200);
+    box-shadow: var(--shadow-sm);
+    padding: .5rem 0;
+    overflow-x: auto;
+  }
+
+  .disputes-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: .87rem;
+  }
+
+  .disputes-table thead {
+    background: var(--dark-25);
+  }
+
+  .disputes-table th,
+  .disputes-table td {
+    padding: .6rem .85rem;
+    text-align: right;
+    white-space: nowrap;
+  }
+
+  .disputes-table th {
+    font-weight: 600;
+    color: var(--dark-600);
+    border-bottom: 1px solid var(--dark-200);
+  }
+
+  .disputes-table tbody tr {
+    border-bottom: 1px solid var(--dark-100);
+  }
+
+  .disputes-table tbody tr:hover {
+    background: var(--dark-25);
+  }
+
+  .disputes-status-chip {
+    display: inline-flex;
+    align-items: center;
+    padding: .2rem .55rem;
+    font-size: .75rem;
+    border-radius: 999px;
+    font-weight: 700;
+    border: 1px solid transparent;
+  }
+
+  .disputes-status-open {
+    background: #fff7ed;
+    color: #c2410c;
+    border-color: #fed7aa;
+  }
+
+  .disputes-status-review {
+    background: #eff6ff;
+    color: #1d4ed8;
+    border-color: #bfdbfe;
+  }
+
+  .disputes-status-resolved {
+    background: #ecfdf5;
+    color: #047857;
+    border-color: #a7f3d0;
+  }
+
+  .disputes-status-canceled {
+    background: #fef2f2;
+    color: #b91c1c;
+    border-color: #fecaca;
+  }
+
+  .disputes-text-main {
+    display: block;
+    font-weight: 700;
+    color: var(--dark-800);
+    margin-bottom: .15rem;
+    max-width: 340px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .disputes-text-sub {
+    display: block;
+    font-size: .8rem;
+    color: var(--dark-500);
+    max-width: 360px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .disputes-actions {
+    display: inline-flex;
+    flex-wrap: wrap;
+    gap: .35rem;
+  }
+
+  .btn-small {
+    padding: .35rem .7rem;
+    font-size: .78rem;
+    border-radius: .65rem;
+  }
+
+  .btn-soft {
+    background: #fff;
+    color: var(--dark-700);
+    border: 1px solid var(--dark-150);
+  }
+
+  .btn-soft:hover {
+    background: var(--dark-25);
+  }
+
+  .disputes-empty-row td {
+    padding: 1.4rem .9rem;
+    text-align: center;
+    color: var(--dark-500);
+    font-size: .9rem;
+  }
+
+  .disputes-pagination {
+    margin-top: 1rem;
+    display: flex;
+    justify-content: center;
+    gap: .4rem;
+    align-items: center;
+    font-size: .8rem;
+  }
+
+  .disputes-pagination span {
+    padding: .4rem .7rem;
+    border-radius: .7rem;
+    background: #f3f4f6;
+    color: var(--dark-700);
+  }
+
+  .disputes-pagination a {
+    text-decoration: none;
+    color: var(--dark-700);
+    padding: .4rem .7rem;
+    border-radius: .7rem;
+    border: 1px solid var(--dark-150);
+    background: #fff;
+  }
+
+  .disputes-pagination a:hover {
+    background: var(--dark-25);
+  }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container disputes-admin-page" dir="rtl">
+
+  <div class="disputes-admin-header">
+    <div>
+      <h1 class="disputes-admin-title">إدارة النزاعات</h1>
+      <p class="disputes-admin-subtitle">مراجعة حالات النزاعات واتخاذ الإجراءات المناسبة لكل طلب.</p>
+    </div>
+  </div>
+
+  <form method="get" class="disputes-filter-card">
+    <div class="disputes-filter-grid">
+      <div>
+        <input
+          class="disputes-input"
+          type="text"
+          name="q"
+          value="{{ q }}"
+          placeholder="بحث بالعنوان أو رقم الطلب أو الوصف…">
+      </div>
+
+      <div>
+        <input
+          class="disputes-input"
+          type="date"
+          name="start"
+          value="{{ start }}">
+      </div>
+
+      <div>
+        <input
+          class="disputes-input"
+          type="date"
+          name="end"
+          value="{{ end }}">
+      </div>
+
+      <div>
+        <select class="disputes-select" name="status">
+          <option value="">كل الحالات</option>
+          <option value="open" {% if status == "open" %}selected{% endif %}>مفتوح</option>
+          <option value="in_review" {% if status == "in_review" %}selected{% endif %}>قيد المراجعة</option>
+          <option value="resolved" {% if status == "resolved" %}selected{% endif %}>محسوم</option>
+          <option value="canceled" {% if status == "canceled" %}selected{% endif %}>ملغي</option>
+        </select>
+      </div>
+
+      <div class="disputes-filter-actions">
+        <button type="submit" class="btn btn-primary btn-sm">بحث</button>
+        <a href="." class="btn btn-outline btn-sm">تصفير البحث</a>
+      </div>
+    </div>
+  </form>
+
+  <div class="disputes-list-card">
+    <table class="disputes-table">
+      <thead>
+        <tr>
+          <th>#</th>
+          <th>الحالة</th>
+          <th>الطلب</th>
+          <th>العنوان / الوصف</th>
+          <th>تاريخ الإنشاء</th>
+          <th>إجراءات</th>
+        </tr>
+      </thead>
+
+      <tbody>
+        {% if page_obj %}
+          {% for d in page_obj %}
+            <tr>
+              <td>D{{ d.id }}</td>
+
+              <td>
+                {% if d.status %}
+                  {% if d.status == "open" %}
+                    <span class="disputes-status-chip disputes-status-open">مفتوح</span>
+                  {% elif d.status == "in_review" %}
+                    <span class="disputes-status-chip disputes-status-review">قيد المراجعة</span>
+                  {% elif d.status == "resolved" %}
+                    <span class="disputes-status-chip disputes-status-resolved">محسوم</span>
+                  {% elif d.status == "canceled" %}
+                    <span class="disputes-status-chip disputes-status-canceled">ملغي</span>
+                  {% else %}
+                    <span class="disputes-status-chip">{{ d.status }}</span>
+                  {% endif %}
+                {% else %}
+                  -
+                {% endif %}
+              </td>
+
+              <td>
+                {% if d.request_id %}
+                  #{{ d.request_id }}
+                {% else %}
+                  -
+                {% endif %}
+              </td>
+
+              <td>
+                <span class="disputes-text-main">
+                  {% if d.title %}
+                    {{ d.title }}
+                  {% else %}
+                    بدون عنوان
+                  {% endif %}
+                </span>
+                <span class="disputes-text-sub">
+                  {% if d.note %}
+                    {{ d.note|truncatechars:80 }}
+                  {% elif d.details %}
+                    {{ d.details|truncatechars:80 }}
+                  {% else %}
+                    لا يوجد وصف إضافي
+                  {% endif %}
+                </span>
+              </td>
+
+              <td>
+                {% if d.created_at %}
+                  {{ d.created_at|date:"Y-m-d H:i" }}
+                {% elif d.opened_at %}
+                  {{ d.opened_at|date:"Y-m-d H:i" }}
+                {% else %}
+                  -
+                {% endif %}
+              </td>
+
+              <td>
+                <div class="disputes-actions">
+                  <form method="post" action="{% url 'disputes:update_status' d.id %}" style="display:inline;">
+                    {% csrf_token %}
+                    <button type="submit" name="action" value="review" class="btn btn-secondary btn-sm btn-small">
+                      تحديث الحالة
+                    </button>
+                  </form>
+
+                  <a href="{% url 'disputes:detail' d.id %}" class="btn btn-soft btn-small">
+                    تفاصيل النزاع
+                  </a>
+                </div>
+              </td>
+            </tr>
+
+          {% empty %}
+            <tr class="disputes-empty-row">
+              <td colspan="6">لا توجد نزاعات مطابقة لخيارات البحث الحالية.</td>
+            </tr>
+          {% endfor %}
+
+        {% else %}
+          <tr class="disputes-empty-row">
+            <td colspan="6">لا توجد بيانات نزاعات متاحة حاليًا.</td>
+          </tr>
+        {% endif %}
+      </tbody>
+    </table>
+  </div>
+
+  {% if page_obj %}
+    <div class="disputes-pagination">
+      {% if page_obj.has_previous %}
+        <a href="?page={{ page_obj.previous_page_number }}&q={{ q }}&status={{ status }}&start={{ start }}&end={{ end }}">السابق</a>
+      {% endif %}
+
+      <span>صفحة {{ page_obj.number }} من {{ page_obj.paginator.num_pages }}</span>
+
+      {% if page_obj.has_next %}
+        <a href="?page={{ page_obj.next_page_number }}&q={{ q }}&status={{ status }}&start={{ start }}&end={{ end }}">التالي</a>
+      {% endif %}
+    </div>
+  {% endif %}
+
+</div>
+{% endblock %}

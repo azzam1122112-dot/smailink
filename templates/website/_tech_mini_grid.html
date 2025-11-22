@@ -1,0 +1,53 @@
+{# website/_tech_mini_grid.html #}
+{% load static %}
+
+<div class="mini-tech-grid">
+  {% for emp in tech_list %}
+    <article class="mini-tech-card scroll-reveal" aria-label="تقني">
+      <div class="mini-tech-head">
+
+        <div class="mini-tech-avatar">
+          {% if emp.avatar_url %}
+            <img src="{{ emp.avatar_url }}" alt="{{ emp.full_name|default:emp.name|default:'تقني' }}" loading="lazy" />
+          {% elif emp.avatar %}
+            <img src="{{ emp.avatar.url }}" alt="{{ emp.full_name|default:emp.name|default:'تقني' }}" loading="lazy" />
+          {% elif emp.image %}
+            <img src="{{ emp.image.url }}" alt="{{ emp.full_name|default:emp.name|default:'تقني' }}" loading="lazy" />
+          {% elif emp.photo %}
+            <img src="{{ emp.photo.url }}" alt="{{ emp.full_name|default:emp.name|default:'تقني' }}" loading="lazy" />
+          {% elif emp.profile_image %}
+            <img src="{{ emp.profile_image.url }}" alt="{{ emp.full_name|default:emp.name|default:'تقني' }}" loading="lazy" />
+          {% elif emp.profile and emp.profile.avatar %}
+            <img src="{{ emp.profile.avatar.url }}" alt="{{ emp.full_name|default:emp.name|default:'تقني' }}" loading="lazy" />
+          {% elif emp.profile and emp.profile.photo %}
+            <img src="{{ emp.profile.photo.url }}" alt="{{ emp.full_name|default:emp.name|default:'تقني' }}" loading="lazy" />
+          {% elif emp.profile and emp.profile.image %}
+            <img src="{{ emp.profile.image.url }}" alt="{{ emp.full_name|default:emp.name|default:'تقني' }}" loading="lazy" />
+          {% elif emp.employee_profile and emp.employee_profile.photo %}
+            <img src="{{ emp.employee_profile.photo.url }}" alt="{{ emp.full_name|default:emp.name|default:'تقني' }}" loading="lazy" />
+          {% else %}
+            <img src="{% static 'img/avatar-placeholder.png' %}" alt="{{ emp.full_name|default:emp.name|default:'تقني' }}" loading="lazy" />
+          {% endif %}
+        </div>
+
+        <div class="mini-tech-info">
+          <div class="mini-tech-name">
+            {{ emp.full_name|default:emp.name|default:emp.email|default:"تقني سعودي" }}
+          </div>
+          <div class="mini-tech-sub">تقني سعودي معتمد</div>
+        </div>
+
+      </div>
+
+      <div class="mini-tech-skills">
+        {% for skill in emp.skills.all|slice:":3" %}
+          <span class="skill-tag-small">{{ skill.name|default:skill }}</span>
+        {% empty %}
+          <span class="skill-tag-small">Django</span>
+          <span class="skill-tag-small">React</span>
+          <span class="skill-tag-small">API</span>
+        {% endfor %}
+      </div>
+    </article>
+  {% endfor %}
+</div>
