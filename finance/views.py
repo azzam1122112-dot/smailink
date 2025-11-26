@@ -1,4 +1,3 @@
-# finance/views.py
 from __future__ import annotations
 
 import csv
@@ -8,6 +7,9 @@ import logging
 from datetime import date, timedelta
 from decimal import Decimal, ROUND_HALF_UP, InvalidOperation
 from typing import Dict, List, Optional, Set, Tuple
+from decimal import Decimal
+from django.db.models import Q, Sum, Case, When, DecimalField
+from django.db.models.functions import Coalesce
 
 from django.conf import settings
 from django.contrib import messages
@@ -201,8 +203,40 @@ def _mark_agreement_started_and_sync(ag: Agreement) -> None:
 
 
 def _agreement_P(ag: Agreement) -> Decimal:
-    """قيمة المشروع الأساسية P."""
-    return _as_decimal(getattr(ag, "p_amount", None) or getattr(ag, "total_amount", 0))
+    """
+    قيمة المشروع الأساسية (قبل الضريبة والعمولة).
+
+    السياسة الحالية:
+    - p_amount: إن وُجد فهو المصدر المعتمد للسعر الأساسي P.
+    - total_amount: أصبح في النظام = إجمالي العميل (P + VAT)،
+      لذلك لا يجوز التعامل معه مباشرة كـ P وإلا أعدنا حساب الضريبة مرة أخرى.
+    """
+    # 1) لو عندنا p_amount نستخدمه كما هو
+    p_raw = getattr(ag, "p_amount", None)
+    if p_raw is not None:
+        return _q2(_as_decimal(p_raw))
+
+    # 2) لا يوجد p_amount → نحاول استنتاج P من total_amount
+    total_raw = getattr(ag, "total_amount", None)
+    total = _as_decimal(total_raw)
+    if total <= 0:
+        return Decimal("0.00")
+
+    try:
+        fee_rate, vat_rate = FinanceSettings.current_rates()
+    except Exception:
+        # لو فشلنا في قراءة الإعدادات نعتبر total هو P
+        # (أفضل من مضاعفة الضريبة، حتى لو كان approximation)
+        return _q2(total)
+
+    vat_rate = _as_decimal(vat_rate or 0)
+    if vat_rate > 0:
+        # total = P + P*vat_rate  ⇒  P = total / (1 + vat_rate)
+        base = total / (Decimal("1") + vat_rate)
+    else:
+        base = total
+
+    return _q2(base)
 
 
 def _invoice_client_total(inv: Invoice, ag: Optional[Agreement] = None) -> Decimal:
@@ -408,7 +442,6 @@ def _build_invoice_summary(qs: QuerySet, paid_val: str, unpaid_val: str) -> Dict
         "employee_unpaid": Decimal("0.00"),
         "employee_cancelled": Decimal("0.00"),
     }
-
 
     inv_list = list(qs.select_related("agreement"))
     for inv in inv_list:
@@ -1114,6 +1147,7 @@ def mark_invoice_paid(request: HttpRequest, pk: int):
             messages.error(request, "حدث خطأ غير متوقع أثناء تحديث الدفع. لم يتم حفظ أي تغييرات.")
         return redirect(request.META.get("HTTP_REFERER", "/"))
 
+
 # ===========================
 # عرض الفواتير
 # ===========================
@@ -1216,15 +1250,23 @@ def agreement_invoices(request: HttpRequest, agreement_id: int):
     )
 
     totals = compute_agreement_totals(ag)
-    inv = _ensure_single_invoice_with_amount(ag, amount=totals["grand_total"])
+
+    # السعر الأساسي P
+    P = _as_decimal(totals.get("P", _agreement_P(ag)))
+
+    # نضمن الفاتورة باستخدام P كسعر أساس، وليس grand_total
+    inv = _ensure_single_invoice_with_amount(ag, amount=P)
 
     paid_val = getattr(getattr(Invoice, "Status", None), "PAID", "paid")
     is_paid = (getattr(inv, "status", None) == paid_val) or bool(getattr(inv, "is_paid", False))
 
+    # لإظهار إجمالي العميل في الملخص نستخدم _invoice_client_total
+    client_total = _invoice_client_total(inv, ag)
+
     summary = {
-        "total": inv.amount,
-        "unpaid": inv.amount if not is_paid else None,
-        "paid": inv.amount if is_paid else None,
+        "total": client_total,
+        "unpaid": client_total if not is_paid else None,
+        "paid": client_total if is_paid else None,
     }
 
     invoices_with_breakdown = [{"inv": inv, "breakdown": totals}]
@@ -1257,6 +1299,7 @@ def client_payments(request: HttpRequest) -> HttpResponse:
     paid_val = getattr(getattr(Invoice, "Status", None), "PAID", "paid")
     unpaid_val = getattr(getattr(Invoice, "Status", None), "UNPAID", "unpaid")
 
+    # جميع فواتير هذا العميل (مع إمكانية التصفية)
     invs = (
         Invoice.objects
         .select_related("agreement", "agreement__request")
@@ -1284,13 +1327,38 @@ def client_payments(request: HttpRequest) -> HttpResponse:
     if date_to:
         invs = invs.filter(issued_at__date__lte=date_to)
 
-    summary_filtered = _build_invoice_summary(invs, paid_val=paid_val, unpaid_val=unpaid_val)
+    # ===== إجماليات الكروت (تعتمد مباشرةً على amount كما في الجدول) =====
+    aggregates = invs.aggregate(
+        client_total=Coalesce(Sum("amount"), Decimal("0.00")),
+        client_paid=Coalesce(
+            Sum(
+                Case(
+                    When(status=paid_val, then="amount"),
+                    default=Decimal("0.00"),
+                    output_field=DecimalField(max_digits=12, decimal_places=2),
+                )
+            ),
+            Decimal("0.00"),
+        ),
+        client_unpaid=Coalesce(
+            Sum(
+                Case(
+                    When(status=unpaid_val, then="amount"),
+                    default=Decimal("0.00"),
+                    output_field=DecimalField(max_digits=12, decimal_places=2),
+                )
+            ),
+            Decimal("0.00"),
+        ),
+    )
+
     totals = {
-        "total": summary_filtered["client_total"],
-        "paid": summary_filtered["client_paid"],
-        "unpaid": summary_filtered["client_unpaid"],
+        "total": aggregates["client_total"],
+        "paid": aggregates["client_paid"],
+        "unpaid": aggregates["client_unpaid"],
     }
 
+    # طرق الدفع المتاحة لهذا العميل (لكل فواتيره، بدون تقييد بالفلاتر الحالية)
     methods = (
         Invoice.objects.filter(agreement__request__client_id=user.id)
         .exclude(method__isnull=True)
@@ -1300,6 +1368,7 @@ def client_payments(request: HttpRequest) -> HttpResponse:
         .order_by("method")
     )
 
+    # ملخص تفصيلي لو احتجته في أماكن أخرى بالقالب
     summary = _build_invoice_summary(invs, paid_val=paid_val, unpaid_val=unpaid_val)
 
     return render(
@@ -2130,6 +2199,8 @@ def mark_payout_paid(request: HttpRequest, pk: int):
         if note:
             payout.note = note[:255]
             payout.save(update_fields=["note", "updated_at"])
+
+
 
         _log_ledger_once(
             entry_type=getattr(LedgerEntry.Type, "EMPLOYEE_PAYOUT", "employee_payout") if LedgerEntry else "employee_payout",

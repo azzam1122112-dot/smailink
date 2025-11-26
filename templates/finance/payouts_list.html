@@ -143,9 +143,9 @@
 
                   <td>
                     <span class="badge 
-                               {% if p.status == 'paid' %}badge-verified
-                               {% elif p.status == 'pending' %}badge-pending
-                               {% elif p.status == 'cancelled' %}badge-rejected
+                               {% if p.is_paid %}badge-verified
+                               {% elif p.is_pending %}badge-pending
+                               {% elif p.is_cancelled %}badge-rejected
                                {% else %}badge-default{% endif %}">
                       {{ p.get_status_display }}
                     </span>
@@ -157,7 +157,7 @@
                   </td>
 
                   <td>
-                    {% if p.status == 'pending' %}
+                    {% if p.is_pending %}
                       <form method="post" action="{% url 'finance:mark_payout_paid' p.pk %}" class="payout-form">
                         {% csrf_token %}
                         <div class="form-row" style="display: flex; flex-wrap: wrap; gap: 0.5rem; align-items: center;">

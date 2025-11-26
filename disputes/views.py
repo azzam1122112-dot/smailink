@@ -256,7 +256,6 @@ def dispute_create(request: HttpRequest, request_id: int):
             # تحقق من وجود نزاع سابق مفتوح أو قيد المراجعة
             existing_dispute = req.disputes.filter(status__in=["open", "in_review"]).first()
             if existing_dispute:
-                from django.contrib import messages
                 messages.error(request, "لا يمكن فتح نزاع بسبب فتح نزاع سابق وتم حله من قبل الإدارة.")
                 return render(request, "disputes/open.html", {"form": form, "req": req})
 

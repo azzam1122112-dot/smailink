@@ -58,96 +58,97 @@
           <tbody>
             {% if invoices %}
               {% for item in invoices %}
-                  <tr class="scroll-reveal invoice-row">
-                    <td class="invoice-number">
-                      <span class="badge badge-default">#{{ item.inv.id }}</span>
-                    </td>
-                  
-                    <td class="agreement-info">
-                      <div class="agreement-main">
-                        <div class="agreement-id">A{{ item.inv.agreement_id }}</div>
-                        {% if item.inv.agreement and item.inv.agreement.request_id %}
-                          <div class="request-id">طلب #{{ item.inv.agreement.request_id }}</div>
+                <tr class="scroll-reveal invoice-row">
+                  <td class="invoice-number">
+                    <span class="badge badge-default">#{{ item.inv.id }}</span>
+                  </td>
+                
+                  <td class="agreement-info">
+                    <div class="agreement-main">
+                      <div class="agreement-id">A{{ item.inv.agreement_id }}</div>
+                      {% if item.inv.agreement and item.inv.agreement.request_id %}
+                        <div class="request-id">طلب #{{ item.inv.agreement.request_id }}</div>
+                      {% endif %}
+                    </div>
+                  </td>
+                
+                  <td class="milestone-info">
+                    {% if item.inv.milestone %}
+                      <div class="milestone-title">{{ item.inv.milestone.title|truncatewords:3 }}</div>
+                    {% else %}
+                      <span class="text-muted">—</span>
+                    {% endif %}
+                  </td>
+                
+                  {# ===== المبالغ (حسب السياسة الجديدة) ===== #}
+                  <td class="amount-info">
+                    {% if item.breakdown %}
+                      {# grand_total = P + VAT (إجمالي العميل) #}
+                      <div class="amount-value">
+                        {{ item.breakdown.grand_total|floatformat:2 }}
+                      </div>
+                      <div class="amount-currency">ر.س</div>
+
+                      {# تفاصيل موجزة تحت الإجمالي #}
+                      <div class="amount-subline">
+                        <span class="amount-chip">P: {{ item.breakdown.P|floatformat:2 }}</span>
+                        <span class="amount-chip">VAT: {{ item.breakdown.vat_amount|floatformat:2 }}</span>
+                        <span class="amount-chip muted">Fee خصم موظف: {{ item.breakdown.platform_fee|floatformat:2 }}</span>
+                      </div>
+                    {% else %}
+                      {# fallback آمن: إجمالي العميل المحسوب من الموديل #}
+                      <div class="amount-value">
+                        {% if item.inv.client_total_amount %}
+                          {{ item.inv.client_total_amount|floatformat:2 }}
+                        {% else %}
+                          {{ item.inv.amount|floatformat:2 }}
                         {% endif %}
                       </div>
-                    </td>
-                  
-                    <td class="milestone-info">
-                      {% if item.inv.milestone %}
-                        <div class="milestone-title">{{ item.inv.milestone.title|truncatewords:3 }}</div>
-                      {% else %}
-                        <span class="text-muted">—</span>
+                      <div class="amount-currency">ر.س</div>
+                    {% endif %}
+                  </td>
+                
+                  <td class="status-info">
+                    <span class="badge 
+                               {% if item.inv.status == 'paid' %}badge-verified
+                               {% elif item.inv.status == 'unpaid' %}badge-pending
+                               {% elif item.inv.status == 'cancelled' %}badge-rejected
+                               {% else %}badge-default{% endif %}">
+                      {% if item.inv.status == 'paid' %}✅ 
+                      {% elif item.inv.status == 'unpaid' %}⏳
+                      {% elif item.inv.status == 'cancelled' %}🚫
                       {% endif %}
-                    </td>
-                  
-                    {# ===== المبالغ (حسب السياسة الجديدة) ===== #}
-                    <td class="amount-info">
-                      {% if item.breakdown %}
-                        <div class="amount-value">
-                          {{ item.breakdown.client_total|floatformat:2 }}
-                        </div>
-                        <div class="amount-currency">ر.س</div>
-
-                        {# تفاصيل موجزة تحت الإجمالي (لا تُحمَّل على العميل) #}
-                        <div class="amount-subline">
-                          <span class="amount-chip">P: {{ item.breakdown.project_price|floatformat:2 }}</span>
-                          <span class="amount-chip">VAT: {{ item.breakdown.vat_amount|floatformat:2 }}</span>
-                          <span class="amount-chip muted">Fee خصم موظف: {{ item.breakdown.platform_fee_value|floatformat:2 }}</span>
-                        </div>
-                      {% else %}
-                        {# fallback آمن: إجمالي العميل المحسوب من الموديل #}
-                        <div class="amount-value">
-                          {% if item.inv.client_total_amount %}
-                            {{ item.inv.client_total_amount|floatformat:2 }}
-                          {% else %}
-                            {{ item.inv.amount|floatformat:2 }}
-                          {% endif %}
-                        </div>
-                        <div class="amount-currency">ر.س</div>
-                      {% endif %}
-                    </td>
-                  
-                    <td class="status-info">
-                      <span class="badge 
-                                 {% if item.inv.status == 'paid' %}badge-verified
-                                 {% elif item.inv.status == 'unpaid' %}badge-pending
-                                 {% elif item.inv.status == 'cancelled' %}badge-rejected
-                                 {% else %}badge-default{% endif %}">
-                        {% if item.inv.status == 'paid' %}✅ 
-                        {% elif item.inv.status == 'unpaid' %}⏳
-                        {% elif item.inv.status == 'cancelled' %}🚫
-                        {% endif %}
-                        {{ item.inv.get_status_display }}
-                      </span>
-                    </td>
-                  
-                    <td class="date-info">
-                      {% if item.inv.issued_at %}
-                        <div class="date-main">{{ item.inv.issued_at|date:"Y-m-d" }}</div>
-                        <div class="date-time">{{ item.inv.issued_at|date:"H:i" }}</div>
-                      {% else %}
-                        <span class="text-muted">—</span>
-                      {% endif %}
-                    </td>
-                  
-                    <td class="date-info">
-                      {% if item.inv.paid_at %}
-                        <div class="date-main">{{ item.inv.paid_at|date:"Y-m-d" }}</div>
-                        <div class="date-time">{{ item.inv.paid_at|date:"H:i" }}</div>
-                      {% else %}
-                        <span class="text-muted">—</span>
-                      {% endif %}
-                    </td>
-                  
-                    <td class="actions-info">
-                      <a href="{% url 'finance:invoice_detail' item.inv.id %}" 
-                         class="btn btn-outline btn-sm"
-                         title="عرض تفاصيل الفاتورة">
-                        👁️ تفاصيل
-                      </a>
-                    </td>
-                  </tr>
-                {% endfor %}
+                      {{ item.inv.get_status_display }}
+                    </span>
+                  </td>
+                
+                  <td class="date-info">
+                    {% if item.inv.issued_at %}
+                      <div class="date-main">{{ item.inv.issued_at|date:"Y-m-d" }}</div>
+                      <div class="date-time">{{ item.inv.issued_at|date:"H:i" }}</div>
+                    {% else %}
+                      <span class="text-muted">—</span>
+                    {% endif %}
+                  </td>
+                
+                  <td class="date-info">
+                    {% if item.inv.paid_at %}
+                      <div class="date-main">{{ item.inv.paid_at|date:"Y-m-d" }}</div>
+                      <div class="date-time">{{ item.inv.paid_at|date:"H:i" }}</div>
+                    {% else %}
+                      <span class="text-muted">—</span>
+                    {% endif %}
+                  </td>
+                
+                  <td class="actions-info">
+                    <a href="{% url 'finance:invoice_detail' item.inv.id %}" 
+                       class="btn btn-outline btn-sm"
+                       title="عرض تفاصيل الفاتورة">
+                      👁️ تفاصيل
+                    </a>
+                  </td>
+                </tr>
+              {% endfor %}
             {% else %}
               {# ===== حالة عدم وجود فواتير ===== #}
               <tr>
@@ -185,7 +186,7 @@
     }
 
     // تأثيرات على صفوف الجدول
-    document.querySelectorAll('.invoice-row').forEach(row => {
+    document.querySelectorAll('.invoice-row').forEach(function (row) {
       row.addEventListener('mouseenter', function() {
         this.style.background = 'var(--primary-50)';
         this.style.transform = 'translateX(-5px)';
@@ -200,13 +201,13 @@
     });
 
     // تأثيرات على أزرار التصفية
-    document.querySelectorAll('.filter-buttons .btn').forEach(button => {
+    document.querySelectorAll('.filter-buttons .btn').forEach(function (button) {
       button.addEventListener('click', function() {
         if (typeof animateButtonClick === 'function') {
           animateButtonClick(this);
         }
         
-        document.querySelectorAll('.filter-buttons .btn').forEach(btn => {
+        document.querySelectorAll('.filter-buttons .btn').forEach(function (btn) {
           btn.classList.remove('active');
         });
         this.classList.add('active');
@@ -214,7 +215,7 @@
     });
 
     // تأثيرات على أزرار التفاصيل
-    document.querySelectorAll('.actions-info .btn').forEach(button => {
+    document.querySelectorAll('.actions-info .btn').forEach(function (button) {
       button.addEventListener('mouseenter', function() {
         this.style.transform = 'scale(1.05)';
         this.style.background = 'var(--primary-500)';
