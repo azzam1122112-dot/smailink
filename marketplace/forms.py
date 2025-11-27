@@ -24,7 +24,7 @@ def _clean_text(v: str | None) -> str:
     if v is None:
         return ""
     v = strip_tags(v)
-    v = " ".join(v.split())
+    v = v.strip()
     return v
 
 

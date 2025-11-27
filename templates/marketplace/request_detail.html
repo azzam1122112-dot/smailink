@@ -3,7 +3,7 @@
 
 {% block title %}طلب #{{ req.pk }}{% endblock %}
 
-{# تحسين عرض النصوص متعددة الأسطر + كرت العرض المختار #}
+{# تحسين عرض النصوص متعددة الأسطر + كروت التفاصيل #}
 {% block extra_head %}
   {{ block.super }}
   <style>
@@ -15,11 +15,32 @@
       font-size: 1rem;
     }
     .details-prose p{ margin: 0 0 .6rem 0; }
-    .details-prose ul, .details-prose ol{
+    .details-prose ul,
+    .details-prose ol{
       padding-inline-start: 1.25rem;
       margin: .5rem 0;
     }
     .details-prose li{ margin: .25rem 0; }
+
+    /* صندوق موحّد لعرض التفاصيل (طلب/روابط/ملاحظات/عروض) */
+    .details-block{
+      background: var(--dark-50);
+      border-radius: var(--radius-lg);
+      padding: 1rem 1.25rem;
+      border: 1px solid var(--dark-100);
+    }
+    .details-block-header{
+      display:flex;
+      align-items:center;
+      gap:.5rem;
+      margin-bottom:.75rem;
+      font-weight:700;
+      color: var(--dark-800);
+      font-size: .98rem;
+    }
+    .details-block-header .icon{
+      font-size:1.1rem;
+    }
 
     /* كرت تفاصيل العرض المختار */
     .selected-offer-details{
@@ -38,7 +59,7 @@
   </style>
 {% endblock %}
 
-{# تنبيه المنصّة (يختفي بعد 3 ثواني) #}
+{# تنبيه المنصّة (يختفي بعد ثواني) #}
 {% block platform_notice %}
   <div id="platformNoticeCard" class="platform-warning-card" role="status" aria-live="polite">
     <div class="pw-icon">🛡️</div>
@@ -161,7 +182,6 @@
                     🚀 قيد التنفيذ
                   </button>
                 </form>
-
 
                 <form method="post"
                       action="{% url 'marketplace:request_change_status' req.pk %}"
@@ -331,7 +351,7 @@
                       <div class="selected-offer-details">
                         <div class="so-title">📌 تفاصيل العرض المختار</div>
                         <div class="details-prose">
-                          {{ selected_offer.note|urlize|linebreaksbr }}
+                          {{ selected_offer.note|linebreaksbr }}
                         </div>
                       </div>
                     {% endif %}
@@ -389,20 +409,32 @@
         {# تفاصيل الطلب #}
         <div class="profile-section">
           <div class="card-section-title">📄 التفاصيل</div>
-          <div class="card-text prose-text details-prose">
-            {% if req.details %}
-              {{ req.details|urlize|linebreaksbr }}
-            {% else %}
-              —
-            {% endif %}
+          <div class="details-block">
+            <div class="details-block-header">
+              <span class="icon">🧾</span>
+              <span>وصف العميل للطلب</span>
+            </div>
+            <div class="card-text prose-text details-prose">
+              {% if req.details %}
+                {{ req.details|linebreaksbr }}
+              {% else %}
+                —
+              {% endif %}
+            </div>
           </div>
         </div>
 
         {% if req.links %}
           <div class="profile-section">
             <div class="card-section-title">🔗 روابط مرتبطة</div>
-            <div class="card-text prose-text details-prose">
-              {{ req.links|urlize|linebreaksbr }}
+            <div class="details-block">
+              <div class="details-block-header">
+                <span class="icon">🌐</span>
+                <span>روابط ومراجع إضافية</span>
+              </div>
+              <div class="card-text prose-text details-prose">
+                {{ req.links|urlize|linebreaksbr }}
+              </div>
             </div>
           </div>
         {% endif %}
@@ -521,8 +553,14 @@
                 <div class="note-meta" style="font-size: 0.875rem; color: var(--dark-500); margin-bottom: 0.5rem;">
                   👤 {{ n.author }} — {{ n.created_at|date:"Y-m-d H:i" }}
                 </div>
-                <div class="note-text details-prose">
-                  {{ n.text|linebreaksbr }}
+                <div class="details-block">
+                  <div class="details-block-header">
+                    <span class="icon">💬</span>
+                    <span>نص الملاحظة</span>
+                  </div>
+                  <div class="note-text details-prose">
+                    {{ n.text|linebreaksbr }}
+                  </div>
                 </div>
               </div>
             {% empty %}
@@ -567,8 +605,14 @@
                   </div>
 
                   {% if off.note %}
-                    <div class="offer-note details-prose" style="background: var(--white); padding: 0.75rem; border-radius: var(--radius); margin-bottom: 0.75rem;">
-                      {{ off.note|urlize|linebreaksbr }}
+                    <div class="details-block" style="background: var(--white); margin-bottom: 0.75rem;">
+                      <div class="details-block-header">
+                        <span class="icon">📝</span>
+                        <span>تفاصيل العرض</span>
+                      </div>
+                      <div class="offer-note details-prose">
+                        {{ off.note|urlize|linebreaksbr }}
+                      </div>
                     </div>
                   {% endif %}
 
@@ -602,7 +646,7 @@
                 <div class="offer-actions" style="margin-top: 1rem;">
                   {% if req.client_id == request.user.id and req.status == 'new' and off.status != 'selected' %}
                     <form method="post"
-                          action="{% url 'marketplace:offer_select' off.pk %}"
+                          action="{% url 'marketplace:offer_select' off.pk %}"`
                           onsubmit="return confirm('سيتم اعتماد هذا العرض والانتقال لمرحلة الاتفاقية. تأكيد؟');">
                       {% csrf_token %}
                       <button class="btn btn-primary btn-sm">
@@ -652,6 +696,7 @@
 
               {% if request.user.id == req.client_id %}
                 {% if req.status == 'agreement_pending' or req.agreement.status == 'pending' %}
+
                   <form action="{% url 'agreements:accept_by_request' req.pk %}"
                         method="post"
                         class="inline-form"
@@ -773,6 +818,8 @@
                                 {{ ms.invoice.due_at|date:"Y-m-d H:i" }}
                               {% else %}
                                 —
+
+
                               {% endif %}
                             </span>
                           {% endif %}
@@ -988,7 +1035,7 @@
   <script>
   (function () {
 
-    // --- إخفاء تنبيه المنصّة بعد 3 ثواني ---
+    // --- إخفاء تنبيه المنصّة بعد مدة --- 
     var pn = document.getElementById("platformNoticeCard");
     var pnClose = document.getElementById("platformNoticeClose");
     if (pn) {
