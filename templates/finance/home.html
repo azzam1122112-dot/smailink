@@ -13,7 +13,8 @@
       <div class="section-badge">💰 لوحة المالية</div>
       <h1 class="section-title">لوحة المالية</h1>
       <p class="section-description">
-        نظرة إجمالية على التحصيل، الضرائب، عمولة المنصّة، مستحقات الموظفين، والنزاعات — مع متابعة الخزينة لحظيًا.
+        نظرة إجمالية على التحصيل، الضرائب، عمولة المنصّة، مستحقات الموظفين، المرتجعات، النزاعات،
+        ورصيد الخزينة وفق السياسة المالية الحالية (العميل يدفع P + VAT فقط).
       </p>
     </div>
 
@@ -31,6 +32,7 @@
     {% url 'finance:disputes_dashboard' as disputes_url %}
     {% url 'finance:settings' as settings_fallback_url %}
 
+    {# لو الفيو مرّر settings_url نستخدمه، وإلا نستخدم المسار العادي #}
     {% with settings_link=settings_url|default:settings_fallback_url %}
 
     {# ===== اختصارات سريعة ===== #}
@@ -95,6 +97,11 @@
           <div class="quick-text">مدفوعات العملاء</div>
         </a>
 
+        <a href="{{ employee_dues_url }}" class="quick-action profile-section">
+          <div class="quick-icon">👷</div>
+          <div class="quick-text">مستحقات الموظف (منظور الموظف)</div>
+        </a>
+
         <a href="{{ settings_link }}" class="quick-action profile-section"
            style="background:linear-gradient(135deg,var(--primary-50) 0%,var(--white) 100%);">
           <div class="quick-icon">⚙️</div>
@@ -108,30 +115,53 @@
     <div class="kpi-grid"
          style="display:grid; grid-template-columns:repeat(auto-fit,minmax(280px,1fr)); gap:1.25rem; margin-bottom:2rem;">
 
-      {# رصيد الخزينة (اختياري من الـview) #}
+      {# رصيد الخزينة (محسوب من التدفقات) + مقارنة مع دفتر الخزينة #}
       <div class="profile-section kpi-card"
            style="background:linear-gradient(135deg,#ecfeff 0%,var(--white) 100%);">
         <div class="kpi-header">
           <div class="kpi-icon" style="background:#cffafe;color:#0e7490;">🏦</div>
           <div class="kpi-info">
-            <div class="kpi-title">رصيد الخزينة الحالي</div>
-            <div class="kpi-subtitle">صافي السيولة = تحصيل العملاء − صرف الموظفين − المرتجعات − توريد VAT</div>
+            <div class="kpi-title">رصيد الخزينة الحالي (محسوب)</div>
+            <div class="kpi-subtitle">
+              صافي السيولة = تحصيل العملاء − صرف الموظفين − المرتجعات − توريد VAT
+            </div>
           </div>
         </div>
         <div class="kpi-value" style="color:#0e7490;">
           {{ treasury_balance|default:"0"|floatformat:2 }} ريال
         </div>
+        <div class="kpi-subnote text-muted" style="margin-top:.35rem; font-size:.8rem;">
+          من دفتر الخزينة: {{ ledger_treasury_balance|default:"0"|floatformat:2 }} ر.س
+        </div>
       </div>
 
+      {# التزام المنصّة تجاه العملاء #}
+      <div class="profile-section kpi-card"
+           style="background:linear-gradient(135deg,#eef2ff 0%,var(--white) 100%);">
+        <div class="kpi-header">
+          <div class="kpi-icon" style="background:#e0e7ff;color:#3730a3;">📘</div>
+          <div class="kpi-info">
+            <div class="kpi-title">التزام المنصّة تجاه العملاء</div>
+            <div class="kpi-subtitle">
+              ما تم تحصيله من العملاء ناقص ما تم إرجاعه وصرفه للموظفين
+            </div>
+          </div>
+        </div>
+        <div class="kpi-value" style="color:#3730a3;">
+          {{ customer_liability|default:"0"|floatformat:2 }} ريال
+        </div>
+      </div>
 
-      {# ضريبة غير مورّدة (اختياري من الـview) #}
+      {# ضريبة غير مورّدة (VAT Payable) #}
       <div class="profile-section kpi-card"
            style="background:linear-gradient(135deg,#fff7ed 0%,var(--white) 100%);">
         <div class="kpi-header">
           <div class="kpi-icon" style="background:#ffedd5;color:#9a3412;">🧾</div>
           <div class="kpi-info">
             <div class="kpi-title">VAT غير مورّدة</div>
-            <div class="kpi-subtitle">VAT محصّلة من العملاء ولم تُورَّد بعد</div>
+            <div class="kpi-subtitle">
+              VAT محصّلة من العملاء ولم تُورَّد للهيئة بعد
+            </div>
           </div>
         </div>
         <div class="kpi-value" style="color:#9a3412;">
@@ -157,7 +187,7 @@
           <div class="kpi-icon">📌</div>
           <div class="kpi-info">
             <div class="kpi-title">اتفاقيات قيد التنفيذ</div>
-            <div class="kpi-subtitle">إجمالي قيمة الخدمات الجارية</div>
+            <div class="kpi-subtitle">إجمالي قيمة الخدمات الجارية (P + VAT)</div>
           </div>
         </div>
         <div class="kpi-value">
@@ -201,7 +231,9 @@
           <div class="kpi-icon">🏷️</div>
           <div class="kpi-info">
             <div class="kpi-title">دخل المنصّة (عمولة)</div>
-            <div class="kpi-subtitle">تُخصم من الموظف فقط — لا يتحملها العميل</div>
+            <div class="kpi-subtitle">
+              تُخصم من الموظف فقط — لا يتحملها العميل
+            </div>
           </div>
         </div>
         <div class="kpi-value">
@@ -209,13 +241,13 @@
         </div>
       </div>
 
-      {# VAT الإجمالية #}
+      {# VAT الإجمالية المحصّلة #}
       <div class="profile-section kpi-card">
         <div class="kpi-header">
           <div class="kpi-icon">🧾</div>
           <div class="kpi-info">
             <div class="kpi-title">VAT محصّلة</div>
-            <div class="kpi-subtitle">VAT على قيمة الخدمة P فقط</div>
+            <div class="kpi-subtitle">VAT على السعر الأساسي P فقط</div>
           </div>
         </div>
         <div class="kpi-value">
@@ -223,14 +255,16 @@
         </div>
       </div>
 
-      {# ✅ إجمالي مستحقات الموظفين غير المدفوعة (صافي) بغض النظر عن الحالة #}
+      {# إجمالي مستحقات الموظفين غير المدفوعة (صافي) من منظور الفواتير #}
       <div class="profile-section kpi-card"
            style="background:linear-gradient(135deg,#f8fafc 0%,var(--white) 100%);">
         <div class="kpi-header">
           <div class="kpi-icon" style="background:#e2e8f0;color:#0f172a;">👷</div>
           <div class="kpi-info">
             <div class="kpi-title">إجمالي مستحقات الموظفين غير المدفوعة (صافي)</div>
-            <div class="kpi-subtitle">يشمل المؤهل + قيد الانتظار + المجمّد طالما لا يوجد صرف</div>
+            <div class="kpi-subtitle">
+              صافي P − Fee للفواتير غير المسددة (يشمل المؤهَّل والمعلّق والمجمّد)
+            </div>
           </div>
         </div>
         <div class="kpi-value">
@@ -244,8 +278,8 @@
         <div class="kpi-header">
           <div class="kpi-icon" style="background:#fee2e2;color:#b91c1c;">🚫</div>
           <div class="kpi-info">
-            <div class="kpi-title">مستحقات مجمّدة (نزاع)</div>
-            <div class="kpi-subtitle">صافي الموظف المجمد = P − Fee</div>
+            <div class="kpi-title">مستحقات مجمّدة (نزاعات)</div>
+            <div class="kpi-subtitle">صافي الموظف المجمد = P − Fee في الطلبات المتنازع عليها</div>
           </div>
         </div>
         <div class="kpi-value" style="color:#ef4444;">
@@ -259,7 +293,7 @@
           <div class="kpi-icon">💸</div>
           <div class="kpi-info">
             <div class="kpi-title">مستحقات موظفين مدفوعة</div>
-            <div class="kpi-subtitle">مجموع أوامر الصرف المدفوعة</div>
+            <div class="kpi-subtitle">مجموع أوامر الصرف المنفَّذة</div>
           </div>
         </div>
         <div class="kpi-value">
@@ -278,6 +312,48 @@
         </div>
         <div class="kpi-value">
           {{ employee_unpaid_total|default:"0"|floatformat:2 }} ريال
+        </div>
+      </div>
+
+      {# إجمالي المرتجعات المنفذة #}
+      <div class="profile-section kpi-card">
+        <div class="kpi-header">
+          <div class="kpi-icon">↩️</div>
+          <div class="kpi-info">
+            <div class="kpi-title">مرتجعات منفَّذة للعملاء</div>
+            <div class="kpi-subtitle">ما تم إرجاعه فعليًا من تحصيل العملاء</div>
+          </div>
+        </div>
+        <div class="kpi-value">
+          {{ refunds_sent_total|default:"0"|floatformat:2 }} ريال
+        </div>
+      </div>
+
+      {# مرتجعات بانتظار التنفيذ #}
+      <div class="profile-section kpi-card">
+        <div class="kpi-header">
+          <div class="kpi-icon">⏱️</div>
+          <div class="kpi-info">
+            <div class="kpi-title">مرتجعات قيد التنفيذ</div>
+            <div class="kpi-subtitle">طلبات Refund بانتظار التنفيذ المالي</div>
+          </div>
+        </div>
+        <div class="kpi-value">
+          {{ refunds_pending_total|default:"0"|floatformat:2 }} ريال
+        </div>
+      </div>
+
+      {# ضريبة مورَّدة فعليًا #}
+      <div class="profile-section kpi-card">
+        <div class="kpi-header">
+          <div class="kpi-icon">📤</div>
+          <div class="kpi-info">
+            <div class="kpi-title">VAT تم توريدها</div>
+            <div class="kpi-subtitle">مجموع توريدات الضريبة المنفذة للهيئة</div>
+          </div>
+        </div>
+        <div class="kpi-value">
+          {{ remitted_total|default:"0"|floatformat:2 }} ريال
         </div>
       </div>
 
@@ -450,20 +526,33 @@
 
         <div class="summary-item profile-section">
           <div class="summary-label">عمولة المنصّة</div>
-          <div class="summary-value">{{ platform_fee_total|default:"0"|floatformat:2 }} ريال</div>
+          <div class="summary-value">
+            {{ platform_fee_total|default:"0"|floatformat:2 }} ريال
+          </div>
         </div>
 
         <div class="summary-item profile-section">
           <div class="summary-label">VAT محصّلة</div>
-          <div class="summary-value">{{ vat_total|default:"0"|floatformat:2 }} ريال</div>
+          <div class="summary-value">
+            {{ vat_total|default:"0"|floatformat:2 }} ريال
+          </div>
         </div>
 
         <div class="summary-item profile-section">
           <div class="summary-label">VAT غير مورّدة</div>
-          <div class="summary-value">{{ vat_payable|default:"0"|floatformat:2 }} ريال</div>
+          <div class="summary-value">
+            {{ vat_payable|default:"0"|floatformat:2 }} ريال
+          </div>
         </div>
 
-        {# ✅ نفس التغيير في الموجز #}
+        <div class="summary-item profile-section">
+          <div class="summary-label">التزام تجاه العملاء</div>
+          <div class="summary-value">
+            {{ customer_liability|default:"0"|floatformat:2 }} ريال
+          </div>
+        </div>
+
+        {# ملخص مستحقات الموظفين #}
         <div class="summary-item profile-section">
           <div class="summary-label">إجمالي مستحقات غير مدفوعة (صافي)</div>
           <div class="summary-value">
@@ -473,20 +562,45 @@
 
         <div class="summary-item profile-section">
           <div class="summary-label">مستحقات مدفوعة</div>
-          <div class="summary-value">{{ employee_dues_total|default:"0"|floatformat:2 }} ريال</div>
+          <div class="summary-value">
+            {{ employee_dues_total|default:"0"|floatformat:2 }} ريال
+          </div>
         </div>
 
         <div class="summary-item profile-section">
-          <div class="summary-label">مجمّد نزاع</div>
+          <div class="summary-label">مجمّد بسبب نزاع</div>
           <div class="summary-value" style="color:#ef4444;">
             {{ disputed_total|default:"0"|floatformat:2 }} ريال
+          </div>
+        </div>
+
+        <div class="summary-item profile-section">
+          <div class="summary-label">مرتجعات منفّذة</div>
+          <div class="summary-value">
+            {{ refunds_sent_total|default:"0"|floatformat:2 }} ريال
+          </div>
+        </div>
+
+        <div class="summary-item profile-section">
+          <div class="summary-label">مرتجعات قيد التنفيذ</div>
+          <div class="summary-value">
+            {{ refunds_pending_total|default:"0"|floatformat:2 }} ريال
+          </div>
+        </div>
+
+        <div class="summary-item profile-section">
+          <div class="summary-label">VAT مورَّدة</div>
+          <div class="summary-value">
+            {{ remitted_total|default:"0"|floatformat:2 }} ريال
           </div>
         </div>
 
       </div>
 
       <div class="card-section-note" style="margin-top:1rem; text-align:center;">
-        ✅ العمولة تُخصم من الموظف — VAT تُحسب على السعر P فقط — العميل يدفع P + VAT فقط.
+        ✅ السياسة المالية: العميل يدفع <strong>P + VAT</strong> فقط،
+        عمولة المنصّة تُخصم من الموظف،
+        والـ VAT تُحتسب على السعر الأساسي P دون عمولة.
       </div>
     </div>
 
@@ -503,8 +617,8 @@
       initScrollReveal();
     }
 
-    document.querySelectorAll('.profile-section').forEach((card, index) => {
-      card.style.animationDelay = `${index * 0.06}s`;
+    document.querySelectorAll('.profile-section').forEach(function (card, index) {
+      card.style.animationDelay = String(index * 0.06) + 's';
 
       if (card.classList.contains('kpi-card') ||
           card.classList.contains('quick-action') ||
@@ -522,7 +636,7 @@
       }
     });
 
-    document.querySelectorAll('.table-clean tbody tr').forEach(row => {
+    document.querySelectorAll('.table-clean tbody tr').forEach(function (row) {
       row.addEventListener('mouseenter', function() {
         this.style.background = 'var(--primary-50)';
       });
@@ -542,8 +656,15 @@
     border-radius: var(--radius-xl);
     transition: all 0.25s ease;
   }
-  .finance-dashboard .quick-icon { font-size: 1.8rem; margin-bottom: .4rem; }
-  .finance-dashboard .quick-text { font-weight: 700; color: var(--dark-700); font-size: .95rem; }
+  .finance-dashboard .quick-icon {
+    font-size: 1.8rem;
+    margin-bottom: .4rem;
+  }
+  .finance-dashboard .quick-text {
+    font-weight: 700;
+    color: var(--dark-700);
+    font-size: .95rem;
+  }
 
   .finance-dashboard .kpi-card {
     min-height: 140px;
@@ -553,88 +674,150 @@
     transition: all 0.25s ease;
   }
   .finance-dashboard .kpi-header {
-    display: flex; align-items: center; gap: 1rem; margin-bottom: 1rem;
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    margin-bottom: 1rem;
   }
   .finance-dashboard .kpi-icon {
-    width: 3rem; height: 3rem;
+    width: 3rem;
+    height: 3rem;
     background: var(--primary-100);
     color: var(--primary-600);
     border-radius: var(--radius-lg);
-    display: flex; align-items: center; justify-content: center;
-    font-size: 1.45rem; flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.45rem;
+    flex-shrink: 0;
   }
   .finance-dashboard .kpi-title {
-    font-weight: 700; color: var(--dark-800);
-    margin-bottom: .25rem; font-size: .98rem;
+    font-weight: 700;
+    color: var(--dark-800);
+    margin-bottom: .25rem;
+    font-size: .98rem;
   }
   .finance-dashboard .kpi-subtitle {
-    color: var(--dark-500); font-size: .8rem; line-height: 1.45;
+    color: var(--dark-500);
+    font-size: .8rem;
+    line-height: 1.45;
   }
   .finance-dashboard .kpi-value {
-    font-size: 1.7rem; font-weight: 800; color: var(--dark-900);
+    font-size: 1.7rem;
+    font-weight: 800;
+    color: var(--dark-900);
     line-height: 1.2;
+  }
+  .finance-dashboard .kpi-subnote {
+    color: var(--dark-500);
   }
 
   .finance-dashboard .data-card {
-    min-height: 300px; display: flex; flex-direction: column;
+    min-height: 300px;
+    display: flex;
+    flex-direction: column;
   }
   .finance-dashboard .table-wrapper {
-    overflow-x: auto; border-radius: var(--radius-lg);
-    border: 1px solid var(--dark-200); flex: 1;
+    overflow-x: auto;
+    border-radius: var(--radius-lg);
+    border: 1px solid var(--dark-200);
+    flex: 1;
   }
   .finance-dashboard .table-clean {
-    width: 100%; border-collapse: collapse;
+    width: 100%;
+    border-collapse: collapse;
   }
   .finance-dashboard .table-clean th {
     background: var(--dark-50);
     color: var(--dark-700);
     font-weight: 700;
-    padding: 1rem; text-align: right;
+    padding: 1rem;
+    text-align: right;
     border-bottom: 1px solid var(--dark-200);
   }
   .finance-dashboard .table-clean td {
-    padding: 1rem; border-bottom: 1px solid var(--dark-100); vertical-align: top;
+    padding: 1rem;
+    border-bottom: 1px solid var(--dark-100);
+    vertical-align: top;
   }
-  .finance-dashboard .table-clean tr:last-child td { border-bottom: none; }
+  .finance-dashboard .table-clean tr:last-child td {
+    border-bottom: none;
+  }
 
-  .finance-dashboard .value-strong { font-weight: 800; color: var(--dark-900); }
-  .finance-dashboard .text-muted { color: var(--dark-500); }
+  .finance-dashboard .value-strong {
+    font-weight: 800;
+    color: var(--dark-900);
+  }
+  .finance-dashboard .text-muted {
+    color: var(--dark-500);
+  }
 
   .finance-dashboard .link {
-    color: var(--primary-600); text-decoration: none; transition: var(--transition);
+    color: var(--primary-600);
+    text-decoration: none;
+    transition: var(--transition);
   }
-  .finance-dashboard .link:hover { color: var(--primary-700); text-decoration: underline; }
+  .finance-dashboard .link:hover {
+    color: var(--primary-700);
+    text-decoration: underline;
+  }
 
   .finance-dashboard .summary-item {
-    text-align: center; padding: 1.2rem .8rem;
+    text-align: center;
+    padding: 1.2rem .8rem;
   }
   .finance-dashboard .summary-label {
-    font-size: .875rem; color: var(--dark-600); margin-bottom: .35rem;
+    font-size: .875rem;
+    color: var(--dark-600);
+    margin-bottom: .35rem;
   }
   .finance-dashboard .summary-value {
-    font-size: 1.15rem; font-weight: 800;
+    font-size: 1.15rem;
+    font-weight: 800;
   }
 
   @media (max-width: 1024px) {
-    .finance-dashboard .tables-grid { grid-template-columns: 1fr; }
-    .finance-dashboard .kpi-grid { grid-template-columns: 1fr; }
+    .finance-dashboard .tables-grid {
+      grid-template-columns: 1fr;
+    }
+    .finance-dashboard .kpi-grid {
+      grid-template-columns: 1fr;
+    }
   }
   @media (max-width: 768px) {
-    .finance-dashboard .quick-actions-grid { grid-template-columns: repeat(2, 1fr); }
-    .finance-dashboard .summary-grid { grid-template-columns: repeat(2, 1fr); }
-    .finance-dashboard .data-card-header { flex-direction: column; align-items: stretch; gap: 1rem; }
-    .finance-dashboard .data-card-header .btn { align-self: flex-end; }
+    .finance-dashboard .quick-actions-grid {
+      grid-template-columns: repeat(2, 1fr);
+    }
+    .finance-dashboard .summary-grid {
+      grid-template-columns: repeat(2, 1fr);
+    }
+    .finance-dashboard .data-card-header {
+      flex-direction: column;
+      align-items: stretch;
+      gap: 1rem;
+    }
+    .finance-dashboard .data-card-header .btn {
+      align-self: flex-end;
+    }
   }
   @media (max-width: 480px) {
-    .finance-dashboard .quick-actions-grid { grid-template-columns: 1fr; }
-    .finance-dashboard .summary-grid { grid-template-columns: 1fr; }
-    .finance-dashboard .kpi-value { font-size: 1.45rem; }
+    .finance-dashboard .quick-actions-grid {
+      grid-template-columns: 1fr;
+    }
+    .finance-dashboard .summary-grid {
+      grid-template-columns: 1fr;
+    }
+    .finance-dashboard .kpi-value {
+      font-size: 1.45rem;
+    }
   }
 
   @keyframes slideInUp {
     from { opacity: 0; transform: translateY(24px); }
     to { opacity: 1; transform: translateY(0); }
   }
-  .finance-dashboard .scroll-reveal { animation: slideInUp 0.55s ease-out; }
+  .finance-dashboard .scroll-reveal {
+    animation: slideInUp 0.55s ease-out;
+  }
   </style>
 {% endblock %}

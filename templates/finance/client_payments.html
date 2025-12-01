@@ -82,15 +82,22 @@
         <div class="stat-value" style="font-size: 1.75rem; font-weight: 800; color: var(--primary-600); margin: 0.5rem 0;">
           {{ totals.total|default:0|floatformat:2 }} ر.س
         </div>
-        <div class="card-section-note">مجموع جميع الفواتير (يشمل الضريبة)</div>
+        <div class="card-section-note">مجموع جميع الفواتير (يشمل الضريبة، قبل أي إرجاعات)</div>
       </div>
 
       <div class="profile-section text-center" style="background: linear-gradient(135deg, var(--primary-50) 0%, var(--white) 100%);">
-        <div class="card-section-title">✅ مدفوع</div>
+        <div class="card-section-title">✅ مدفوع (صافي بعد الإرجاع)</div>
         <div class="stat-value" style="font-size: 1.75rem; font-weight: 800; color: var(--primary-600); margin: 0.5rem 0;">
           {{ totals.paid|default:0|floatformat:2 }} ر.س
         </div>
-        <div class="card-section-note">المبالغ المسددة</div>
+        <div class="card-section-note">
+          المبالغ المسددة بعد خصم مبالغ الإرجاع
+          {% if totals.refunded %}
+            <span style="display:block; margin-top:0.25rem; font-size:0.85rem;">
+              تم إرجاع {{ totals.refunded|floatformat:2 }} ر.س من فواتيرك.
+            </span>
+          {% endif %}
+        </div>
       </div>
 
       <div class="profile-section text-center" style="background: linear-gradient(135deg, var(--secondary-50) 0%, var(--white) 100%);">
@@ -98,13 +105,13 @@
         <div class="stat-value" style="font-size: 1.75rem; font-weight: 800; color: var(--secondary-600); margin: 0.5rem 0;">
           {{ totals.unpaid|default:0|floatformat:2 }} ر.س
         </div>
-        <div class="card-section-note">المبالغ المستحقة</div>
+        <div class="card-section-note">المبالغ المستحقة حسب الفواتير غير المدفوعة</div>
       </div>
     </div>
 
     <div class="profile-section" style="background: var(--dark-50); margin-bottom: 1rem; padding: 1rem;">
       <div class="card-section-note" style="text-align: center; margin: 0;">
-        💡 الأرقام أعلاه تمثل مجموع الفواتير كما هو ظاهر في الجدول ولا يتم جمع الضريبة مرتين.
+        💡 الأرقام أعلاه تمثل مجموع الفواتير كما هو ظاهر في الجدول، مع خصم مبالغ الإرجاع من بطاقة "مدفوع" فقط.
       </div>
     </div>
 
@@ -151,12 +158,22 @@
                   </div>
                 </td>
 
-                {# عرض فقط المبالغ المدفوعة فعلياً للعميل #}
+                {# عرض المبالغ مع بيان الإرجاع إن وجد #}
                 <td>
                   {% if inv.status == 'paid' %}
-                    <span class="value-strong" style="color: var(--primary-600); font-weight: 700;">
-                      {{ inv.amount|floatformat:2 }} ر.س
-                    </span>
+                    {% if inv.refunded_client_amount %}
+                      <div class="value-strong" style="color: var(--primary-600); font-weight: 700;">
+                        {{ inv.net_client_paid|floatformat:2 }} ر.س
+                      </div>
+                      <div class="amount-subnote">
+                        <span>الأصلي: {{ inv.amount|floatformat:2 }} ر.س</span>
+                        <span>تم إرجاع: -{{ inv.refunded_client_amount|floatformat:2 }} ر.س</span>
+                      </div>
+                    {% else %}
+                      <span class="value-strong" style="color: var(--primary-600); font-weight: 700;">
+                        {{ inv.amount|floatformat:2 }} ر.س
+                      </span>
+                    {% endif %}
                   {% else %}
                     <span class="text-muted">—</span>
                   {% endif %}
@@ -247,7 +264,7 @@
           <div class="info-icon">💰</div>
           <div class="info-content">
             <div class="info-title">إجمالي العميل</div>
-            <div class="info-text">يشمل فقط قيمة الخدمة + VAT</div>
+            <div class="info-text">يشمل فقط قيمة الخدمة + VAT (دون عمولة المنصّة)</div>
           </div>
         </div>
         <div class="info-item">
@@ -275,13 +292,11 @@
   {{ block.super }}
   <script>
   (function () {
-    // تهيئة تأثيرات التمرير
     if (typeof initScrollReveal === 'function') {
       initScrollReveal();
     }
 
-    // تأثيرات على الأزرار
-    document.querySelectorAll('.btn').forEach(button => {
+    document.querySelectorAll('.btn').forEach(function(button) {
       button.addEventListener('click', function() {
         if (typeof animateButtonClick === 'function') {
           animateButtonClick(this);
@@ -289,13 +304,11 @@
       });
     });
 
-    // تحسين تجربة الفلاتر
     const filterForm = document.querySelector('.filter-form');
     if (filterForm) {
       const inputs = filterForm.querySelectorAll('input, select');
-      inputs.forEach(input => {
+      inputs.forEach(function(input) {
         input.addEventListener('change', function() {
-          // إضافة تأثير عند التغيير
           this.style.borderColor = 'var(--primary-500)';
           this.style.boxShadow = '0 0 0 3px rgba(34, 197, 94, 0.1)';
           setTimeout(() => {
@@ -305,30 +318,27 @@
         });
       });
 
-      // إرسال النموذج عند تغيير بعض الحقول
       const autoSubmitFields = filterForm.querySelectorAll('select[name="status"], select[name="method"]');
-      autoSubmitFields.forEach(field => {
+      autoSubmitFields.forEach(function(field) {
         field.addEventListener('change', function() {
-          setTimeout(() => {
+          setTimeout(function() {
             filterForm.submit();
           }, 300);
         });
       });
     }
 
-    // تأثيرات على صفوف الجدول
-    document.querySelectorAll('.table-clean tbody tr').forEach(row => {
+    document.querySelectorAll('.table-clean tbody tr').forEach(function(row) {
       row.addEventListener('mouseenter', function() {
         this.style.background = 'var(--primary-50)';
         this.style.transform = 'translateX(5px)';
       });
-      
+
       row.addEventListener('mouseleave', function() {
         this.style.background = '';
         this.style.transform = 'translateX(0)';
       });
 
-      // تأثير النقر على صف الجدول
       row.addEventListener('click', function(e) {
         if (!e.target.closest('a') && !e.target.closest('button')) {
           const link = this.querySelector('a.btn');
@@ -339,20 +349,17 @@
       });
     });
 
-    // تحديث الإحصائيات بشكل حيوي
     function updateStatsAnimation() {
       const statValues = document.querySelectorAll('.stat-value');
-      statValues.forEach(stat => {
+      statValues.forEach(function(stat) {
         stat.style.animation = 'pulse 0.6s ease-in-out';
-        setTimeout(() => {
+        setTimeout(function() {
           stat.style.animation = '';
         }, 600);
       });
     }
 
-    // تطبيق تأثيرات على الإحصائيات عند التحميل
     updateStatsAnimation();
-
   })();
   </script>
 
@@ -447,6 +454,15 @@
     color: var(--primary-600);
   }
 
+  .client-payments-page .amount-subnote {
+    margin-top: 0.25rem;
+    font-size: 0.8rem;
+    color: var(--dark-600);
+    display: flex;
+    flex-direction: column;
+    gap: 0.1rem;
+  }
+
   .client-payments-page .text-muted {
     color: var(--dark-500);
   }
@@ -522,25 +538,25 @@
     .client-payments-page .form-grid-6 {
       grid-template-columns: 1fr;
     }
-    
+
     .client-payments-page .stats-grid {
       grid-template-columns: 1fr;
     }
-    
+
     .client-payments-page .table-clean {
       font-size: 0.875rem;
     }
-    
+
     .client-payments-page .table-clean th,
     .client-payments-page .table-clean td {
       padding: 0.75rem 0.5rem;
     }
-    
+
     .client-payments-page .pagination-inner {
       flex-direction: column;
       gap: 0.5rem;
     }
-    
+
     .client-payments-page .info-grid {
       grid-template-columns: 1fr;
     }
@@ -550,17 +566,16 @@
     .client-payments-page .table-clean {
       font-size: 0.8rem;
     }
-    
+
     .client-payments-page .table-actions {
       flex-direction: column;
     }
-    
+
     .client-payments-page .table-actions .btn {
       width: 100%;
     }
   }
 
-  /* تأثيرات الحركة */
   @keyframes pulse {
     0% { transform: scale(1); }
     50% { transform: scale(1.05); }
