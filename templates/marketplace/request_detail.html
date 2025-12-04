@@ -1,5 +1,31 @@
-{# marketplace/templates/marketplace/request_detail.html #}
 {% extends "base.html" %}
+<pre style="background:#f3f4f6;padding:1rem;border-radius:8px;margin-bottom:1rem;">
+  حالة الطلب: {{ req.status }}
+  تاريخ البداية: {{ req.agreement.started_at }}
+  مدة الاتفاقية: {{ req.agreement.duration_days }}
+  الأيام المتبقية: {{ req.agreement.days_remaining }}
+</pre>
+{# marketplace/templates/marketplace/request_detail.html #}
+
+  {# عداد الأيام المتبقية لتسليم المشروع + رسالة تشخيصية #}
+  {% if req.status == 'in_progress' and req.agreement %}
+    <div style="background:#f3f4f6;padding:.7rem 1rem;border-radius:8px;margin-bottom:.7rem;font-size:.98rem;color:#334155;">
+      <b>تشخيص القيم:</b>
+      <div>حالة الطلب: <span style="color:#0ea5e9">{{ req.status }}</span></div>
+      <div>حالة الاتفاقية: <span style="color:#0ea5e9">{{ req.agreement.status }}</span></div>
+      <div>تاريخ البداية: <span style="color:#0ea5e9">{{ req.agreement.started_at }}</span></div>
+      <div>مدة الاتفاقية: <span style="color:#0ea5e9">{{ req.agreement.duration_days }}</span> يوم</div>
+      <div>الأيام المتبقية: <span style="color:#0ea5e9">{{ req.agreement.days_remaining }}</span> يوم</div>
+    </div>
+    <div class="alert alert-info" style="background:#e0f2fe;border:1.5px solid #38bdf8;color:#0369a1;padding:.7rem 1rem;border-radius:10px;margin-bottom:1rem;display:flex;align-items:center;gap:.8rem;">
+      <span style="font-size:1.7rem;">⏰</span>
+      <div>
+        <b>الوقت المتبقي لتسليم المشروع:</b>
+        <span style="font-weight:700;color:#0ea5e9;">{{ req.agreement.days_remaining }}</span>
+        <span>يوم</span>
+      </div>
+    </div>
+  {% endif %}
 
 {% block title %}طلب #{{ req.pk }}{% endblock %}
 
@@ -296,21 +322,7 @@
           <div class="profile-section" style="background: var(--dark-50);">
             <div class="card-row" style="display: flex; align-items: center; justify-content: space-between; gap: 1rem;">
               <div class="card-text-main">
-                <div class="card-title-small">عرضك المقدم</div>
-                <div class="card-subtext">
-                  الحالة: {{ my_offer.get_status_display|default:my_offer.status }}
-                  — المدة: {{ my_offer.proposed_duration_days }} يوم
-                  — صافي الموظف:
-                    <strong class="my-offer-net"
-                            data-net="{{ my_offer.net_for_employee }}">
-                      {{ my_offer.net_for_employee|floatformat:2 }}
-                    </strong> ر.س
-                  — إجمالي العميل:
-                    <strong class="my-offer-total"
-                            data-total="{{ my_offer.client_total_amount|default_if_none:'' }}">
-                      {{ my_offer.client_total_amount|default_if_none:"—"|floatformat:2 }}
-                    </strong> ر.س
-                </div>
+
               </div>
               <span class="badge badge-muted">
                 📋 قدّمت عرضًا بالفعل
@@ -851,6 +863,17 @@
                 <span class="card-section-note">
                   ✅ الاتفاقية مقبولة — لا يمكن تعديل بنودها، ويمكن فقط طلب تمديد المهلة عند الحاجة.
                 </span>
+              {% endif %}
+
+              {# عرض سبب رفض الاتفاقية للموظف فقط إذا كانت الاتفاقية مرفوضة #}
+              {% if req.agreement.status == 'rejected' and request.user.is_authenticated and request.user.id == req.assigned_employee_id and req.agreement.rejection_reason %}
+                <div class="agreement-rejection-reason" style="background:#fef2f2;border:1.5px solid #ef4444;color:#b91c1c;padding:1rem 1.2rem;border-radius:10px;margin-top:1rem;">
+                  <b>سبب رفض الاتفاقية من العميل:</b>
+                  <div style="margin-top:.5rem;white-space:pre-line;">{{ req.agreement.rejection_reason }}</div>
+                  <div style="margin-top:.7rem;">
+                    <a class="btn btn-warning btn-sm" href="{% url 'agreements:open_by_request' req.pk %}">✏️ تعديل الاتفاقية وإعادة إرسالها</a>
+                  </div>
+                </div>
               {% endif %}
             </div>
           </div>

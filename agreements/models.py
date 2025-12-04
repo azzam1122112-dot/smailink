@@ -206,6 +206,11 @@ class Agreement(models.Model):
 
     @property
     def days_remaining(self) -> Optional[int]:
+        # إذا كانت حالة الطلب قيد التنفيذ ولم يتم ضبط started_at، نضبطها تلقائيًا
+        req = getattr(self, "request", None)
+        if req and getattr(req, "status", None) == "in_progress" and not self.started_at:
+            self.started_at = timezone.now().date()
+            self.save(update_fields=["started_at", "updated_at"])
         if not self.started_at or not self.duration_days:
             return None
         passed = self.days_since_start
@@ -418,13 +423,16 @@ class Agreement(models.Model):
             except Agreement.DoesNotExist:
                 prev = None
             if prev and prev.status != Agreement.Status.DRAFT:
-                # السماح بتعديل المدة فقط عند الموافقة على طلب التمديد
+                # السماح بتعديل المدة فقط عند الموافقة أو الرفض على طلب التمديد
                 allow_duration_change = False
+                # السماح إذا كان هناك طلب تمديد فعال وتمت الموافقة أو الرفض
                 if (
-                    prev.duration_days != self.duration_days
-                    and prev.extension_requested_days
+                    prev.extension_requested_days
                     and prev.extension_requested_days > 0
-                    and self.duration_days == prev.duration_days + prev.extension_requested_days
+                    and (
+                        self.duration_days == prev.duration_days + prev.extension_requested_days
+                        or self.duration_days == prev.duration_days  # في حالة الرفض لا تتغير المدة
+                    )
                 ):
                     allow_duration_change = True
                 if (prev.duration_days != self.duration_days and not allow_duration_change) or prev.total_amount != self.total_amount:
@@ -438,6 +446,11 @@ class Agreement(models.Model):
                 old_status = prev.status
             except Agreement.DoesNotExist:
                 old_status = None
+
+
+        # ضبط تاريخ بداية التنفيذ تلقائيًا إذا أصبحت الاتفاقية قيد التنفيذ ولم يكن مضبوطًا
+        if self.status == 'in_progress' and not self.started_at:
+            self.started_at = timezone.now().date()
 
         self.full_clean()
         super().save(*args, **kwargs)
@@ -479,7 +492,7 @@ class Agreement(models.Model):
         return f"Agreement#{self.pk} R{self.request_id} — {self.get_status_display()}"
 
     def get_absolute_url(self) -> str:
-        return reverse("agreements:agreement_detail", kwargs={"pk": self.pk})
+        return reverse("agreements:detail", kwargs={"pk": self.pk})
 
     def get_day_name_ar(self) -> str:
         dt = getattr(self, "created_at", None) or timezone.now()

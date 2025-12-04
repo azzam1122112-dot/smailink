@@ -360,7 +360,7 @@
           ↩️ عودة للطلب
         </a>
         {# زر إلغاء العرض للموظف صاحب الاتفاقية إذا لم يكن الطلب في حالة new #}
-        {% if user.is_authenticated and user.id == agreement.employee_id and req.status != 'new' %}
+        {% if user.is_authenticated and user.id == agreement.employee_id and req.status != 'new' and agreement.offer_id %}
           <form method="post" action="{% url 'marketplace:offer_cancel' agreement.offer_id %}" style="display:inline;">
             {% csrf_token %}
             <button type="submit" class="btn btn-danger" onclick="return confirm('هل أنت متأكد من إلغاء العرض؟ سيتم حذف العرض وإرجاع الطلب لحالة جديد.');">

@@ -22,18 +22,15 @@ def approve_extension(request: HttpRequest, pk: int) -> HttpResponse:
             ag.updated_at = timezone.now()
         ag.save(update_fields=["duration_days", "extension_requested_days"] + (["updated_at"] if hasattr(ag, "updated_at") else []))
         # إشعار الموظف
-        try:
-            from notifications.utils import create_notification
-            create_notification(
-                recipient=ag.employee,
-                title="تمت الموافقة على طلب تمديد المهلة",
-                body=f"تمت الموافقة من العميل على تمديد مدة الاتفاقية #{ag.pk}.",
-                url=ag.get_absolute_url(),
-                actor=request.user,
-                target=ag,
-            )
-        except Exception:
-            pass
+        from notifications.utils import create_notification
+        create_notification(
+            recipient=ag.employee,
+            title="تمت الموافقة على طلب تمديد المهلة",
+            body=f"تمت الموافقة من العميل على تمديد مدة الاتفاقية #{ag.pk}.",
+            url=ag.get_absolute_url(),
+            actor=request.user,
+            target=ag,
+        )
         messages.success(request, "تمت الموافقة على تمديد المهلة بنجاح.")
     else:
         messages.error(request, "لا يوجد طلب تمديد مهلة بانتظار الموافقة.")
@@ -52,18 +49,15 @@ def reject_extension(request: HttpRequest, pk: int) -> HttpResponse:
             ag.updated_at = timezone.now()
         ag.save(update_fields=["extension_requested_days"] + (["updated_at"] if hasattr(ag, "updated_at") else []))
         # إشعار الموظف
-        try:
-            from notifications.utils import create_notification
-            create_notification(
-                recipient=ag.employee,
-                title="تم رفض طلب تمديد المهلة",
-                body=f"تم رفض طلب تمديد المهلة للاتفاقية #{ag.pk} من العميل.",
-                url=ag.get_absolute_url(),
-                actor=request.user,
-                target=ag,
-            )
-        except Exception:
-            pass
+        from notifications.utils import create_notification
+        create_notification(
+            recipient=ag.employee,
+            title="تم رفض طلب تمديد المهلة",
+            body=f"تم رفض طلب تمديد المهلة للاتفاقية #{ag.pk} من العميل.",
+            url=ag.get_absolute_url(),
+            actor=request.user,
+            target=ag,
+        )
         messages.success(request, "تم رفض طلب تمديد المهلة.")
     else:
         messages.error(request, "لا يوجد طلب تمديد مهلة بانتظار الموافقة.")
@@ -97,19 +91,16 @@ def request_extension(request: HttpRequest, pk: int) -> HttpResponse:
                 ag.updated_at = timezone.now()
             ag.save(update_fields=["extension_requested_days"] + (["updated_at"] if hasattr(ag, "updated_at") else []))
             # إشعار العميل
-            try:
-                from notifications.utils import create_notification
-                client = getattr(ag.request, "client", None)
-                create_notification(
-                    recipient=client,
-                    title="طلب تمديد مهلة التنفيذ",
-                    body=f"قام الموظف بطلب تمديد مدة الاتفاقية #{ag.pk} بمقدار {extra_days} يوم. يمكنك الموافقة أو الرفض من صفحة الطلب.",
-                    url=ag.get_absolute_url(),
-                    actor=request.user,
-                    target=ag,
-                )
-            except Exception:
-                pass
+            from notifications.utils import create_notification
+            client = getattr(ag.request, "client", None)
+            create_notification(
+                recipient=client,
+                title="طلب تمديد مهلة التنفيذ",
+                body=f"قام الموظف بطلب تمديد مدة الاتفاقية #{ag.pk} بمقدار {extra_days} يوم. يمكنك الموافقة أو الرفض من صفحة الطلب.",
+                url=ag.get_absolute_url(),
+                actor=request.user,
+                target=ag,
+            )
             messages.success(request, f"تم إرسال طلب تمديد المهلة ({extra_days} يوم) للعميل بنجاح.")
             return redirect("agreements:detail", pk=ag.pk)
 
