@@ -80,6 +80,13 @@
                             <span class="ref-icon">🏦</span>
                             {{ inv.paid_ref }}
                         </div>
+                        {% if inv.receipt_image %}
+                        <div style="margin-top: 0.5rem;">
+                            <a href="{{ inv.receipt_image.url }}" target="_blank" class="text-sm text-primary" style="text-decoration: underline;">
+                                📎 عرض الإيصال
+                            </a>
+                        </div>
+                        {% endif %}
                         {% else %}
                         <span class="text-muted text-sm">—</span>
                         {% endif %}

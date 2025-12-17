@@ -16,7 +16,7 @@ urlpatterns = [
     
     # ✅ التصحيح: دمج المسارين في مسار واحد يدعم pk و slug
     path('employees/<int:pk>/', EmployeeDetailView.as_view(), name='employee_detail_by_pk'),
-    path('employees/<slug:slug>/', EmployeeDetailView.as_view(), name='employee_detail_by_slug'),
+    path('employees/<str:slug>/', EmployeeDetailView.as_view(), name='employee_detail_by_slug'),
     
     # ✅ مسار رئيسي واحد
     path('employee/<int:pk>/', EmployeeDetailView.as_view(), name='employee_detail'),

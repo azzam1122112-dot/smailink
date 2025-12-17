@@ -249,7 +249,7 @@
             📋 جميع الفواتير
           </a>
           {% if not inv.is_paid %}
-            <a href="{% url 'finance:checkout_agreement' inv.agreement_id %}" class="btn btn-outline btn-sm">
+            <a href="{% url 'finance:checkout_invoice' inv.id %}" class="btn btn-outline btn-sm">
               💳 صفحة الدفع
             </a>
           {% endif %}

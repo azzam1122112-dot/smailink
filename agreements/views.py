@@ -1,6 +1,7 @@
 from django.shortcuts import get_object_or_404, redirect, render
 from django.http import HttpResponseForbidden
 from django.utils import timezone
+from datetime import timedelta
 from .models import Agreement
 from django.contrib.auth.decorators import login_required
 from django.db import transaction
@@ -63,6 +64,166 @@ def reject_extension(request: HttpRequest, pk: int) -> HttpResponse:
         messages.error(request, "لا يوجد طلب تمديد مهلة بانتظار الموافقة.")
     return redirect("agreements:detail", pk=ag.pk)
 
+
+# ========================= طلب تعديل قيمة الاتفاقية =========================
+@login_required
+@transaction.atomic
+def request_modification(request: HttpRequest, pk: int) -> HttpResponse:
+    ag = get_object_or_404(Agreement.objects.select_related("request"), pk=pk)
+    req = ag.request
+    # تحقق من الصلاحية: فقط الموظف المسند
+    if request.user.id != getattr(req, "assigned_employee_id", None):
+        return HttpResponseForbidden("غير مصرح لك بطلب تعديل الاتفاقية.")
+
+    # منع التعديل إذا كان الطلب مكتمل
+    from marketplace.models import Status
+    if req.status == Status.COMPLETED:
+        messages.error(request, "لا يمكن طلب تعديل المبلغ لأن الطلب مكتمل.")
+        return redirect("agreements:detail", pk=ag.pk)
+
+    if request.method == "POST":
+        try:
+            new_amount = Decimal(request.POST.get("new_amount", "0"))
+            reason = request.POST.get("reason", "").strip()
+        except Exception:
+            new_amount = Decimal("0")
+            reason = ""
+
+        if new_amount <= ag.total_amount:
+             messages.error(request, "المبلغ الجديد يجب أن يكون أكبر من المبلغ الحالي.")
+        elif not reason:
+             messages.error(request, "يجب ذكر سبب التعديل.")
+        else:
+            ag.modification_requested_amount = new_amount
+            ag.modification_reason = reason
+            if hasattr(ag, "updated_at"):
+                ag.updated_at = timezone.now()
+            ag.save(update_fields=["modification_requested_amount", "modification_reason"] + (["updated_at"] if hasattr(ag, "updated_at") else []))
+            
+            # إشعار العميل
+            from notifications.utils import create_notification
+            client = getattr(ag.request, "client", None)
+            create_notification(
+                recipient=client,
+                title="طلب تعديل قيمة الاتفاقية",
+                body=f"قام الموظف بطلب تعديل قيمة الاتفاقية #{ag.pk} لتصبح {new_amount} ريال. السبب: {reason}",
+                url=ag.get_absolute_url(),
+                actor=request.user,
+                target=ag,
+            )
+            messages.success(request, "تم إرسال طلب تعديل الاتفاقية للعميل بنجاح.")
+            return redirect("agreements:detail", pk=ag.pk)
+    
+    return render(request, "agreements/agreement_modification_request.html", {"agreement": ag})
+
+
+@login_required
+@transaction.atomic
+def approve_modification(request: HttpRequest, pk: int) -> HttpResponse:
+    ag = get_object_or_404(Agreement, pk=pk)
+    # فقط العميل يحق له الموافقة
+    if request.user.id != getattr(ag.request, "client_id", None):
+        return HttpResponseForbidden("غير مصرح لك.")
+
+    if ag.modification_requested_amount and ag.modification_requested_amount > ag.total_amount:
+        old_amount = ag.total_amount
+        new_amount = ag.modification_requested_amount
+        diff = new_amount - old_amount
+        
+        # تحديث مبلغ الاتفاقية
+        ag.total_amount = new_amount
+        ag.modification_requested_amount = None
+        ag.modification_reason = ""
+        if hasattr(ag, "updated_at"):
+            ag.updated_at = timezone.now()
+        ag.save(update_fields=["total_amount", "modification_requested_amount", "modification_reason"] + (["updated_at"] if hasattr(ag, "updated_at") else []))
+
+        # إنشاء فاتورة بالفارق
+        from finance.models import Invoice, FinanceSettings
+        from decimal import ROUND_HALF_UP
+        
+        fee_percent, vat_percent = FinanceSettings.current_rates()
+        
+        # حساب قيم الفاتورة
+        # المبلغ هو الفرق P
+        # العمولة تحسب على P
+        # الضريبة تحسب على P
+        
+        fee_amount = (diff * fee_percent).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+        vat_amount = (diff * vat_percent).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+        total_invoice_amount = diff + vat_amount # العميل يدفع المبلغ + الضريبة
+        
+        inv = Invoice.objects.create(
+            agreement=ag,
+            amount=total_invoice_amount,
+            subtotal=diff,
+            platform_fee_percent=fee_percent,
+            platform_fee_amount=fee_amount,
+            vat_percent=vat_percent,
+            vat_amount=vat_amount,
+            total_amount=total_invoice_amount,
+            status=Invoice.Status.UNPAID,
+            due_at=timezone.now() + timedelta(days=3) # مهلة سداد افتراضية 3 أيام
+        )
+
+        # تحديث حالة الطلب
+        from marketplace.models import Status
+        req = ag.request
+        req.status = Status.AWAITING_PAYMENT_CONFIRMATION
+        if hasattr(req, "updated_at"):
+            req.updated_at = timezone.now()
+        req.save(update_fields=["status"] + (["updated_at"] if hasattr(req, "updated_at") else []))
+
+        # إشعار الموظف
+        from notifications.utils import create_notification
+        create_notification(
+            recipient=ag.employee,
+            title="تمت الموافقة على تعديل الاتفاقية",
+            body=f"وافق العميل على تعديل قيمة الاتفاقية #{ag.pk} لتصبح {new_amount} ريال. تم إصدار فاتورة بالفارق.",
+            url=ag.get_absolute_url(),
+            actor=request.user,
+            target=ag,
+        )
+        messages.success(request, "تمت الموافقة على التعديل وإصدار فاتورة بالفارق. يرجى سداد الفاتورة.")
+        return redirect("finance:checkout_invoice", invoice_id=inv.pk)
+    else:
+        messages.error(request, "لا يوجد طلب تعديل صالح.")
+    
+    return redirect("agreements:detail", pk=ag.pk)
+
+
+@login_required
+@transaction.atomic
+def reject_modification(request: HttpRequest, pk: int) -> HttpResponse:
+    ag = get_object_or_404(Agreement, pk=pk)
+    # فقط العميل يحق له الرفض
+    if request.user.id != getattr(ag.request, "client_id", None):
+        return HttpResponseForbidden("غير مصرح لك.")
+
+    if ag.modification_requested_amount:
+        ag.modification_requested_amount = None
+        ag.modification_reason = ""
+        if hasattr(ag, "updated_at"):
+            ag.updated_at = timezone.now()
+        ag.save(update_fields=["modification_requested_amount", "modification_reason"] + (["updated_at"] if hasattr(ag, "updated_at") else []))
+        
+        # إشعار الموظف
+        from notifications.utils import create_notification
+        create_notification(
+            recipient=ag.employee,
+            title="تم رفض تعديل الاتفاقية",
+            body=f"رفض العميل طلب تعديل قيمة الاتفاقية #{ag.pk}.",
+            url=ag.get_absolute_url(),
+            actor=request.user,
+            target=ag,
+        )
+        messages.success(request, "تم رفض طلب التعديل.")
+    else:
+        messages.error(request, "لا يوجد طلب تعديل.")
+        
+    return redirect("agreements:detail", pk=ag.pk)
+
+
 from django.views.decorators.http import require_POST
 from django.http import HttpRequest, HttpResponse
 from django.db import transaction
@@ -77,6 +238,12 @@ def request_extension(request: HttpRequest, pk: int) -> HttpResponse:
     # تحقق من الصلاحية: فقط الموظف المسند
     if request.user.id != getattr(req, "assigned_employee_id", None):
         return HttpResponseForbidden("غير مصرح لك بطلب تمديد المهلة.")
+
+    # منع التمديل إذا كان الطلب مكتمل
+    from marketplace.models import Status
+    if req.status == Status.COMPLETED:
+        messages.error(request, "لا يمكن طلب تمديد المهلة لأن الطلب مكتمل.")
+        return redirect("agreements:detail", pk=ag.pk)
 
     if request.method == "POST":
         try:
@@ -404,6 +571,12 @@ def edit(request: HttpRequest, pk: int) -> HttpResponse:
 
     if not _is_emp_or_admin(request.user):
         messages.error(request, "غير مصرح بتحرير الاتفاقية.")
+        return redirect("agreements:detail", pk=ag.pk)
+
+    # منع التحرير إذا كان الطلب مكتمل
+    from marketplace.models import Status
+    if req.status == Status.COMPLETED:
+        messages.error(request, "لا يمكن تحرير الاتفاقية لأن الطلب مكتمل.")
         return redirect("agreements:detail", pk=ag.pk)
 
     selected_offer = getattr(req, "selected_offer", None)

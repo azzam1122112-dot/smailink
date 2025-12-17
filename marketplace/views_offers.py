@@ -33,7 +33,7 @@ from django.shortcuts import get_object_or_404, redirect
 from django.views.decorators.http import require_POST
 
 from core.permissions import require_role  # يتيح للـ staff/admin كذلك
-from .models import Request, Offer
+from .models import Request, Offer, Status
 
 logger = logging.getLogger(__name__)
 
@@ -95,7 +95,7 @@ def _offers_open(req: Request) -> bool:
     - ضمن نافذة الأيام المحددة
     """
     status_str = str(getattr(req, "status", "")).lower()
-    new_value = getattr(Request.Status, "NEW", "new")
+    new_value = getattr(Status, "NEW", "new")
     if status_str != str(new_value).lower():
         return False
     if getattr(req, "assigned_employee_id", None):
@@ -170,8 +170,8 @@ def offer_create(request: HttpRequest, request_id: int) -> HttpResponse:
         request=req,
         employee=request.user,
         status__in=[
-            getattr(Offer.Status, "PENDING", "pending"),
-            getattr(Offer.Status, "SELECTED", "selected"),
+            getattr(Status, "PENDING", "pending"),
+            getattr(Status, "SELECTED", "selected"),
         ],
     ).exists():
         messages.info(request, "لديك عرض سابق على هذا الطلب.")
@@ -194,7 +194,7 @@ def offer_create(request: HttpRequest, request_id: int) -> HttpResponse:
         employee=request.user,
         price=price,
         notes=notes,
-        status=getattr(Offer.Status, "PENDING", "pending"),
+        status=getattr(Status, "PENDING", "pending"),
     )
 
     logger.info(
@@ -243,20 +243,42 @@ def offer_select(request: HttpRequest, offer_id: int) -> HttpResponse:
     # صلاحية العرض للحظة الاختيار
     if hasattr(off, "can_select") and not off.can_select(request.user):
         return HttpResponseForbidden("لا يمكن اختيار هذا العرض.")
-    if getattr(off, "status", None) != getattr(Offer.Status, "PENDING", "pending"):
-        messages.info(request, "لا يمكن اختيار عرض غير معلّق.")
+    
+    # السماح باختيار العرض المعلق أو المعدل بانتظار الموافقة
+    allowed_statuses = [
+        getattr(Status, "PENDING", "pending"),
+        getattr(Status, "WAITING_CLIENT_APPROVAL", "waiting_client_approval"),
+    ]
+    if getattr(off, "status", None) not in allowed_statuses:
+        messages.info(request, "لا يمكن اختيار عرض غير معلّق أو بانتظار الموافقة.")
         return redirect("marketplace:request_detail", pk=req.pk)
 
     # ارفض بقية العروض
     rejected_count = (
         Offer.objects.filter(request=req)
         .exclude(pk=off.pk)
-        .update(status=getattr(Offer.Status, "REJECTED", "rejected"))
+        .update(status=getattr(Status, "REJECTED", "rejected"))
     )
 
     # اختر هذا العرض
-    off.status = getattr(Offer.Status, "SELECTED", "selected")
+    off.status = getattr(Status, "SELECTED", "selected")
     offer_update_fields = ["status"]
+
+    # تطبيق التعديلات إن وجدت (تثبيت السعر والمدة الجديدة)
+    if off.modified_price is not None:
+        logger.info(f"offer_select: Updating offer {off.pk} price from {off.proposed_price} to {off.modified_price}")
+        off.proposed_price = off.modified_price
+        off.modified_price = None
+        offer_update_fields.extend(["proposed_price", "modified_price"])
+    
+    if off.modified_duration_days is not None:
+        off.proposed_duration_days = off.modified_duration_days
+        off.modified_duration_days = None
+        offer_update_fields.extend(["proposed_duration_days", "modified_duration_days"])
+        
+    if off.modification_reason:
+        off.modification_reason = ""
+        offer_update_fields.append("modification_reason")
 
     if _model_has_field(Offer, "updated_at"):
         off.updated_at = timezone.now()
@@ -267,10 +289,26 @@ def offer_select(request: HttpRequest, offer_id: int) -> HttpResponse:
         offer_update_fields.append("selected_at")
 
     off.save(update_fields=offer_update_fields)
+    
+    # تحديث الاتفاقية المرتبطة إن وجدت
+    try:
+        # Force refresh of agreement to ensure we have it
+        from agreements.models import Agreement
+        ag = Agreement.objects.filter(request=req).first()
+        if ag:
+            logger.info(f"offer_select: Updating agreement {ag.pk} total_amount to {off.proposed_price}")
+            ag.total_amount = off.proposed_price
+            ag.duration_days = off.proposed_duration_days or 7
+            ag.save(update_fields=["total_amount", "duration_days"])
+        else:
+            logger.warning(f"offer_select: No agreement found for request {req.pk}")
+    except Exception as e:
+        logger.error(f"offer_select: Failed to update agreement: {e}")
+        pass
 
     # إسناد الطلب وتحديث حالته
     req.assigned_employee = off.employee
-    req.status = getattr(Request.Status, "OFFER_SELECTED", "offer_selected")
+    req.status = getattr(Status, "OFFER_SELECTED", "offer_selected")
 
     request_update_fields = ["assigned_employee", "status"]
 
@@ -332,11 +370,11 @@ def offer_reject(request: HttpRequest, offer_id: int) -> HttpResponse:
         messages.error(request, "لا يمكن رفض عرض: الطلب في حالة نزاع/تجميد.")
         return redirect("marketplace:request_detail", pk=req.pk)
 
-    if getattr(off, "status", None) != getattr(Offer.Status, "PENDING", "pending"):
+    if getattr(off, "status", None) != getattr(Status, "PENDING", "pending"):
         messages.info(request, "لا يمكن رفض هذا العرض في حالته الحالية.")
         return redirect("marketplace:request_detail", pk=req.pk)
 
-    off.status = getattr(Offer.Status, "REJECTED", "rejected")
+    off.status = getattr(Status, "REJECTED", "rejected")
     update_fields = ["status"]
 
     if _model_has_field(Offer, "updated_at"):
@@ -376,7 +414,7 @@ def offer_withdraw(request: HttpRequest, offer_id: int) -> HttpResponse:
         messages.error(request, "انتهت نافذة العروض؛ لا يمكن سحب العرض الآن.")
         return redirect("marketplace:request_detail", pk=req.pk)
 
-    if getattr(off, "status", None) != getattr(Offer.Status, "PENDING", "pending"):
+    if getattr(off, "status", None) != getattr(Status, "PENDING", "pending"):
         messages.info(request, "لا يمكن سحب عرض غير مُعلّق.")
         return redirect("marketplace:request_detail", pk=req.pk)
 

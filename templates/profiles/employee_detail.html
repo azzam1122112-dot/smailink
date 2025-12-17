@@ -5,420 +5,565 @@
 
 {% block extra_head %}
 <style>
-    /* Profile Hero */
-    .profile-hero {
-        background: linear-gradient(135deg, #ffffff 0%, #f8fafc 100%);
-        border-radius: 24px;
-        padding: 3rem 2rem;
-        border: 1px solid #e2e8f0;
-        box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);
+    :root {
+        --card-radius: 20px;
+        --transition-base: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.05);
+        --shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
+        --shadow-lg: 0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1);
+        --primary-gradient: linear-gradient(135deg, #16a34a 0%, #15803d 100%);
+    }
+
+    .profile-page {
+        background-color: #f8fafc;
+        min-height: 100vh;
+        padding-bottom: 4rem;
+    }
+
+    /* Hero Section */
+    .profile-hero-section {
+        background: #ffffff;
+        border-bottom: 1px solid #e2e8f0;
+        padding: 3rem 0 4rem;
         position: relative;
         overflow: hidden;
-        margin-bottom: 2rem;
     }
-    .profile-hero::before {
-        content: '';
+
+    .hero-bg-pattern {
         position: absolute;
         top: 0;
         left: 0;
-        right: 0;
-        height: 6px;
-        background: linear-gradient(90deg, #3b82f6 0%, #2563eb 100%);
+        width: 100%;
+        height: 100%;
+        background-image: radial-gradient(#e2e8f0 1px, transparent 1px);
+        background-size: 24px 24px;
+        opacity: 0.3;
+        z-index: 0;
     }
-    
-    .avatar-wrapper {
-        width: 140px;
-        height: 140px;
-        border-radius: 50%;
-        border: 4px solid #fff;
-        box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
-        overflow: hidden;
+
+    .hero-content {
         position: relative;
-        background: #fff;
-        margin-bottom: 1rem;
+        z-index: 1;
     }
-    .avatar-wrapper img {
+
+    /* Profile Card */
+    .profile-main-card {
+        background: #ffffff;
+        border-radius: var(--card-radius);
+        border: 1px solid #e2e8f0;
+        box-shadow: var(--shadow-lg);
+        padding: 2rem;
+        margin-top: -3rem;
+        position: relative;
+        z-index: 2;
+    }
+
+    .avatar-container {
+        width: 160px;
+        height: 160px;
+        border-radius: 50%;
+        border: 6px solid #ffffff;
+        box-shadow: var(--shadow-md);
+        overflow: hidden;
+        background: #f1f5f9;
+        margin-top: -5rem;
+        margin-bottom: 1.5rem;
+        position: relative;
+    }
+
+    .avatar-img {
         width: 100%;
         height: 100%;
         object-fit: cover;
     }
-    
+
+    .profile-name {
+        font-size: 1.75rem;
+        font-weight: 800;
+        color: #1e293b;
+        margin-bottom: 0.5rem;
+    }
+
+    .profile-title {
+        color: #16a34a;
+        font-weight: 600;
+        font-size: 1.1rem;
+        margin-bottom: 1rem;
+    }
+
+    .profile-meta {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 1rem;
+        color: #64748b;
+        font-size: 0.9rem;
+        margin-bottom: 1.5rem;
+    }
+
+    .meta-item {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        background: #f8fafc;
+        padding: 0.5rem 1rem;
+        border-radius: 50px;
+        border: 1px solid #f1f5f9;
+    }
+
+    /* KYC Badge */
     .kyc-badge {
         display: inline-flex;
         align-items: center;
         gap: 0.5rem;
         padding: 0.5rem 1rem;
-        border-radius: 99px;
+        border-radius: 50px;
         font-weight: 600;
-        font-size: 0.875rem;
-        transition: all 0.2s;
+        font-size: 0.85rem;
+        transition: var(--transition-base);
     }
+    
     .kyc-verified { background: #dcfce7; color: #166534; border: 1px solid #bbf7d0; }
     .kyc-pending { background: #fef9c3; color: #854d0e; border: 1px solid #fde047; }
     .kyc-rejected { background: #fee2e2; color: #991b1b; border: 1px solid #fecaca; }
     .kyc-none { background: #f1f5f9; color: #64748b; border: 1px solid #e2e8f0; }
 
-    /* Stats Cards */
-    .stat-card {
-        background: #fff;
-        border: 1px solid #e2e8f0;
-        border-radius: 16px;
-        padding: 1.25rem;
+    /* Stats Grid */
+    .stats-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+        gap: 1rem;
+        margin-top: 2rem;
+        padding-top: 2rem;
+        border-top: 1px solid #f1f5f9;
+    }
+
+    .stat-item {
         text-align: center;
-        transition: transform 0.2s, box-shadow 0.2s;
-        height: 100%;
+        padding: 1rem;
+        background: #f8fafc;
+        border-radius: 12px;
+        transition: var(--transition-base);
     }
-    .stat-card:hover {
-        transform: translateY(-3px);
-        box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);
-        border-color: #cbd5e1;
+
+    .stat-item:hover {
+        background: #f0fdf4;
+        transform: translateY(-2px);
     }
+
     .stat-value {
         font-size: 1.5rem;
         font-weight: 800;
         color: #1e293b;
         margin-bottom: 0.25rem;
+        line-height: 1;
     }
+
     .stat-label {
+        font-size: 0.8rem;
         color: #64748b;
-        font-size: 0.875rem;
         font-weight: 500;
     }
 
-    /* Section Styling */
-    .content-card {
-        background: #fff;
-        border-radius: 20px;
+    /* Content Cards */
+    .content-section {
+        background: #ffffff;
+        border-radius: var(--card-radius);
         border: 1px solid #e2e8f0;
         padding: 2rem;
         margin-bottom: 2rem;
-        box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+        box-shadow: var(--shadow-sm);
     }
+
+    .section-header {
+        display: flex;
+        align-items: center;
+        gap: 0.75rem;
+        margin-bottom: 1.5rem;
+    }
+
+    .section-icon {
+        width: 32px;
+        height: 32px;
+        border-radius: 8px;
+        background: #dcfce7;
+        color: #16a34a;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 1rem;
+    }
+
     .section-title {
         font-size: 1.25rem;
         font-weight: 700;
         color: #1e293b;
-        margin-bottom: 1.5rem;
-        display: flex;
-        align-items: center;
-        gap: 0.75rem;
-    }
-    .section-title::before {
-        content: '';
-        display: block;
-        width: 4px;
-        height: 24px;
-        background: #3b82f6;
-        border-radius: 2px;
+        margin: 0;
     }
 
     /* Skills */
-    .skill-tag {
-        display: inline-block;
-        background: #f8fafc;
-        color: #334155;
-        padding: 0.6rem 1.2rem;
-        border-radius: 12px;
-        font-size: 0.9rem;
-        font-weight: 500;
-        margin: 0.25rem;
-        border: 1px solid #e2e8f0;
-        transition: all 0.2s;
-    }
-    .skill-tag:hover {
-        background: #eff6ff;
-        color: #1d4ed8;
-        border-color: #bfdbfe;
-        transform: translateY(-1px);
+    .skills-wrapper {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.75rem;
     }
 
-    /* Portfolio & Projects */
-    .portfolio-card {
+    .skill-pill {
+        background: #ffffff;
         border: 1px solid #e2e8f0;
+        color: #475569;
+        padding: 0.5rem 1rem;
+        border-radius: 8px;
+        font-size: 0.9rem;
+        font-weight: 500;
+        transition: var(--transition-base);
+    }
+
+    .skill-pill:hover {
+        border-color: #16a34a;
+        color: #16a34a;
+        background: #f0fdf4;
+        transform: translateY(-2px);
+    }
+
+    /* Portfolio Grid */
+    .portfolio-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+        gap: 1.5rem;
+    }
+
+    .portfolio-item {
+        background: #ffffff;
         border-radius: 16px;
+        border: 1px solid #f1f5f9;
         overflow: hidden;
-        transition: all 0.3s ease;
-        background: #fff;
+        transition: var(--transition-base);
         height: 100%;
-        box-shadow: 0 2px 4px rgba(0,0,0,0.02);
+        display: flex;
+        flex-direction: column;
     }
-    .portfolio-card:hover {
-        transform: translateY(-5px);
-        box-shadow: 0 12px 24px -8px rgba(0,0,0,0.1);
-        border-color: #cbd5e1;
+
+    .portfolio-item:hover {
+        transform: translateY(-4px);
+        box-shadow: var(--shadow-md);
+        border-color: #dcfce7;
     }
-    .portfolio-img {
-        height: 200px;
-        background: #f1f5f9;
+
+    .portfolio-thumb {
+        height: 180px;
+        background: #f8fafc;
         position: relative;
         overflow: hidden;
-        display: flex;
-        align-items: center;
-        justify-content: center;
     }
-    .portfolio-img img {
+
+    .portfolio-thumb img {
         width: 100%;
         height: 100%;
         object-fit: cover;
-        transition: transform 0.5s;
+        transition: transform 0.5s ease;
     }
-    .portfolio-card:hover .portfolio-img img {
+
+    .portfolio-item:hover .portfolio-thumb img {
         transform: scale(1.05);
     }
-    
-    .project-history-item {
-        display: flex;
-        align-items: center;
-        gap: 1rem;
+
+    .portfolio-content {
         padding: 1.25rem;
-        border: 1px solid #f1f5f9;
-        border-radius: 12px;
-        margin-bottom: 0.75rem;
-        transition: all 0.2s;
-        background: #fff;
-    }
-    .project-history-item:hover { 
-        background: #f8fafc; 
-        border-color: #e2e8f0;
-        transform: translateX(-4px);
-    }
-    .project-icon {
-        width: 48px;
-        height: 48px;
-        border-radius: 12px;
-        background: #dcfce7;
-        color: #166534;
+        flex-grow: 1;
         display: flex;
-        align-items: center;
-        justify-content: center;
-        font-size: 1.25rem;
-        flex-shrink: 0;
+        flex-direction: column;
     }
-    
-    .line-clamp-2 {
+
+    .portfolio-title {
+        font-weight: 700;
+        color: #1e293b;
+        margin-bottom: 0.5rem;
+        font-size: 1.1rem;
+    }
+
+    .portfolio-desc {
+        color: #64748b;
+        font-size: 0.85rem;
+        line-height: 1.5;
+        margin-bottom: 1rem;
         display: -webkit-box;
         -webkit-line-clamp: 2;
         -webkit-box-orient: vertical;
         overflow: hidden;
+        flex-grow: 1;
     }
+
+    .portfolio-actions {
+        display: flex;
+        gap: 0.5rem;
+        margin-top: auto;
+    }
+
+    /* Project History */
+    .history-item {
+        display: flex;
+        align-items: center;
+        gap: 1rem;
+        padding: 1rem;
+        border: 1px solid #f1f5f9;
+        border-radius: 12px;
+        margin-bottom: 1rem;
+        transition: var(--transition-base);
+    }
+
+    .history-item:hover {
+        background: #f8fafc;
+        border-color: #e2e8f0;
+        transform: translateX(-4px);
+    }
+
+    .history-icon {
+        width: 40px;
+        height: 40px;
+        border-radius: 10px;
+        background: #dcfce7;
+        color: #16a34a;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 1.1rem;
+        flex-shrink: 0;
+    }
+
+    /* Animations */
+    @keyframes fadeInUp {
+        from { opacity: 0; transform: translateY(20px); }
+        to { opacity: 1; transform: translateY(0); }
+    }
+
+    .animate-up {
+        animation: fadeInUp 0.5s ease forwards;
+    }
+    
+    .delay-1 { animation-delay: 0.1s; }
+    .delay-2 { animation-delay: 0.2s; }
+    .delay-3 { animation-delay: 0.3s; }
+
 </style>
 {% endblock %}
 
 {% block content %}
-<div class="container py-5">
+<div class="profile-page">
     
-    <!-- Profile Hero -->
-    <div class="profile-hero text-center text-md-start">
-        <div class="row align-items-center">
-            <div class="col-md-auto d-flex justify-content-center mb-3 mb-md-0">
-                <div class="avatar-wrapper">
-                    <img src="{% if emp.photo %}{{ emp.photo.url }}{% else %}{% static 'img/avatar-placeholder.png' %}{% endif %}" 
-                         alt="{{ emp.user.name }}">
-                </div>
-            </div>
-            <div class="col-md">
-                <div class="d-flex flex-column flex-md-row align-items-center align-items-md-start justify-content-between gap-3">
-                    <div>
-                        <h1 class="fw-bold mb-2 text-dark">{{ emp.user.name|default:"تقني" }}</h1>
-                        <p class="text-primary fw-medium mb-3 fs-5">
-                            {% if emp.title %}{{ emp.title }}{% elif emp.specialty %}{{ emp.specialty }}{% else %}تقني معتمد{% endif %}
-                        </p>
-                        
-                        <div class="d-flex flex-wrap justify-content-center justify-content-md-start gap-3 mb-3">
-                            {% if emp.city %}
-                            <span class="text-muted bg-light px-3 py-1 rounded-pill border">
-                                <i class="fas fa-map-marker-alt me-1 text-danger"></i> {{ emp.city }}
-                            </span>
-                            {% endif %}
-                            <span class="text-muted bg-light px-3 py-1 rounded-pill border">
-                                <i class="fas fa-calendar-alt me-1 text-primary"></i> عضو منذ {{ emp.user.date_joined|date:"Y" }}
-                            </span>
-                        </div>
-                    </div>
-
-                    <!-- KYC Status -->
-                    <div class="text-center text-md-end">
-                        {% if emp.kyc_status == 'verified' %}
-                            <div class="kyc-badge kyc-verified" title="تم التحقق من الهوية">
-                                <i class="fas fa-check-circle"></i> هوية موثقة
-                            </div>
-                            {% if emp.kyc_verified_at %}
-                            <div class="text-muted small mt-1">منذ {{ emp.kyc_verified_at|date:"Y-m-d" }}</div>
-                            {% endif %}
-                        {% elif emp.kyc_status == 'pending' %}
-                            <div class="kyc-badge kyc-pending">
-                                <i class="fas fa-clock"></i> قيد المراجعة
-                            </div>
-                        {% elif emp.kyc_status == 'rejected' %}
-                            <div class="kyc-badge kyc-rejected">
-                                <i class="fas fa-times-circle"></i> التوثيق مرفوض
-                            </div>
-                        {% else %}
-                            <div class="kyc-badge kyc-none">
-                                <i class="fas fa-shield-alt"></i> غير موثق
-                            </div>
-                        {% endif %}
-                    </div>
-                </div>
-            </div>
-        </div>
-
-        <!-- Stats Grid -->
-        <div class="row g-3 mt-4">
-            <div class="col-6 col-md-3">
-                <div class="stat-card">
-                    <div class="stat-value text-warning">
-                        <i class="fas fa-star me-1"></i>{{ emp.rating|floatformat:1 }}
-                    </div>
-                    <div class="stat-label">{{ emp.reviews_count }} تقييم</div>
-                </div>
-            </div>
-            <div class="col-6 col-md-3">
-                <div class="stat-card">
-                    <div class="stat-value text-success">
-                        {{ completed_requests_count|default:0 }}
-                    </div>
-                    <div class="stat-label">مشروع مكتمل</div>
-                </div>
-            </div>
-        </div>
+    <!-- Hero Background -->
+    <div class="profile-hero-section">
+        <div class="hero-bg-pattern"></div>
     </div>
 
-    <div class="row g-4">
-        <!-- Left Column: Bio & Skills -->
-        <div class="col-lg-4">
-            <!-- Bio -->
-            {% if emp.bio %}
-            <div class="content-card">
-                <h2 class="section-title">نبذة عني</h2>
-                <p class="text-muted leading-relaxed mb-0" style="white-space: pre-line; line-height: 1.8;">{{ emp.bio }}</p>
-            </div>
-            {% endif %}
-
-            <!-- Skills -->
-            <div class="content-card">
-                <h2 class="section-title">المهارات</h2>
-                {% if emp.skills_list %}
-                    <div class="d-flex flex-wrap">
-                        {% for skill in emp.skills_list %}
-                            <span class="skill-tag">{{ skill }}</span>
-                        {% endfor %}
-                    </div>
-                {% else %}
-                    <p class="text-muted small fst-italic">لم يتم إضافة مهارات بعد.</p>
-                {% endif %}
-            </div>
-        </div>
-
-        <!-- Right Column: Portfolio & History -->
-        <div class="col-lg-8">
+    <div class="container">
+        <div class="row g-4">
             
-            <!-- Portfolio Section -->
-            <div class="content-card bg-transparent border-0 shadow-none p-0 mb-5">
-                <div class="d-flex justify-content-between align-items-center mb-4">
-                    <h2 class="section-title mb-0">معرض الأعمال</h2>
-                    {% if request.user == emp.user %}
-                    <a href="{% url 'profiles:portfolio_list' %}" class="btn btn-sm btn-primary rounded-pill px-3 shadow-sm">
-                        <i class="fas fa-edit me-1"></i> إدارة أعمالي
-                    </a>
-                    {% endif %}
+            <!-- Left Column: Profile Info -->
+            <div class="col-lg-4">
+                <div class="profile-main-card animate-up">
+                    <div class="text-center">
+                        <div class="avatar-container mx-auto">
+                            <img src="{% if emp.photo %}{{ emp.photo.url }}{% else %}{% static 'img/avatar-placeholder.png' %}{% endif %}" 
+                                 alt="{{ emp.user.name }}" class="avatar-img">
+                        </div>
+                        
+                        <h1 class="profile-name">{{ emp.user.name|default:"تقني" }}</h1>
+                        <p class="profile-title">
+                            {% if emp.title %}{{ emp.title }}{% elif emp.specialty %}{{ emp.specialty }}{% else %}تقني معتمد{% endif %}
+                        </p>
+
+                        <!-- KYC Status -->
+                        <div class="mb-4">
+                            {% if emp.kyc_status == 'verified' %}
+                                <div class="kyc-badge kyc-verified" title="تم التحقق من الهوية">
+                                    <i class="fas fa-check-circle"></i> هوية موثقة
+                                </div>
+                            {% elif emp.kyc_status == 'pending' %}
+                                <div class="kyc-badge kyc-pending">
+                                    <i class="fas fa-clock"></i> قيد المراجعة
+                                </div>
+                            {% elif emp.kyc_status == 'rejected' %}
+                                <div class="kyc-badge kyc-rejected">
+                                    <i class="fas fa-times-circle"></i> التوثيق مرفوض
+                                </div>
+                            {% else %}
+                                <div class="kyc-badge kyc-none">
+                                    <i class="fas fa-shield-alt"></i> غير موثق
+                                </div>
+                            {% endif %}
+                        </div>
+
+                        <div class="profile-meta justify-content-center">
+                            {% if emp.city %}
+                            <div class="meta-item">
+                                <i class="fas fa-map-marker-alt text-danger"></i> {{ emp.city }}
+                            </div>
+                            {% endif %}
+                            <div class="meta-item">
+                                <i class="fas fa-calendar-alt text-primary"></i> عضو منذ {{ emp.user.date_joined|date:"Y" }}
+                            </div>
+                        </div>
+
+                        <div class="stats-grid">
+                            <div class="stat-item">
+                                <div class="stat-value text-warning">
+                                    <i class="fas fa-star me-1" style="font-size: 1.2rem;"></i>{{ emp.rating|floatformat:1 }}
+                                </div>
+                                <div class="stat-label">{{ emp.reviews_count }} تقييم</div>
+                            </div>
+                            <div class="stat-item">
+                                <div class="stat-value text-success">
+                                    {{ completed_requests_count|default:0 }}
+                                </div>
+                                <div class="stat-label">مشروع مكتمل</div>
+                            </div>
+                        </div>
+                    </div>
                 </div>
 
-                {% if emp.user.portfolio_items.exists %}
-                <div class="row g-4">
-                    {% for item in emp.user.portfolio_items.all %}
-                        {% if item.is_public %}
-                        <div class="col-md-6">
-                            <div class="portfolio-card h-100 d-flex flex-column">
-                                <div class="portfolio-img">
+                <!-- Skills Section -->
+                <div class="content-section animate-up delay-1">
+                    <div class="section-header">
+                        <div class="section-icon"><i class="fas fa-tools"></i></div>
+                        <h2 class="section-title">المهارات</h2>
+                    </div>
+                    {% if emp.skills_list %}
+                        <div class="skills-wrapper">
+                            {% for skill in emp.skills_list %}
+                                <span class="skill-pill">{{ skill }}</span>
+                            {% endfor %}
+                        </div>
+                    {% else %}
+                        <p class="text-muted small fst-italic text-center py-3">لم يتم إضافة مهارات بعد.</p>
+                    {% endif %}
+                </div>
+            </div>
+
+            <!-- Right Column: Bio, Portfolio, History -->
+            <div class="col-lg-8">
+                
+                <!-- Bio Section -->
+                {% if emp.bio %}
+                <div class="content-section animate-up delay-1">
+                    <div class="section-header">
+                        <div class="section-icon"><i class="fas fa-user"></i></div>
+                        <h2 class="section-title">نبذة عني</h2>
+                    </div>
+                    <p class="text-muted mb-0" style="line-height: 1.8; white-space: pre-line;">{{ emp.bio }}</p>
+                </div>
+                {% endif %}
+
+                <!-- Portfolio Section -->
+                <div class="content-section animate-up delay-2">
+                    <div class="d-flex justify-content-between align-items-center mb-4">
+                        <div class="section-header mb-0">
+                            <div class="section-icon"><i class="fas fa-briefcase"></i></div>
+                            <h2 class="section-title">معرض الأعمال</h2>
+                        </div>
+                        {% if request.user == emp.user %}
+                        <a href="{% url 'profiles:portfolio_list' %}" class="btn btn-sm btn-outline-primary rounded-pill px-3">
+                            <i class="fas fa-edit me-1"></i> إدارة
+                        </a>
+                        {% endif %}
+                    </div>
+
+                    {% if emp.user.portfolio_items.exists %}
+                    <div class="portfolio-grid">
+                        {% for item in emp.user.portfolio_items.all %}
+                            {% if item.is_public %}
+                            <div class="portfolio-item">
+                                <div class="portfolio-thumb">
                                     {% if item.image %}
                                         <img src="{{ item.image.url }}" alt="{{ item.title }}">
                                     {% else %}
-                                        <i class="fas fa-image fa-3x text-light"></i>
+                                        <div class="d-flex align-items-center justify-content-center h-100 text-muted">
+                                            <i class="fas fa-image fa-2x opacity-25"></i>
+                                        </div>
                                     {% endif %}
                                 </div>
-                                <div class="p-3 flex-grow-1 d-flex flex-column">
-                                    <h5 class="fw-bold mb-2 text-dark">{{ item.title }}</h5>
+                                <div class="portfolio-content">
+                                    <h3 class="portfolio-title">{{ item.title }}</h3>
                                     
                                     {% if item.tags_list %}
-                                    <div class="mb-2">
-                                        {% for tag in item.tags_list|slice:":3" %}
+                                    <div class="d-flex flex-wrap gap-1 mb-2">
+                                        {% for tag in item.tags_list|slice:":2" %}
                                             <span class="badge bg-light text-secondary border fw-normal">{{ tag }}</span>
                                         {% endfor %}
                                     </div>
                                     {% endif %}
 
-                                    <p class="text-muted small mb-3 flex-grow-1 line-clamp-2">
+                                    <p class="portfolio-desc">
                                         {{ item.description|truncatechars:100 }}
                                     </p>
                                     
-                                    <div class="d-flex gap-2 mt-auto">
+                                    <div class="portfolio-actions">
                                         {% if item.link %}
-                                        <a href="{{ item.link }}" target="_blank" class="btn btn-sm btn-outline-primary rounded-pill w-100">
+                                        <a href="{{ item.link }}" target="_blank" class="btn btn-sm btn-outline-primary rounded-pill flex-grow-1">
                                             <i class="fas fa-external-link-alt me-1"></i> زيارة
                                         </a>
                                         {% endif %}
                                         {% if item.attachment %}
-                                        <a href="{{ item.attachment.url }}" class="btn btn-sm btn-outline-secondary rounded-pill w-100">
+                                        <a href="{{ item.attachment.url }}" class="btn btn-sm btn-outline-secondary rounded-pill flex-grow-1">
                                             <i class="fas fa-download me-1"></i> ملف
                                         </a>
                                         {% endif %}
                                     </div>
                                 </div>
                             </div>
-                        </div>
-                        {% endif %}
-                    {% endfor %}
+                            {% endif %}
+                        {% endfor %}
+                    </div>
+                    {% else %}
+                    <div class="text-center py-5 bg-light rounded-4 border border-dashed">
+                        <div class="text-muted mb-3"><i class="fas fa-layer-group fa-3x opacity-25"></i></div>
+                        <h5 class="text-muted fw-bold">لا توجد أعمال معروضة</h5>
+                        <p class="text-muted small mb-0">لم يقم التقني بإضافة أعمال للمعرض بعد.</p>
+                    </div>
+                    {% endif %}
                 </div>
-                {% else %}
-                <div class="text-center py-5 bg-white rounded-4 border border-dashed">
-                    <div class="text-muted mb-3"><i class="fas fa-briefcase fa-3x opacity-25"></i></div>
-                    <h5 class="text-muted">لا توجد أعمال معروضة حالياً</h5>
-                    <p class="text-muted small">سيظهر هنا معرض الأعمال الخاص بالتقني</p>
+
+                <!-- Platform History -->
+                {% if completed_requests_count %}
+                <div class="content-section animate-up delay-3">
+                    <div class="d-flex align-items-center justify-content-between mb-4">
+                        <div class="section-header mb-0">
+                            <div class="section-icon"><i class="fas fa-check-circle"></i></div>
+                            <h2 class="section-title">مشاريع مكتملة</h2>
+                        </div>
+                        <span class="badge bg-success-subtle text-success rounded-pill px-3 py-2">
+                            {{ completed_requests_count }} مشروع
+                        </span>
+                    </div>
+                    
+                    <div class="d-flex flex-column gap-2">
+                        {% for req in completed_requests %}
+                        <div class="history-item">
+                            <div class="history-icon">
+                                <i class="fas fa-check"></i>
+                            </div>
+                            <div class="flex-grow-1">
+                                <h6 class="fw-bold mb-1 text-dark">{{ req.title|default:"مشروع تقني" }}</h6>
+                                <div class="d-flex flex-wrap gap-3 text-muted small">
+                                    <span><i class="far fa-calendar me-1"></i> {{ req.completed_at|date:"Y-m-d"|default:req.created_at|date:"Y-m-d" }}</span>
+                                    {% if req.category %}
+                                    <span><i class="fas fa-tag me-1"></i> {{ req.get_category_display }}</span>
+                                    {% endif %}
+                                </div>
+                            </div>
+                            {% if req.client %}
+                            <div class="text-end d-none d-sm-block">
+                                <span class="badge bg-light text-dark border px-3 py-2 rounded-pill">
+                                    <i class="fas fa-user me-1 text-secondary"></i> {{ req.client.name|default:"عميل" }}
+                                </span>
+                            </div>
+                            {% endif %}
+                        </div>
+                        {% endfor %}
+                    </div>
                 </div>
                 {% endif %}
-            </div>
 
-            <!-- Platform History Section -->
-            {% if completed_requests_count %}
-            <div class="content-card">
-                <div class="d-flex align-items-center justify-content-between mb-4">
-                    <h2 class="section-title mb-0">
-                        مشاريع مكتملة عبر المنصة
-                    </h2>
-                    <span class="badge bg-success-subtle text-success rounded-pill px-3 py-2 fs-6">
-                        {{ completed_requests_count }} مشروع
-                    </span>
-                </div>
-                
-                <div class="d-flex flex-column gap-3">
-                    {% for req in completed_requests %}
-                    <div class="project-history-item">
-                        <div class="project-icon">
-                            <i class="fas fa-check-circle"></i>
-                        </div>
-                        <div class="flex-grow-1">
-                            <h6 class="fw-bold mb-1 text-dark">{{ req.title|default:"مشروع تقني" }}</h6>
-                            <div class="d-flex flex-wrap gap-3 text-muted small">
-                                <span><i class="far fa-calendar me-1"></i> {{ req.completed_at|date:"Y-m-d"|default:req.created_at|date:"Y-m-d" }}</span>
-                                {% if req.category %}
-                                <span><i class="fas fa-tag me-1"></i> {{ req.get_category_display }}</span>
-                                {% endif %}
-                            </div>
-                        </div>
-                        {% if req.client %}
-                        <div class="text-end d-none d-sm-block">
-                            <span class="badge bg-light text-dark border px-3 py-2 rounded-pill">
-                                <i class="fas fa-user me-1 text-secondary"></i> {{ req.client.name|default:"عميل" }}
-                            </span>
-                        </div>
-                        {% endif %}
-                    </div>
-                    {% endfor %}
-                </div>
             </div>
-            {% endif %}
-
         </div>
     </div>
 </div>

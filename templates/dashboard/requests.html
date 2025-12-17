@@ -113,8 +113,8 @@
                         {{ r.client.name }}
                       {% elif r.client and r.client.get_full_name %}
                         {{ r.client.get_full_name }}
-                      {% elif r.client and r.client.username %}
-                        {{ r.client.username }}
+                      {% elif r.client and r.client.email %}
+                        {{ r.client.email }}
                       {% else %}-{% endif %}
                     </div>
                   </td>

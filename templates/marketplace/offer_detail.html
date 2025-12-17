@@ -32,16 +32,12 @@
                 
                 <div class="offer-stats">
                     <div class="stat-item">
-                        <label>السعر المقترح</label>
-                        <div class="value price">{{ off.proposed_price|intcomma }} <small>ر.س</small></div>
+                        <label>السعر الاجمالي</label>
+                        <div class="value price">{{ off.client_total_amount|default:off.proposed_price|intcomma }} <small>ر.س</small></div>
                     </div>
                     <div class="stat-item">
                         <label>مدة التنفيذ</label>
                         <div class="value">{{ off.proposed_duration_days }} <small>يوم</small></div>
-                    </div>
-                    <div class="stat-item">
-                        <label>صافي الربح المتوقع</label>
-                        <div class="value text-muted">{{ off.proposed_price|intcomma }} <small>ر.س</small></div>
                     </div>
                 </div>
 
@@ -60,7 +56,7 @@
                         {% if off.modified_price %}
                         <div class="mod-item">
                             <label>السعر الجديد</label>
-                            <span>{{ off.modified_price|intcomma }} ر.س</span>
+                            <span>{{ off.client_modified_total_amount|default:off.modified_price|intcomma }} ر.س</span>
                         </div>
                         {% endif %}
                         {% if off.modified_duration_days %}
@@ -137,11 +133,16 @@
                     {% else %}
                         <h3>مقدم العرض</h3>
                         <div class="user-info">
-                            <div class="avatar">{{ off.employee.first_name|first }}</div>
-                            <div>
-                                <h4>{{ off.employee.get_full_name }}</h4>
-                                <span>موظف مختص</span>
-                            </div>
+                            <a href="{% url 'profiles:employee_detail_by_slug' off.employee.employee_profile.slug %}" style="display: flex; align-items: center; gap: 1rem; text-decoration: none; color: inherit;">
+                                <div class="avatar">{{ off.employee.first_name|first }}</div>
+                                <div>
+                                    <h4>{{ off.employee.get_full_name }}</h4>
+                                    <span>موظف مختص</span>
+                                    <div style="color: #f59e0b; font-size: 0.9rem; margin-top: 0.25rem;">
+                                        <i class="fas fa-star"></i> {{ off.employee.employee_profile.rating|default:0|floatformat:1 }}
+                                    </div>
+                                </div>
+                            </a>
                         </div>
                     {% endif %}
                 </div>
@@ -204,7 +205,7 @@
     .meta-info { color: var(--text-muted); font-size: 0.9rem; }
 
     .offer-stats {
-        display: grid; grid-template-columns: repeat(3, 1fr); gap: 1rem;
+        display: grid; grid-template-columns: repeat(2, 1fr); gap: 1rem;
         background: #f8fafc; padding: 1.5rem; border-radius: 8px; margin-bottom: 1.5rem;
     }
     .stat-item label { display: block; font-size: 0.8rem; color: var(--text-muted); margin-bottom: 0.5rem; }

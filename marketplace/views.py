@@ -526,12 +526,9 @@ class RequestCreateView(LoginRequiredMixin, CreateView):
         # حفظ المرفقات إن وجدت
         files = self.request.FILES.getlist('attachments')
         if files:
-            try:
-                from uploads.models import RequestFile
-                for f in files:
-                    RequestFile.objects.create(request=self.object, file=f)
-            except Exception:
-                pass
+            from uploads.models import RequestFile
+            for f in files:
+                RequestFile.objects.create(request=self.object, file=f)
 
         messages.success(self.request, "تم إنشاء الطلب بنجاح.")
         try:
@@ -601,6 +598,7 @@ class RequestDetailView(LoginRequiredMixin, DetailView):
 
     def get_queryset(self):
         return Request.objects.select_related("client", "assigned_employee").prefetch_related(
+            "agreement",
             Prefetch("offers", queryset=Offer.objects.select_related("employee")),
             Prefetch("notes", queryset=Note.objects.select_related("author")),
             Prefetch("comments", queryset=Comment.objects.select_related("author")),

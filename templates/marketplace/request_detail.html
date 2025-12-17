@@ -37,38 +37,110 @@
             {# --- Progress Stepper --- #}
             <div class="card stepper-card">
                 <div class="stepper">
+                    {# 1. جديد #}
                     <div class="step {% if req.status != 'cancelled' %}active{% endif %}">
-                        <div class="step-icon"><i class="fas fa-file-alt"></i></div>
-                        <div class="step-label">الطلب</div>
+                        <div class="step-icon"><i class="fas fa-plus-circle"></i></div>
+                        <div class="step-label">جديد</div>
                     </div>
-                    <div class="step {% if req.status == 'offer_pending' or req.status == 'agreement_pending' or req.status == 'in_progress' or req.status == 'completed' %}active{% endif %}">
-                        <div class="step-icon"><i class="fas fa-handshake"></i></div>
+
+                    {# 2. العروض #}
+                    <div class="step {% if req.status != 'cancelled' %}active{% endif %}">
+                        <div class="step-icon"><i class="fas fa-users"></i></div>
                         <div class="step-label">العروض</div>
                     </div>
+
+                    {# 3. الاتفاقية #}
+                    <div class="step {% if req.status == 'offer_selected' or req.status == 'agreement_pending' or req.status == 'awaiting_payment_confirmation' or req.status == 'in_progress' or req.status == 'completed' %}active{% endif %}">
+                        <div class="step-icon"><i class="fas fa-handshake"></i></div>
+                        <div class="step-label">الاتفاقية</div>
+                    </div>
+
+                    {# 4. تأكيد الدفع #}
+                    <div class="step {% if req.status == 'awaiting_payment_confirmation' or req.status == 'in_progress' or req.status == 'completed' %}active{% endif %}">
+                        <div class="step-icon"><i class="fas fa-file-invoice-dollar"></i></div>
+                        <div class="step-label">تأكيد الدفع</div>
+                    </div>
+
+                    {# 5. التنفيذ #}
                     <div class="step {% if req.status == 'in_progress' or req.status == 'completed' %}active{% endif %}">
                         <div class="step-icon"><i class="fas fa-cogs"></i></div>
                         <div class="step-label">التنفيذ</div>
                     </div>
+
+                    {# 6. مكتمل #}
                     <div class="step {% if req.status == 'completed' %}active{% endif %}">
                         <div class="step-icon"><i class="fas fa-check-circle"></i></div>
-                        <div class="step-label">التسليم</div>
+                        <div class="step-label">مكتمل</div>
                     </div>
                 </div>
             </div>
 
             {# --- Alerts & Notifications Area --- #}
             {% if req.agreement and req.agreement.extension_requested_days and req.agreement.extension_requested_days > 0 and request.user.id == req.client_id %}
-            <div class="alert-box warning fade-in-up">
-                <div class="alert-icon">⏳</div>
+            <div class="alert-box warning fade-in-up" style="background-color: #fff7ed; border: 1px solid #fdba74; box-shadow: 0 4px 6px -1px rgba(251, 146, 60, 0.1); padding: 1.5rem;">
+                <div class="alert-icon" style="font-size: 2rem; background: #ffedd5; width: 50px; height: 50px; display: flex; align-items: center; justify-content: center; border-radius: 50%; color: #c2410c;">⏳</div>
                 <div class="alert-content">
-                    <h3>طلب تمديد مهلة</h3>
-                    <p>طلب الموظف تمديد مدة المشروع <strong>{{ req.agreement.extension_requested_days }} يوم</strong>.</p>
+                    <h3 style="color: #9a3412; font-size: 1.1rem; margin-bottom: 0.5rem;">طلب تمديد مهلة</h3>
+                    <p style="color: #c2410c;">طلب الموظف تمديد مدة المشروع <strong>{{ req.agreement.extension_requested_days }} يوم</strong>.</p>
                 </div>
                 <div class="alert-actions">
-                    <form method="post" action="{% url 'agreements:approve_extension' req.agreement.pk %}">{% csrf_token %}<button class="btn-sm success">موافقة</button></form>
-                    <form method="post" action="{% url 'agreements:reject_extension' req.agreement.pk %}">{% csrf_token %}<button class="btn-sm danger">رفض</button></form>
+                    <form method="post" action="{% url 'agreements:approve_extension' req.agreement.pk %}">{% csrf_token %}<button class="btn-sm success" style="background: #16a34a; border-color: #16a34a;">موافقة</button></form>
+                    <form method="post" action="{% url 'agreements:reject_extension' req.agreement.pk %}">{% csrf_token %}<button class="btn-sm danger" style="background: #dc2626; border-color: #dc2626;">رفض</button></form>
                 </div>
             </div>
+            {% endif %}
+
+            {# --- Modification Request Alert (Client) --- #}
+            {% if req.agreement and req.agreement.modification_requested_amount and request.user.id == req.client_id %}
+            <div class="alert-box warning fade-in-up" style="background-color: #fffbeb; border: 1px solid #fcd34d; box-shadow: 0 4px 6px -1px rgba(245, 158, 11, 0.1); padding: 1.5rem;">
+                <div class="alert-icon" style="font-size: 2rem; background: #fef3c7; width: 50px; height: 50px; display: flex; align-items: center; justify-content: center; border-radius: 50%; color: #b45309;">💰</div>
+                <div class="alert-content">
+                    <h3 style="color: #92400e; font-size: 1.1rem; margin-bottom: 0.5rem;">طلب تعديل قيمة الاتفاقية</h3>
+                    <p style="color: #b45309;">طلب الموظف تعديل قيمة المشروع لتصبح <strong>{{ req.agreement.modification_requested_amount|floatformat:2 }} ريال</strong>.</p>
+                    {% if req.agreement.modification_reason %}
+                    <p style="font-size: 0.9rem; color: #78350f; margin-top: 0.5rem; background: rgba(255,255,255,0.5); padding: 0.5rem; border-radius: 4px;">السبب: {{ req.agreement.modification_reason }}</p>
+                    {% endif %}
+                </div>
+                <div class="alert-actions">
+                    <form method="post" action="{% url 'agreements:approve_modification' req.agreement.pk %}">{% csrf_token %}<button class="btn-sm success" style="background: #16a34a; border-color: #16a34a;">موافقة</button></form>
+                    <form method="post" action="{% url 'agreements:reject_modification' req.agreement.pk %}">{% csrf_token %}<button class="btn-sm danger" style="background: #dc2626; border-color: #dc2626;">رفض</button></form>
+                </div>
+            </div>
+            {% endif %}
+
+            {# --- Employee Actions (Extension Request) --- #}
+            {% if req.agreement and request.user.id == req.assigned_employee_id and req.agreement.status == 'accepted' %}
+                {% if req.agreement.extension_requested_days and req.agreement.extension_requested_days > 0 %}
+                <div class="alert-box warning fade-in-up">
+                    <div class="alert-icon">⏳</div>
+                    <div class="alert-content">
+                        <h3>طلب تمديد معلق</h3>
+                        <p>لقد طلبت تمديد المهلة <strong>{{ req.agreement.extension_requested_days }} يوم</strong>. بانتظار موافقة العميل.</p>
+                    </div>
+                </div>
+                {% else %}
+                <div class="alert-box info fade-in-up" style="background: #f0f9ff; border-color: #bae6fd;">
+                    <div class="alert-icon" style="color: #0284c7;">⏱️</div>
+                    <div class="alert-content">
+                        <h3 style="color: #0369a1;">إدارة الوقت</h3>
+                        <p style="color: #0284c7;">هل تحتاج إلى وقت إضافي لإنجاز المشروع؟</p>
+                    </div>
+                    <div class="alert-actions">
+                        <a href="{% url 'agreements:request_extension' req.agreement.pk %}" class="btn-sm primary">طلب تمديد مهلة</a>
+                    </div>
+                </div>
+                {% endif %}
+
+                {# --- Employee Actions (Modification Request Status) --- #}
+                {% if req.agreement.modification_requested_amount %}
+                <div class="alert-box warning fade-in-up" style="margin-top: 1rem;">
+                    <div class="alert-icon">💰</div>
+                    <div class="alert-content">
+                        <h3>طلب تعديل مالي معلق</h3>
+                        <p>لقد طلبت تعديل القيمة لتصبح <strong>{{ req.agreement.modification_requested_amount|floatformat:2 }} ريال</strong>. بانتظار موافقة العميل.</p>
+                    </div>
+                </div>
+                {% endif %}
             {% endif %}
 
             {# --- Review Section (Client Only) --- #}
@@ -223,6 +295,42 @@
 
             {# --- Tab: Workspace (Chat & Files) --- #}
             <div id="tab-workspace" class="tab-content fade-in-up">
+                
+                {# --- Project Files Section --- #}
+                <div class="card mb-4">
+                    <div class="card-header" style="border-bottom: 1px solid #eee; padding-bottom: 1rem; margin-bottom: 1rem;">
+                        <h3 style="font-size: 1.1rem; font-weight: 600;">ملفات المشروع</h3>
+                    </div>
+                    <div class="files-grid" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 1rem;">
+                        {# Request Files #}
+                        {% for f in req.files.all %}
+                        <a href="{{ f.file.url }}" class="file-item" target="_blank" style="display: flex; align-items: center; gap: 0.5rem; padding: 0.75rem; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; text-decoration: none; color: inherit; transition: all 0.2s;">
+                            <span class="file-icon" style="font-size: 1.2rem;">📎</span>
+                            <div class="file-info" style="overflow: hidden;">
+                                <div class="file-name" style="font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">{{ f.filename|default:"ملف طلب" }}</div>
+                                <div class="file-date" style="font-size: 0.75rem; color: #64748b;">{{ f.created_at|date:"d/m/Y" }}</div>
+                            </div>
+                        </a>
+                        {% endfor %}
+
+                        {# Comment Files #}
+                        {% for comment in req.comments.all %}
+                            {% if comment.file %}
+                            <a href="{{ comment.file.url }}" class="file-item" target="_blank" style="display: flex; align-items: center; gap: 0.5rem; padding: 0.75rem; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; text-decoration: none; color: inherit; transition: all 0.2s;">
+                                <span class="file-icon" style="font-size: 1.2rem;">📎</span>
+                                <div class="file-info" style="overflow: hidden;">
+                                    <div class="file-name" style="font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">{{ comment.filename|default:"ملف نقاش" }}</div>
+                                    <div class="file-date" style="font-size: 0.75rem; color: #64748b;">{{ comment.created_at|date:"d/m/Y" }}</div>
+                                </div>
+                            </a>
+                            {% endif %}
+                        {% endfor %}
+                    </div>
+                    {% if not req.files.all and not req.comments.all %} 
+                        {# Note: checking req.comments.all is not perfect for files, but good enough for now or we can leave empty #}
+                    {% endif %}
+                </div>
+
                 <div class="card chat-card">
                     <div class="chat-header">
                         <h3>نقاش المشروع</h3>

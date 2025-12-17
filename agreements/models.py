@@ -72,6 +72,18 @@ class Agreement(models.Model):
 
     duration_days = models.PositiveIntegerField("المدة (أيام)", default=7)
     extension_requested_days = models.IntegerField(null=True, blank=True, verbose_name="عدد أيام التمديد المطلوبة")
+    
+    # حقول تعديل الاتفاقية (المبلغ)
+    modification_requested_amount = models.DecimalField(
+        "المبلغ الجديد المطلوب (ريال)",
+        max_digits=12,
+        decimal_places=2,
+        null=True,
+        blank=True,
+        help_text="المبلغ الإجمالي الجديد المقترح للاتفاقية."
+    )
+    modification_reason = models.TextField("سبب تعديل المبلغ", blank=True)
+
     total_amount = models.DecimalField(
         "قيمة المشروع P (ريال)",
         max_digits=12,
@@ -419,7 +431,7 @@ class Agreement(models.Model):
 
         if self.pk:
             try:
-                prev = Agreement.objects.only("duration_days", "total_amount", "status").get(pk=self.pk)
+                prev = Agreement.objects.only("duration_days", "total_amount", "status", "extension_requested_days", "modification_requested_amount").get(pk=self.pk)
             except Agreement.DoesNotExist:
                 prev = None
             if prev and prev.status not in [Agreement.Status.DRAFT, Agreement.Status.REJECTED]:
@@ -435,7 +447,17 @@ class Agreement(models.Model):
                     )
                 ):
                     allow_duration_change = True
-                if (prev.duration_days != self.duration_days and not allow_duration_change) or prev.total_amount != self.total_amount:
+                
+                # السماح بتعديل المبلغ فقط عند الموافقة على طلب تعديل القيمة
+                allow_amount_change = False
+                if (
+                    prev.modification_requested_amount
+                    and prev.modification_requested_amount > 0
+                    and self.total_amount == prev.modification_requested_amount
+                ):
+                    allow_amount_change = True
+
+                if (prev.duration_days != self.duration_days and not allow_duration_change) or (prev.total_amount != self.total_amount and not allow_amount_change):
                     raise ValidationError("لا يُسمح بتعديل المدة أو إجمالي المشروع بعد مغادرة المسودة.")
 
     def save(self, *args, **kwargs):

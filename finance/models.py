@@ -448,6 +448,13 @@ class Invoice(models.Model):
         null=True,
         help_text="مرجع التحويل البنكي الذي يرسله العميل.",
     )
+    receipt_image = models.ImageField(
+        "صورة الإيصال",
+        upload_to="receipts/%Y/%m/",
+        blank=True,
+        null=True,
+        help_text="صورة إيصال التحويل البنكي.",
+    )
 
     created_by = models.ForeignKey(
         User,

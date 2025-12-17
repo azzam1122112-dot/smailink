@@ -111,11 +111,32 @@
               </p>
             </div>
           </div>
+        {% elif invoice.paid_ref %}
+          <div class="payment-pending profile-section" style="background: #fffbeb; border-color: #d97706; margin-top: 1.5rem;">
+            <div class="pending-content" style="text-align: center; padding: 1.5rem;">
+              <div class="pending-icon" style="font-size: 3rem; margin-bottom: 1rem;">⏳</div>
+              <h3 class="card-section-title" style="color: #d97706; margin-bottom: 0.5rem;">
+                قيد المراجعة
+              </h3>
+              <p class="card-section-note">
+                تم إرسال مرجع التحويل ({{ invoice.paid_ref }}) وجاري التحقق منه.
+                لا حاجة لإرساله مرة أخرى.
+              </p>
+              {% if invoice.receipt_image %}
+              <div style="margin-top: 1rem;">
+                  <a href="{{ invoice.receipt_image.url }}" target="_blank" class="btn btn-outline btn-sm">
+                      📎 عرض الإيصال المرفق
+                  </a>
+              </div>
+              {% endif %}
+            </div>
+          </div>
         {% else %}
           <form method="post"
                 action="{% url 'finance:confirm_bank_transfer' invoice.id %}"
                 class="transfer-form"
-                id="transferForm">
+                id="transferForm"
+                enctype="multipart/form-data">
             {% csrf_token %}
 
             <div class="form-field">
@@ -135,12 +156,20 @@
             <div class="receipt-section profile-section" style="background: var(--dark-50); margin-top: 1.5rem;">
               <div class="card-section-title">📎 إيصال التحويل البنكي</div>
               <p class="card-section-note" style="margin-bottom: 1rem;">
-                يمكنك الاحتفاظ بصورة أو ملف للإيصال لديك حاليًا.
-                سيتم توفير ميزة رفع الإيصال من داخل المنصّة في مرحلة لاحقة.
+                يرجى رفع صورة واضحة لإيصال التحويل البنكي لتسريع عملية التأكيد.
               </p>
-              <div class="upload-placeholder" style="text-align: center; padding: 1.5rem; border: 2px dashed var(--dark-300); border-radius: var(--radius-lg); background: var(--white);">
-                <div style="font-size: 2rem; margin-bottom: 0.5rem; opacity: 0.5;">📤</div>
-                <div style="color: var(--dark-500); font-size: 0.9rem;">رفع إيصال التحويل (قريبًا)</div>
+              <div class="upload-container" style="text-align: center; padding: 1.5rem; border: 2px dashed var(--dark-300); border-radius: var(--radius-lg); background: var(--white);">
+                <input type="file" name="receipt_image" id="receiptImageInput" accept="image/*" class="d-none" onchange="previewReceipt(this)">
+                <label for="receiptImageInput" style="cursor: pointer; width: 100%; height: 100%; display: block;">
+                    <div id="uploadPlaceholder">
+                        <div style="font-size: 2rem; margin-bottom: 0.5rem; opacity: 0.5;">📤</div>
+                        <div style="color: var(--dark-500); font-size: 0.9rem;">اضغط هنا لرفع صورة الإيصال</div>
+                    </div>
+                    <div id="receiptPreview" style="display: none;">
+                        <img id="previewImg" src="" alt="Receipt Preview" style="max-width: 100%; max-height: 200px; border-radius: 8px; margin-bottom: 1rem;">
+                        <div style="color: var(--primary-600); font-size: 0.9rem;">تم اختيار الصورة (اضغط للتغيير)</div>
+                    </div>
+                </label>
               </div>
             </div>
 
@@ -246,5 +275,23 @@
       });
     });
   })();
+
+  function previewReceipt(input) {
+    const placeholder = document.getElementById('uploadPlaceholder');
+    const preview = document.getElementById('receiptPreview');
+    const previewImg = document.getElementById('previewImg');
+
+    if (input.files && input.files[0]) {
+        const reader = new FileReader();
+        
+        reader.onload = function(e) {
+            previewImg.src = e.target.result;
+            placeholder.style.display = 'none';
+            preview.style.display = 'block';
+        }
+        
+        reader.readAsDataURL(input.files[0]);
+    }
+  }
   </script>
 {% endblock %}

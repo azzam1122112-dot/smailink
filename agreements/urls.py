@@ -65,6 +65,11 @@ urlpatterns = [
     # موافقة أو رفض العميل على طلب التمديد
     path("<int:pk>/approve-extension/", views.approve_extension, name="approve_extension"),
     path("<int:pk>/reject-extension/", views.reject_extension, name="reject_extension"),
+    # طلب تعديل قيمة الاتفاقية
+    path("<int:pk>/request-modification/", views.request_modification, name="request_modification"),
+    # موافقة أو رفض العميل على طلب التعديل
+    path("<int:pk>/approve-modification/", views.approve_modification, name="approve_modification"),
+    path("<int:pk>/reject-modification/", views.reject_modification, name="reject_modification"),
 ]
 
 # توافق خلفي: بعض القوالب القديمة كانت تمرّر pk بدل request_id

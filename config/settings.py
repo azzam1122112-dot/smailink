@@ -223,10 +223,17 @@ MEDIA_ROOT = BASE_DIR / "media"
 
 # WhiteNoise (مُوصى به في Django 5 عبر STORAGES)
 STORAGES = {
-    "default": {"BACKEND": "django.core.files.storage.FileSystemStorage"},
+    "default": {"BACKEND": "cloudinary_storage.storage.MediaCloudinaryStorage"},
     "staticfiles": {"BACKEND": "whitenoise.storage.CompressedManifestStaticFilesStorage"},
 }
 WHITENOISE_KEEP_ONLY_HASHED_FILES = True
+
+# Cloudinary
+CLOUDINARY_STORAGE = {
+    'CLOUD_NAME': os.getenv('CLOUDINARY_CLOUD_NAME', 'dnob4uzo6'),
+    'API_KEY': os.getenv('CLOUDINARY_API_KEY', '323685142587988'),
+    'API_SECRET': os.getenv('CLOUDINARY_API_SECRET', 't1J7Pfi-7Rh1i6n-DftrxuP5Kg8'),
+}
 
 # =========================
 # سياسة السوق/المنصّة (من التحليل)
@@ -366,6 +373,17 @@ REST_FRAMEWORK = {
 # =========================
 CORS_ALLOWED_ORIGINS = env_list("CORS_ALLOWED_ORIGINS", "")
 CORS_ALLOW_CREDENTIALS = env_bool("CORS_ALLOW_CREDENTIALS", True)
+
+# =========================
+# Cloudinary Storage
+# =========================
+CLOUDINARY_STORAGE = {
+    'CLOUD_NAME': os.getenv('CLOUDINARY_CLOUD_NAME', 'dnob4uzo6'),
+    'API_KEY': os.getenv('CLOUDINARY_API_KEY', '323685142587988'),
+    'API_SECRET': os.getenv('CLOUDINARY_API_SECRET', 't1J7Pfi-7Rh1i6n-DftrxuP5Kg8'),
+}
+
+DEFAULT_FILE_STORAGE = 'cloudinary_storage.storage.MediaCloudinaryStorage'
 
 # =========================
 # إعدادات نهائية

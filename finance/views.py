@@ -213,8 +213,7 @@ def _agreement_P(ag: Agreement) -> Decimal:
 
     السياسة الحالية:
     - p_amount: إن وُجد فهو المصدر المعتمد للسعر الأساسي P.
-    - total_amount: أصبح في النظام = إجمالي العميل (P + VAT)،
-      لذلك لا يجوز التعامل معه مباشرة كـ P وإلا أعدنا حساب الضريبة مرة أخرى.
+    - total_amount: نعتبره هو السعر الأساسي P (Base Price) في حال عدم وجود p_amount.
     """
     # 1) لو عندنا p_amount نستخدمه كما هو
     p_raw = getattr(ag, "p_amount", None)
@@ -227,20 +226,10 @@ def _agreement_P(ag: Agreement) -> Decimal:
     if total <= 0:
         return Decimal("0.00")
 
-    try:
-        fee_rate, vat_rate = FinanceSettings.current_rates()
-    except Exception:
-        # لو فشلنا في قراءة الإعدادات نعتبر total هو P
-        return _q2(total)
-
-    vat_rate = _as_decimal(vat_rate or 0)
-    if vat_rate > 0:
-        # total = P + P*vat_rate  ⇒  P = total / (1 + vat_rate)
-        base = total / (Decimal("1") + vat_rate)
-    else:
-        base = total
-
-    return _q2(base)
+    # FIX: Treat total_amount as Base Price (P).
+    # Previously, we assumed total_amount was Gross (P + VAT) and stripped tax.
+    # Now we assume it is Base, consistent with pricing.py logic.
+    return _q2(total)
 
 
 def _invoice_client_total(inv: Invoice, ag: Optional[Agreement] = None) -> Decimal:
@@ -298,6 +287,7 @@ def _invoice_breakdown(inv: Invoice) -> Dict[str, Decimal]:
             "vat_percent": _q2(vat_rate * 100),
             "vat_amount": vat_val,
             "grand_total": grand_total,
+            "client_total": grand_total,
             "net_for_employee": net_emp,
         }
 
@@ -312,6 +302,7 @@ def _invoice_breakdown(inv: Invoice) -> Dict[str, Decimal]:
     # 3) فواتير عامة (fallback أخير): نفترض amount هو الإجمالي أيضًا
     return {
         "grand_total": Decimal("0.00"),
+        "client_total": Decimal("0.00"),
         "P": Decimal("0.00"),
         "vat_amount": Decimal("0.00"),
         "platform_fee": Decimal("0.00"),
@@ -441,6 +432,7 @@ def _fallback_agreement_totals(ag: Agreement) -> Dict[str, Decimal]:
         "vat_percent": vat * Decimal("100"),
         "vat_amount": vat_amount,
         "grand_total": client_total,
+        "client_total": client_total,
         "net_for_employee": net_for_employee,
     }
 
@@ -463,6 +455,7 @@ def compute_agreement_totals(ag: Agreement) -> Dict[str, Decimal]:
                 "vat_percent": _q2(bd.vat_rate * Decimal("100")),
                 "vat_amount": _q2(bd.vat_amount),
                 "grand_total": _q2(bd.client_total),
+                "client_total": _q2(bd.client_total),
                 "net_for_employee": _q2(bd.net_for_employee),
             }
         except Exception:
@@ -658,17 +651,12 @@ def finance_home(request: HttpRequest):
 
     def _sum_breakdown(qs, key: str) -> Decimal:
         """
-        يجمع قيمة مفتاح معيّن من breakdown للفواتير، مع تجنّب
-        تكرار احتساب نفس الاتفاقية أكثر من مرة.
+        يجمع قيمة مفتاح معيّن من breakdown للفواتير.
+        تم إزالة شرط عدم التكرار (seen) لأن الاتفاقية قد يكون لها أكثر من فاتورة
+        (مثلاً فاتورة أساسية + فاتورة تعديل)، ويجب جمعها جميعاً.
         """
         total = Decimal("0.00")
-        seen = set()
         for inv in qs:
-            ag = getattr(inv, "agreement", None)
-            if ag:
-                if ag.id in seen:
-                    continue
-                seen.add(ag.id)
             bd = _invoice_breakdown(inv)
             total += _as_decimal(bd.get(key, Decimal("0.00")))
         return total
@@ -1001,23 +989,24 @@ def inprogress_requests(request: HttpRequest):
 # Checkout (فاتورة واحدة)
 # ===========================
 @login_required
-def checkout_agreement(request: HttpRequest, agreement_id: int):
-    ag = get_object_or_404(
-        Agreement.objects.select_related("request", "employee", "request__client"),
-        pk=agreement_id,
+def checkout_invoice(request: HttpRequest, invoice_id: int):
+    """
+    صفحة الدفع لفاتورة محددة (سواء كانت الفاتورة الأصلية أو فاتورة تعديل).
+    """
+    inv = get_object_or_404(
+        Invoice.objects.select_related("agreement", "agreement__request", "agreement__employee", "agreement__request__client"),
+        pk=invoice_id,
     )
+    ag = inv.agreement
 
     u = request.user
     is_owner = getattr(ag.request, "client_id", None) == u.id
     if not (is_owner or _is_finance(u)):
-        messages.error(request, "غير مصرح لك بفتح صفحة الدفع لهذه الاتفاقية.")
+        messages.error(request, "غير مصرح لك بفتح صفحة الدفع لهذه الفاتورة.")
         return redirect("website:home")
 
-    breakdown = compute_agreement_totals(ag)
-    grand_total = _as_decimal(breakdown.get("grand_total", getattr(ag, "total_amount", 0)))
-
-    # الفاتورة هنا تمثّل إجمالي العميل (P + VAT)
-    inv = _ensure_single_invoice_with_amount(ag, amount=grand_total)
+    # حساب تفاصيل الفاتورة المحددة فقط
+    breakdown = _invoice_breakdown(inv)
 
     ctx = {
         "agreement": ag,
@@ -1029,6 +1018,65 @@ def checkout_agreement(request: HttpRequest, agreement_id: int):
         "BANK_IBAN": BANK_IBAN,
     }
     return render(request, "finance/checkout.html", ctx)
+
+
+def checkout_agreement(request: HttpRequest, agreement_id: int):
+    """
+    نقطة توجيه ذكية:
+    - تبحث عن أي فاتورة غير مدفوعة (أصلية أو تعديل) وتوجه لها.
+    - إذا لم توجد فواتير، تنشئ الفاتورة الأصلية.
+    - إذا الكل مدفوع، توجه لآخر فاتورة للعرض.
+    """
+    ag = get_object_or_404(
+        Agreement.objects.select_related("request", "employee", "request__client"),
+        pk=agreement_id,
+    )
+
+    u = request.user
+    is_owner = getattr(ag.request, "client_id", None) == u.id
+    if not (is_owner or _is_finance(u)):
+        messages.error(request, "غير مصرح لك بفتح صفحة الدفع لهذه الاتفاقية.")
+        return redirect("website:home")
+
+    # FIX: Ensure the main invoice has the correct amount (Base + VAT)
+    # This fixes the issue where existing invoices had the Base Price as the Total.
+    try:
+        breakdown = compute_agreement_totals(ag)
+        grand_total = _as_decimal(breakdown.get("grand_total", getattr(ag, "total_amount", 0)))
+        _ensure_single_invoice_with_amount(ag, amount=grand_total)
+    except Exception:
+        logger.exception("Failed to ensure invoice amount for agreement %s", ag.pk)
+
+    # 1) البحث عن فاتورة غير مدفوعة (ليست Milestone)
+    #    نستثني فواتير المراحل لأن لها مسار خاص عادة، أو يمكن دمجها لو أردت.
+    #    هنا نركز على (Initial + Modification).
+    unpaid_inv = Invoice.objects.filter(
+        agreement=ag, 
+        status=Invoice.Status.UNPAID, 
+        milestone__isnull=True
+    ).order_by("id").first()
+
+    if unpaid_inv:
+        return redirect("finance:checkout_invoice", invoice_id=unpaid_inv.pk)
+
+    # 2) هل توجد أي فاتورة أصلاً؟
+    last_inv = Invoice.objects.filter(
+        agreement=ag, 
+        milestone__isnull=True
+    ).order_by("-id").first()
+
+    if last_inv:
+        # الكل مدفوع، نعرض الأخيرة
+        return redirect("finance:checkout_invoice", invoice_id=last_inv.pk)
+
+    # 3) لا توجد فواتير => إنشاء الفاتورة المبدئية
+    breakdown = compute_agreement_totals(ag)
+    grand_total = _as_decimal(breakdown.get("grand_total", getattr(ag, "total_amount", 0)))
+
+    # هذه الدالة تنشئ الفاتورة إذا لم تجدها
+    inv = _ensure_single_invoice_with_amount(ag, amount=grand_total)
+    
+    return redirect("finance:checkout_invoice", invoice_id=inv.pk)
 
 
 # ===========================
@@ -1051,6 +1099,8 @@ def confirm_bank_transfer(request: HttpRequest, invoice_id: int):
         return redirect("website:home")
 
     paid_ref = (request.POST.get("paid_ref") or "").strip()
+    receipt_image = request.FILES.get("receipt_image")
+
     if len(paid_ref) < 4:
         messages.error(request, "الرجاء إدخال مرجع تحويل صحيح (4 أحرف/أرقام على الأقل).")
         return redirect(request.META.get("HTTP_REFERER", "/"))
@@ -1059,6 +1109,11 @@ def confirm_bank_transfer(request: HttpRequest, invoice_id: int):
     if _writable_attr(inv, "paid_ref"):
         inv.paid_ref = paid_ref[:64]
         updates.append("paid_ref")
+    
+    if receipt_image and _writable_attr(inv, "receipt_image"):
+        inv.receipt_image = receipt_image
+        updates.append("receipt_image")
+
     if _writable_attr(inv, "updated_at"):
         inv.updated_at = timezone.now()
         updates.append("updated_at")
@@ -1260,16 +1315,22 @@ def invoice_detail(request: HttpRequest, pk: int):
 
     is_owner = req and getattr(req, "client_id", None) == u.id
     is_employee = ag and getattr(ag, "employee_id", None) == u.id
+    is_finance_user = _is_finance(u)
 
-    if not (_is_finance(u) or is_owner or is_employee):
+    if not (is_finance_user or is_owner or is_employee):
         messages.error(request, "غير مصرح لك بعرض هذه الفاتورة.")
         return redirect("website:home")
 
     breakdown = _invoice_breakdown(inv)
 
+    # Use restricted template for clients (who are not finance admins)
+    template_name = "finance/invoice_detail.html"
+    if is_owner and not is_finance_user:
+        template_name = "finance/invoice_detail_client.html"
+
     return render(
         request,
-        "finance/invoice_detail.html",
+        template_name,
         {"inv": inv, "invoice": inv, "breakdown": breakdown},
     )
 

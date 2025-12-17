@@ -52,6 +52,7 @@ urlpatterns = [
     # ======================
     # Checkout + تأكيد مرجع التحويل البنكي
     # ======================
+    path("checkout/inv/<int:invoice_id>/", views.checkout_invoice, name="checkout_invoice"),
     path("checkout/ag/<int:agreement_id>/", views.checkout_agreement, name="checkout_agreement"),
     path("checkout/confirm/<int:invoice_id>/", views.confirm_bank_transfer, name="confirm_bank_transfer"),
     # Aliases شائعة للتوافق

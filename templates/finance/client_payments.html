@@ -178,7 +178,11 @@
                   {% if inv.status == 'paid' %}
                     <span class="badge badge-verified">✅ مدفوعة</span>
                   {% elif inv.status == 'unpaid' %}
-                    <span class="badge badge-pending">⏳ غير مدفوعة</span>
+                    {% if inv.paid_ref %}
+                      <span class="badge badge-warning" style="background-color: #fffbeb; color: #d97706;">⏳ قيد المراجعة</span>
+                    {% else %}
+                      <span class="badge badge-pending">⏳ غير مدفوعة</span>
+                    {% endif %}
                   {% else %}
                     <span class="badge badge-default">{{ inv.get_status_display|default:inv.status }}</span>
                   {% endif %}

@@ -493,6 +493,28 @@ class Offer(models.Model):
     def client_total_amount(self):
         return self.breakdown.client_total
 
+    @property
+    def client_modified_total_amount(self):
+        if self.modified_price is None:
+            return None
+        from finance.services.pricing import compute_breakdown, resolve_fee_percent, _current_rates
+        
+        client_id = getattr(self.request, "client_id", None)
+        category = getattr(self.request, "category", None)
+        campaign = getattr(self.request, "campaign_code", None)
+        employee_id = self.employee_id
+        
+        F = resolve_fee_percent(
+            client_id=client_id,
+            employee_id=employee_id,
+            category=category,
+            campaign=campaign,
+        )
+        _, default_vat = _current_rates()
+        
+        bd = compute_breakdown(self.modified_price, fee_percent=F, vat_rate=default_vat)
+        return bd.client_total
+
     def can_cancel(self, user) -> bool:
         """
         يمنع الإلغاء إذا كانت الاتفاقية مقبولة.
@@ -578,6 +600,11 @@ class Comment(models.Model):
 
     def __str__(self):
         return f"Comment by {self.author} on {self.request}"
+
+    @property
+    def filename(self):
+        import os
+        return os.path.basename(self.file.name) if self.file else ""
 
 
 class Review(models.Model):

@@ -11,8 +11,6 @@
             {{ request.user.get_full_name }}
           {% elif request.user.email %}
             {{ request.user.email }}
-          {% elif request.user.username %}
-            {{ request.user.username }}
           {% else %}
             مسؤول
           {% endif %}
