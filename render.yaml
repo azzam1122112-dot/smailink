@@ -6,7 +6,7 @@ databases:
 services:
   - type: web
     name: samilink
-    env: python
+    runtime: python
     buildCommand: "./build.sh"
     startCommand: "gunicorn config.wsgi:application"
     envVars:
