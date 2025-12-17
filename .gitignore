@@ -14,7 +14,7 @@ media/
 *.log
 local_settings.py
 db.sqlite3-journal
-/static/
+/staticfiles/
 /media/
 
 # VS Code
