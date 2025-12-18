@@ -780,6 +780,40 @@
         </div>
     </header>
 
+    <!-- Mobile Menu Overlay -->
+    <div class="mobile-menu-overlay" id="mobileMenuOverlay"></div>
+    
+    <!-- Mobile Menu -->
+    <div class="mobile-menu" id="mobileMenu">
+        <div class="mobile-menu-header">
+            <div class="brand-link">
+                <img src="{% static 'img/logo.png' %}" alt="Logo" class="brand-logo">
+                <div class="brand-info">
+                    <h1>سامي لينك</h1>
+                </div>
+            </div>
+            <button class="mobile-menu-close" id="mobileMenuClose"><i class="fas fa-times"></i></button>
+        </div>
+        
+        <nav>
+            <ul class="mobile-nav-links">
+                <li><a href="{% url 'website:home' %}" class="mobile-nav-link">الرئيسية</a></li>
+                <li><a href="{% url 'profiles:employees_list' %}" class="mobile-nav-link">التقنيون</a></li>
+                <li><a href="{% url 'website:home' %}#how-it-works" class="mobile-nav-link">كيف تعمل</a></li>
+                <li><a href="{% url 'website:home' %}#contact" class="mobile-nav-link">اتصل بنا</a></li>
+                
+                {% if not user.is_authenticated %}
+                <li style="margin-top: 1rem; border-top: 1px solid var(--border); padding-top: 1rem;">
+                    <a href="{% url 'accounts:login' %}" class="btn btn-outline" style="width: 100%; justify-content: center;">دخول</a>
+                </li>
+                <li style="margin-top: 0.5rem;">
+                    <a href="{% url 'accounts:register' %}" class="btn btn-primary" style="width: 100%; justify-content: center;">حساب جديد</a>
+                </li>
+                {% endif %}
+            </ul>
+        </nav>
+    </div>
+
     <!-- Platform Notice -->
     {% block platform_notice %}{% endblock %}
 
@@ -879,6 +913,30 @@
                 setTimeout(() => toast.remove(), 300);
             }, 5000);
         });
+
+        // Mobile Menu Toggle
+        const mobileMenuBtn = document.querySelector('.mobile-menu-btn');
+        const mobileMenu = document.getElementById('mobileMenu');
+        const mobileMenuOverlay = document.getElementById('mobileMenuOverlay');
+        const mobileMenuClose = document.getElementById('mobileMenuClose');
+
+        function toggleMobileMenu() {
+            mobileMenu.classList.toggle('active');
+            mobileMenuOverlay.classList.toggle('active');
+            document.body.style.overflow = mobileMenu.classList.contains('active') ? 'hidden' : '';
+        }
+
+        if(mobileMenuBtn) {
+            mobileMenuBtn.addEventListener('click', toggleMobileMenu);
+        }
+        
+        if(mobileMenuClose) {
+            mobileMenuClose.addEventListener('click', toggleMobileMenu);
+        }
+        
+        if(mobileMenuOverlay) {
+            mobileMenuOverlay.addEventListener('click', toggleMobileMenu);
+        }
     </script>
     {% block extra_scripts %}{% endblock %}
 </body>
